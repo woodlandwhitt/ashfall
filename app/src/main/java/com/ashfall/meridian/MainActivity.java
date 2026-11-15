@@ -31,6 +31,8 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setAllowFileAccess(true);
+        // lets the page read its own textures and sounds from android_asset/assets/
+        s.setAllowFileAccessFromFileURLs(true);
         web.addJavascriptInterface(new NativeStore(getSharedPreferences("ashfall_saves", MODE_PRIVATE)), "NativeStore");
         tts = new TextToSpeech(this, status -> {
             if (status != TextToSpeech.SUCCESS) return;

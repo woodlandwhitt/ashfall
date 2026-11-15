@@ -1,0 +1,7 @@
+Ashfall: Meridian — third-party assets (all CC0 1.0 / public domain; no attribution required, credited anyway)
+
+Textures (assets/tex): ambientCG.com — Ground054, Ground103, Rock058, Asphalt023S, Plaster007, Concrete047A, Wood094, Bricks097, Metal055A.
+  Downsized to 1024px, ambient occlusion baked into colour, some colour-graded for the desert.
+Gunshots (assets/sfx): The Free Firearm Sound Library (opengameart.org/content/the-free-firearm-sound-library).
+Footsteps (assets/sfx/step_*): Fantozzi's Footsteps (opengameart.org/content/fantozzis-footsteps-grasssand-stone).
+Collected via github.com/petroulacl/fps-asset-kit.
