@@ -8,3 +8,18 @@ Gun models (assets/guns): "Flat Guns" East and West CC0 packs on OpenGameArt (op
   The above were collected via github.com/petroulacl/fps-asset-kit.
 HD sand, dirt, rock, weathered planks and bark (assets/tex, assets/tex2k): ambientCG and Poly Haven CC0 materials, via github.com/RazorEdge-wyh/unity-nature-pbr-asset-library.
 UI, door, lock, cloth, card, chip and dice sounds (assets/sfx/k_*): Kenney (kenney.nl) RPG, UI and Casino audio packs, via github.com/iwenzhou/kenney.
+
+--- added in build 11 ---
+Character voices, creatures, impacts, footsteps on metal/dirt, shell casings, doors, car engine and doors, wind, night crickets,
+  vault air handlers, reactor hum, casino crowd, rain, glass, stingers (assets/sfx/o_*): Oculus Audio Pack 1 by Oculus / Meta,
+  licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), via github.com/facebookincubator/Meta-open-sound.
+  Converted to mono, trimmed and loudness-normalised.
+Explosions, computer noises, sci-fi doors (assets/sfx/x_boom*, x_computer*, x_vdoor*): Kenney Sci-Fi Sounds (CC0).
+Impacts and concrete/wood footsteps (assets/sfx/x_*): Kenney Impact Sounds (CC0).
+Casino lounge music (assets/sfx/x_lounge*.ogg): Kenney Music Loops "Swinging Pants" and "Night at the Beach" (CC0).
+  The Kenney packs above were collected via github.com/series-ai/jam-ready-assets.
+Wrecked vehicles, barrels, containers, trash, barriers, pipes, water tower, couch, fire hydrant, street lights (assets/props):
+  Quaternius "Post-Apocalypse / Zombie Apocalypse" kit (CC0), via github.com/series-ai/jam-ready-assets.
+Headstones, crosses, crypt, coffin, iron fence, lanterns, logs, tents, fortified fences, signposts, metal panels (assets/props):
+  Kenney Graveyard Kit and Survival Kit (CC0), via github.com/series-ai/jam-ready-assets.
+  Packed into one file, simplified and colour-graded for the desert with glTF-Transform and meshoptimizer (MIT).

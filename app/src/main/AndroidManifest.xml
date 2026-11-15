@@ -11,6 +11,7 @@
         android:label="Ashfall Meridian"
         android:icon="@drawable/ic_launcher"
         android:hardwareAccelerated="true"
+        android:largeHeap="true"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
         <activity
             android:name=".MainActivity"

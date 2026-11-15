@@ -33,14 +33,27 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(true);
         // lets the page read its own textures and sounds from android_asset/assets/
         s.setAllowFileAccessFromFileURLs(true);
+        // performance: GPU layer, keep the renderer process at high priority even when briefly covered, no overscroll glow,
+        // no text autosizing work, and the game's own files cached in memory
+        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setTextZoom(100);
+        web.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        if (android.os.Build.VERSION.SDK_INT >= 26) web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        if (android.os.Build.VERSION.SDK_INT >= 23) s.setOffscreenPreRaster(true);
         web.addJavascriptInterface(new NativeStore(getSharedPreferences("ashfall_saves", MODE_PRIVATE)), "NativeStore");
         tts = new TextToSpeech(this, status -> {
             if (status != TextToSpeech.SUCCESS) return;
             tts.setLanguage(Locale.US);
             try {
                 // Google voice ids: these codes are male, the rest female
-                for (Voice v : tts.getVoices()) {
+                // best voices first: on-device high/very-high quality neural voices, then the rest
+                List<Voice> all = new ArrayList<>(tts.getVoices());
+                all.sort((a, b) -> Integer.compare(b.getQuality(), a.getQuality()));
+                for (Voice v : all) {
                     if (v.getLocale() == null || !"en".equals(v.getLocale().getLanguage()) || v.isNetworkConnectionRequired()) continue;
+                    if (v.getFeatures() != null && v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) continue;
+                    if (v.getQuality() < Voice.QUALITY_NORMAL) continue;
                     String n = v.getName().toLowerCase(Locale.US);
                     boolean male = (n.contains("male") && !n.contains("female")) || n.contains("-iol") || n.contains("-iom") || n.contains("-tpd") || n.contains("-rjs") || n.contains("-gbd") || n.contains("-end");
                     if (male) maleVoices.add(v);
