@@ -6,4 +6,5 @@ Gunshots (assets/sfx/*.mp3 named after guns): The Free Firearm Sound Library (op
 Footsteps (assets/sfx/step_*): Fantozzi's Footsteps (opengameart.org/content/fantozzis-footsteps-grasssand-stone).
 Gun models (assets/guns): "Flat Guns" East and West CC0 packs on OpenGameArt (opengameart.org/content/cc0-flat-guns-west, /cc0-flat-guns-east).
   The above were collected via github.com/petroulacl/fps-asset-kit.
+HD sand, dirt, rock, weathered planks and bark (assets/tex, assets/tex2k): ambientCG and Poly Haven CC0 materials, via github.com/RazorEdge-wyh/unity-nature-pbr-asset-library.
 UI, door, lock, cloth, card, chip and dice sounds (assets/sfx/k_*): Kenney (kenney.nl) RPG, UI and Casino audio packs, via github.com/iwenzhou/kenney.
