@@ -6,8 +6,10 @@ android {
         applicationId 'com.ashfall.meridian'
         minSdk 24
         targetSdk 34
-        versionCode 3
-        versionName '3.0'
+        // every GitHub build gets a higher number, so the phone always treats it as an update
+        def run = (System.getenv('GITHUB_RUN_NUMBER') ?: '0').toInteger()
+        versionCode 100 + run
+        versionName "3.1." + run
     }
     // A fixed signing key kept in the repo, so every build is signed the same way
     // and a new APK installs over the old one without uninstalling first.

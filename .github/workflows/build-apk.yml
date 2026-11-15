@@ -1,6 +1,7 @@
 name: Build APK
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,4 +26,4 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "build-${{ github.run_number }}" AshfallMeridian.apk --title "Ashfall Meridian 3.0 (build ${{ github.run_number }})" --notes "Tap AshfallMeridian.apk below to download and install." --target "${{ github.sha }}"
+        run: gh release create "build-${{ github.run_number }}" AshfallMeridian.apk --title "Ashfall Meridian (build ${{ github.run_number }})" --notes "Tap AshfallMeridian.apk below to download and install." --target "${{ github.sha }}"
