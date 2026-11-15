@@ -6,12 +6,25 @@ android {
         applicationId 'com.ashfall.meridian'
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        versionCode 3
+        versionName '3.0'
+    }
+    // A fixed signing key kept in the repo, so every build is signed the same way
+    // and a new APK installs over the old one without uninstalling first.
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    buildTypes { release { minifyEnabled false; signingConfig signingConfigs.debug } }
+    buildTypes {
+        debug { signingConfig signingConfigs.debug }
+        release { minifyEnabled false; signingConfig signingConfigs.debug }
+    }
 }

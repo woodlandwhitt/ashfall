@@ -1,13 +1,18 @@
-# Ashfall Meridian — Android project
+# Ashfall: Meridian 3.0 — Android build
 
-The whole game is one file: `app/src/main/assets/index.html`. This project wraps it in a full-screen Android app.
+## Build the APK on GitHub (no computer software needed)
+1. Upload everything in this folder to your GitHub repository, replacing the old files.
+   Keep the hidden `.github` folder: it holds the build recipe.
+2. Uploading starts the build automatically. Open the repo's **Actions** tab and wait for the green tick (about 2 minutes).
+3. Get the APK either way:
+   - **Releases** (easiest on a phone): open the repo's main page, tap **Releases** on the right
+     (or go to `/releases`), then tap **AshfallMeridian.apk**. It downloads as a plain APK.
+   - **Artifacts**: open the finished run, scroll to **Artifacts**, tap **AshfallMeridian-apk**.
+     This downloads as a zip; extract it to get `AshfallMeridian.apk`.
+4. Tap the APK to install. Allow "install unknown apps" for your browser or Files app if asked.
 
-## Get the APK without installing anything (GitHub builds it)
-1. Create a free GitHub account and a new empty repository.
-2. Upload the contents of this folder to it (on the repo page: Add file > Upload files; drag everything in, including the `.github` folder).
-3. Open the repo's **Actions** tab. A run called "Build APK" starts on its own and takes about 3 minutes.
-4. Open the finished run and download **AshfallMeridian-apk** at the bottom. Unzip it to get `app-debug.apk`.
-5. Send that file to your phone, tap it, and allow "install unknown apps" when Android asks.
+Every build is signed with the same key (`app/debug.keystore`), so new versions install over old ones and keep your save.
+If you installed version 2.0 earlier, uninstall it once first: it was signed with a different key.
 
-## Or build on your own computer
-Open this folder in Android Studio and press Run with your phone plugged in, or run `gradle assembleDebug` (JDK 17, Gradle 8.9, Android SDK 34).
+## Build locally
+Open this folder in Android Studio and press Run, or run `gradle assembleDebug` (JDK 17, Gradle 8.9, Android SDK 34).
