@@ -23,3 +23,14 @@ Wrecked vehicles, barrels, containers, trash, barriers, pipes, water tower, couc
 Headstones, crosses, crypt, coffin, iron fence, lanterns, logs, tents, fortified fences, signposts, metal panels (assets/props):
   Kenney Graveyard Kit and Survival Kit (CC0), via github.com/series-ai/jam-ready-assets.
   Packed into one file, simplified and colour-graded for the desert with glTF-Transform and meshoptimizer (MIT).
+
+--- added in build 12 ---
+Building textures, 2K (assets/tex, tex2k: brick, concrete, plaster, asphalt, metal, corr, roof, paving): ambientCG (CC0)
+  Bricks101, Concrete036, Plaster003, Asphalt031, Metal041B, CorrugatedSteel005, RoofingTiles012A, PavingStones136,
+  via github.com/achrefelouafi/ProceduralBuildingsThreeJS. AO baked in; normal maps derived from displacement where missing.
+Photoscanned models (assets/props/phaven.glb): Poly Haven (CC0) quiver trees, dead trunks, dry branches, root cluster,
+  scrub, and furniture (sofa, armchairs, rocking chair, tables, school chair, nightstand, shelf, television, oil lamp,
+  metal jug, wall and security lamps), via github.com/RazorEdge-wyh/unity-nature-pbr-asset-library.
+  Converted with obj2gltf (Apache-2.0), decimated with meshoptimizer (MIT), textures resized with sharp (Apache-2.0).
+New guns (assets/guns: Revolver_3, Pistol_4, SubmachineGun_3, AssaultRifle_3, Bullpup_1, AssaultRifle2_2,
+  Shotgun_SawedOff, SniperRifle_4): Quaternius "Ultimate Guns" (CC0), via github.com/series-ai/jam-ready-assets.
