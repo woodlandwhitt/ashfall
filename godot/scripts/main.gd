@@ -21,6 +21,9 @@ var talk_cd := 0.0
 var chunks
 var grass_nodes: Array = []
 var quality := 1
+var terrain_mi: MeshInstance3D
+var terrain_full: ShaderMaterial
+var terrain_lite: ShaderMaterial
 
 func _ready() -> void:
 	Game.main = self
@@ -82,6 +85,8 @@ func _test_hooks() -> void:
 		player.pitch = float(v[3]) if v.size() > 3 else 0.0
 	if args.has("selftest"):
 		await _selftest()
+	if args.has("perf"):
+		await _perf_report()
 	if args.has("shot"):
 		for i in int(args.get("frames", "40")):
 			await get_tree().process_frame
@@ -91,6 +96,52 @@ func _test_hooks() -> void:
 		get_tree().quit()
 	elif args.has("selftest"):
 		get_tree().quit()
+
+# render statistics from where the player stands, split by what is being drawn
+func _perf_report() -> void:
+	for i in 20:
+		await get_tree().process_frame
+	var cam: Camera3D = player.cam
+	var groups := {"characters": 0, "chunk_small": 0, "chunk_big": 0, "grass": 0, "other": 0}
+	var tris := {"characters": 0, "chunk_small": 0, "chunk_big": 0, "grass": 0, "other": 0}
+	var mats := {}
+	for n in find_children("*", "GeometryInstance3D", true, false):
+		var g := n as GeometryInstance3D
+		if not g.is_visible_in_tree():
+			continue
+		var aabb: AABB = g.global_transform * g.get_aabb()
+		var d := aabb.get_center().distance_to(cam.global_position)
+		if g.visibility_range_end > 0.0 and d > g.visibility_range_end:
+			continue
+		if not cam.is_position_in_frustum(aabb.get_center()) and d > aabb.size.length():
+			continue
+		var k := "other"
+		var p := g.get_parent()
+		while p:
+			if p is CharacterBody3D:
+				k = "characters"
+				break
+			if p == chunks:
+				k = "chunk_small" if g.name.begins_with("s_") else "chunk_big"
+				break
+			p = p.get_parent()
+		if g is MultiMeshInstance3D:
+			k = "grass"
+		var surf := 1
+		var t := 0
+		if g is MeshInstance3D and (g as MeshInstance3D).mesh:
+			var m: Mesh = (g as MeshInstance3D).mesh
+			surf = m.get_surface_count()
+			for si in surf:
+				var a := m.surface_get_arrays(si) if m is ArrayMesh else []
+				if a.size() > 0 and a[Mesh.ARRAY_INDEX] != null:
+					t += a[Mesh.ARRAY_INDEX].size() / 3
+		groups[k] += surf
+		tris[k] += t
+	print("PERF draw-surfaces ", groups)
+	print("PERF triangles ", tris)
+	print("PERF engine draw calls ", Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), " objects ", Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME), " primitives ", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	print("PERF chunks loaded ", chunks.count(), " characters ", npcs.size() + enemies.size(), " physics bodies active ", enemies.filter(func(e): return e.global_position.distance_to(player.global_position) < 90.0).size())
 
 func _wait(n: int) -> void:
 	for i in n:
@@ -293,6 +344,14 @@ func _terrain() -> void:
 	mi.mesh = mesh
 	mi.material_override = mat
 	add_child(mi)
+	terrain_mi = mi
+	terrain_full = mat
+	terrain_lite = ShaderMaterial.new()
+	terrain_lite.shader = preload("res://scripts/terrain_lite.gdshader")
+	for k in ["sand", "rock"]:
+		terrain_lite.set_shader_parameter("t_" + k, load("res://tex/" + k + ".webp"))
+	terrain_lite.set_shader_parameter("t_mask", load("res://data/mask.png"))
+	terrain_lite.set_shader_parameter("region", Vector4(Game.x0, Game.z0, w - 1, dd - 1))
 	# physics: a heightfield, which Jolt handles far more cheaply than a triangle mesh
 	var body := StaticBody3D.new()
 	body.collision_layer = 1

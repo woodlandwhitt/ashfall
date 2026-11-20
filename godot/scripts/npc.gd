@@ -1,9 +1,13 @@
-# A townsperson: stands (or wanders), turns to face you when you talk, and has a dialogue tree in Game.DIALOGUE.
+# A townsperson: a Quaternius body dressed and coloured from the original game's look for them, idling, wandering
+# and talking with the Universal Animation Library. Animals keep their original model. Turns to face you when you talk.
 extends CharacterBody3D
+
+const ANIMALS := ["biscuit"]
 
 var id := ""
 var display_name := ""
 var model: Node3D
+var ap: AnimationPlayer
 var rig: Rig
 var home := Vector3.ZERO
 var wander_r := 0.0
@@ -12,12 +16,23 @@ var wait := 0.0
 var face_yaw := 0.0
 var talking := false
 var t := 0.0
+var moving := false
+var near := true
+
+static func look_colors(look: Dictionary) -> Array:
+	var cloth := Color(0.85, 0.8, 0.72)
+	if look.get("body"):
+		cloth = Color(1, 1, 1).lerp(Color(look.body).lightened(0.3), 0.6)
+	var skin := Color(1.0, 0.9, 0.82)
+	if look.get("skin"):
+		var c := Color(look.skin)
+		skin = Color(clampf(c.r / 0.62, 0.45, 1.6), clampf(c.g / 0.45, 0.4, 1.6), clampf(c.b / 0.34, 0.35, 1.6))
+	return [cloth, skin]
 
 func setup(d: Dictionary) -> void:
 	id = d.id
 	display_name = Game.DIALOGUE[id].name if Game.DIALOGUE.has(id) else String(d.name).capitalize()
-	var y := Game.height(d.x, d.z)
-	position = Vector3(d.x, y, d.z)
+	position = Vector3(d.x, Game.height(d.x, d.z), d.z)
 	home = position
 	face_yaw = float(d.rot)
 	if d.wander:
@@ -31,16 +46,38 @@ func setup(d: Dictionary) -> void:
 	cs.shape = cap
 	cs.position.y = 0.88
 	add_child(cs)
-	var ps: PackedScene = load("res://data/chars/npc_" + id + ".glb")
-	model = ps.instantiate()
+	var look: Dictionary = d.get("look", {})
+	if id in ANIMALS:
+		model = (load("res://data/chars/npc_" + id + ".glb") as PackedScene).instantiate()
+		rig = Rig.new(model, true)
+	else:
+		var fem: bool = look.get("fem", false)
+		var hooded: bool = look.get("hat") == "hood" or look.get("coat") != null
+		var cols := look_colors(look)
+		model = Humanoid.build(("Female_" if fem else "Male_") + ("Ranger" if hooded else "Peasant"), cols[0], cols[1])
+		model.scale = Vector3.ONE * float(look.get("bulk", 1.0)) if float(look.get("bulk", 1.0)) > 1.0 else Vector3.ONE
+		ap = model.get_node("AnimationPlayer")
 	add_child(model)
+	for mi in model.find_children("*", "GeometryInstance3D", true, false):
+		(mi as GeometryInstance3D).visibility_range_end = 140.0
 	model.rotation.y = face_yaw
-	rig = Rig.new(model, model.find_child("shinL", true, false) == null)
+	if ap:
+		ap.play("Idle")
+		ap.seek(randf() * 2.0, true)
 	target = home
 
 func _physics_process(d: float) -> void:
 	t += d
-	if Game.player and global_position.distance_squared_to(Game.player.global_position) > 8100.0:
+	var pd := 1e9
+	if Game.player:
+		pd = global_position.distance_squared_to(Game.player.global_position)
+	# far away: no physics, no animation
+	var is_near := pd < 2025.0
+	if is_near != near:
+		near = is_near
+		if ap:
+			ap.active = near
+	if pd > 8100.0:
 		return
 	var spd := 0.0
 	if talking and Game.player:
@@ -60,12 +97,18 @@ func _physics_process(d: float) -> void:
 			velocity = Vector3(v.x, velocity.y, v.z)
 			spd = 1.25
 			face_yaw = lerp_angle(face_yaw, atan2(v.x, v.z), 1.0 - exp(-5.0 * d))
-	if spd == 0.0:
-		velocity.x = 0
-		velocity.z = 0
-	velocity.y = -6.0 if not is_on_floor() else -0.5
-	move_and_slide()
+	moving = spd > 0.0
+	# a standing person doesn't need the physics step at all
+	if moving or not is_on_floor():
+		if not moving:
+			velocity.x = 0
+			velocity.z = 0
+		velocity.y = -6.0 if not is_on_floor() else -0.5
+		move_and_slide()
 	model.rotation.y = face_yaw
-	# only animate characters near the camera
-	if Game.player and global_position.distance_squared_to(Game.player.global_position) < 2500.0:
+	if not near:
+		return
+	if ap:
+		Humanoid.play(ap, "Idle_Talking" if talking else ("Walk" if moving else "Idle"))
+	elif rig:
 		rig.animate(d, spd, t)
