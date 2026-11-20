@@ -158,10 +158,25 @@ func _selftest() -> void:
 			break
 	if tgt:
 		var tp: Vector3 = tgt.global_position
-		await _goto(tp + Vector3(0, 0, 6), tp)
-		player.pitch = atan2(1.0 - 1.62, 6.0)
+		tgt.set_physics_process(false)
+		for k in 8:
+			var o := Vector3(sin(k * TAU / 8.0), 0, cos(k * TAU / 8.0)) * 6.0
+			var sp := tp + o
+			sp.y = Game.height(sp.x, sp.z)
+			var q0 := PhysicsRayQueryParameters3D.create(sp + Vector3.UP * 1.62, tp + Vector3.UP * 1.0, 1)
+			if get_world_3d().direct_space_state.intersect_ray(q0).is_empty():
+				await _goto(sp, tp)
+				break
+		var dv: Vector3 = tp + Vector3.UP * 1.0 - player.cam.global_position
+		player.pitch = atan2(dv.y, Vector2(dv.x, dv.z).length())
+		await _wait(2)
 		var hp0: float = tgt.hp
 		player.fire_cd = 0.0
+		var from: Vector3 = player.cam.global_position
+		var q := PhysicsRayQueryParameters3D.create(from, from + (-player.cam.global_transform.basis.z) * 60.0, 1 | 2 | 4)
+		q.exclude = [player.get_rid()]
+		var h := get_world_3d().direct_space_state.intersect_ray(q)
+		out.append("aim ray hits " + (str(h.collider.name) + " (" + h.collider.get_class() + ")" if h else "nothing"))
 		player.fire()
 		await _wait(2)
 		out.append("shot a %s: hp %.0f -> %.0f, mag %d" % [tgt.type, hp0, tgt.hp, Game.mag])

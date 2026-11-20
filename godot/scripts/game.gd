@@ -227,6 +227,17 @@ func _extra_dialogue() -> void:
 	for id in extra:
 		if not DIALOGUE.has(id):
 			DIALOGUE[id] = extra[id]
+	# everyone else (saloon patrons, card players, the lamplighter) gets a line of their own
+	var barks := ["Water's gone green again. Don't drink from the trough.", "You're from the Shelter? Huh. Thought you'd be taller.",
+		"If you're going north, go armed. The hounds have got bold.", "Cass waters the whiskey. Everybody knows. Nobody says.",
+		"Two winters since the reactor woke up. Feels like twenty.", "Got nothing to sell you, friend. Got nothing at all.",
+		"Sheriff's fair. Hard, but fair. That's rare out here.", "Heard a caravan got hit on the spur road. Raiders again."]
+	for n in region.npcs:
+		if not DIALOGUE.has(n.id):
+			var nm := String(n.name).capitalize()
+			if nm.begins_with("Patron") or nm.begins_with("Gambler") or nm.begins_with("Lamp"):
+				nm = {"P": "Saloon Regular", "G": "Card Player", "L": "Lamplighter"}[nm[0]]
+			DIALOGUE[n.id] = {"name": nm, "entry": [["else", "b"]], "nodes": {"b": {"say": barks[hash(n.id) % barks.size()], "opts": [{"t": "Take care."}]}}}
 
 func hurt(d: float) -> void:
 	if hp <= 0:
