@@ -110,6 +110,8 @@ func _physics_process(d: float) -> void:
 	var P := Game.player
 	var pp := P.global_position
 	var dist := global_position.distance_to(pp)
+	if dist > 90.0 and state != "chase":
+		return
 	atk_cd -= d
 	bark_cd -= d
 	var spd := 0.0

@@ -40,6 +40,8 @@ func setup(d: Dictionary) -> void:
 
 func _physics_process(d: float) -> void:
 	t += d
+	if Game.player and global_position.distance_squared_to(Game.player.global_position) > 8100.0:
+		return
 	var spd := 0.0
 	if talking and Game.player:
 		var to := Game.player.global_position - global_position

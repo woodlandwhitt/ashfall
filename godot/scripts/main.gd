@@ -18,13 +18,15 @@ var well := Vector3.ZERO
 var dens := Vector3.ZERO
 var start_pos := Vector3.ZERO
 var talk_cd := 0.0
+var chunks
+var grass_nodes: Array = []
+var quality := 1
 
 func _ready() -> void:
 	Game.main = self
 	var R: Dictionary = Game.region
 	_environment()
 	_terrain()
-	_world()
 	_colliders()
 	_pools()
 	_lamps()
@@ -35,6 +37,7 @@ func _ready() -> void:
 	if R.locs.has("dens"):
 		dens = Vector3(R.locs.dens.x, Game.height(R.locs.dens.x, R.locs.dens.z), R.locs.dens.z)
 	start_pos = Vector3(R.start.x, Game.height(R.start.x, R.start.z) + 0.2, R.start.z)
+	_world()
 	player = preload("res://scripts/player.gd").new()
 	player.position = start_pos
 	player.yaw = PI
@@ -56,10 +59,13 @@ func _ready() -> void:
 		enemies.append(e)
 	hud = preload("res://scripts/hud.gd").new()
 	add_child(hud)
+	set_quality(Quality.load_level())
 	Sfx.loop("o_wind", -14.0)
 	Game.msg("Dustwell. Find Sheriff Voss in the square.")
 	_bake_nav.call_deferred()
 	_test_hooks.call_deferred()
+	if OS.get_cmdline_user_args().has("--find"):
+		add_child(load("res://zz_find.gd").new())
 
 # ---------------------------------------------------------------- command-line hooks for automated checks:
 #   -- --shot=/path.png --at=x,z,yaw,pitch   render a few frames from a spot, save a screenshot, quit
@@ -302,20 +308,22 @@ func _terrain() -> void:
 
 # ---------------------------------------------------------------- buildings and props, exactly as placed in the WebView build
 func _world() -> void:
-	var ps: PackedScene = load("res://data/world.glb")
-	var w := ps.instantiate()
-	add_child(w)
-	_tune_world(w)
+	chunks = preload("res://scripts/chunks.gd").new()
+	add_child(chunks)
+	chunks.load_now(start_pos)
 
-func _tune_world(n: Node) -> void:
-	if n is MeshInstance3D:
-		var mi := n as MeshInstance3D
-		var aabb := mi.get_aabb()
-		# small clutter is not worth a shadow on a phone
-		if aabb.size.length() < 6.0:
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for c in n.get_children():
-		_tune_world(c)
+func cam_far(d: float) -> void:
+	if player:
+		player.cam.far = d + 60.0
+
+func set_quality(l: int) -> void:
+	quality = l
+	Quality.save_level(l)
+	Quality.apply(self, l)
+
+func cycle_quality() -> String:
+	set_quality((quality + 1) % 3)
+	return Quality.NAMES[quality]
 
 func _colliders() -> void:
 	var body := StaticBody3D.new()
@@ -447,6 +455,7 @@ func _grass() -> void:
 			mmi.visibility_range_end_margin = 8.0
 			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 			add_child(mmi)
+			grass_nodes.append(mmi)
 
 # ---------------------------------------------------------------- navigation: baked once on a worker thread
 func _bake_nav() -> void:

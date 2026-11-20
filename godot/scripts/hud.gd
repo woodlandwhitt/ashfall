@@ -71,14 +71,11 @@ func _ready() -> void:
 	var cross := Label.new()
 	cross.text = "+"
 	cross.add_theme_font_size_override("font_size", 26)
-	cross.set_anchors_preset(Control.PRESET_CENTER)
-	cross.position = Vector2(-7, -18)
+	_place(cross, Control.PRESET_CENTER, -7, -18, 200, 30)
 	root.add_child(cross)
 
 	fps_l = _label(Vector2(0, 8), 18)
-	fps_l.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	fps_l.position = Vector2(-250, 8)
-	fps_l.size = Vector2(170, 24)
+	_place(fps_l, Control.PRESET_TOP_RIGHT, -250, 8, 170, 24)
 	fps_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	quest_l = _label(Vector2(18, 14), 18)
@@ -92,17 +89,13 @@ func _ready() -> void:
 	root.add_child(msgs)
 
 	compass = Compass.new()
-	compass.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	compass.position = Vector2(-220, 10)
-	compass.size = Vector2(440, 34)
+	_place(compass, Control.PRESET_CENTER_TOP, -220, 10, 440, 34)
 	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(compass)
 
 	hp_bar = ProgressBar.new()
 	hp_bar.show_percentage = false
-	hp_bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	hp_bar.position = Vector2(20, -42)
-	hp_bar.size = Vector2(260, 18)
+	_place(hp_bar, Control.PRESET_BOTTOM_LEFT, 20, -42, 260, 18)
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = Color(0.78, 0.3, 0.18)
 	fill.set_corner_radius_all(3)
@@ -113,19 +106,14 @@ func _ready() -> void:
 	hp_bar.add_theme_stylebox_override("background", bg)
 	root.add_child(hp_bar)
 	stat_l = _label(Vector2(20, -70), 17)
-	stat_l.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	stat_l.position = Vector2(20, -70)
+	_place(stat_l, Control.PRESET_BOTTOM_LEFT, 20, -70, 520, 26)
 
 	ammo_l = _label(Vector2(0, 0), 26)
-	ammo_l.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	ammo_l.position = Vector2(-190, -52)
-	ammo_l.size = Vector2(170, 36)
+	_place(ammo_l, Control.PRESET_BOTTOM_RIGHT, -190, -52, 170, 36)
 	ammo_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	prompt_l = _label(Vector2.ZERO, 22)
-	prompt_l.set_anchors_preset(Control.PRESET_CENTER)
-	prompt_l.position = Vector2(-300, 40)
-	prompt_l.size = Vector2(600, 34)
+	_place(prompt_l, Control.PRESET_CENTER, -300, 40, 600, 34)
 	prompt_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	touch_on = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
@@ -137,20 +125,27 @@ func _ready() -> void:
 
 	var pb := Button.new()
 	pb.text = "II"
-	pb.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	pb.position = Vector2(-66, 8)
-	pb.size = Vector2(52, 44)
+	_place(pb, Control.PRESET_TOP_RIGHT, -66, 8, 52, 44)
 	pb.pressed.connect(toggle_pause)
 	root.add_child(pb)
 
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
-	pause_panel = _center_panel("Paused\n\nAshfall: Meridian, Godot test build\nDustwell slice", [["Resume", toggle_pause], ["Restart", func(): toggle_pause(); Game.main.restart()]])
+	pause_panel = _center_panel("Paused\n\nAshfall: Meridian, Godot test build\nDustwell slice", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Restart", func(): toggle_pause(); Game.main.restart()]])
+	_gfx_label()
 
 	Game.message.connect(add_msg)
 	Game.stats_changed.connect(refresh)
 	Game.quest_changed.connect(refresh)
 	refresh()
+
+# anchors plus explicit offsets, so placement doesn't depend on the screen size at the moment it is built
+func _place(c: Control, preset: int, x: float, y: float, w: float, h: float) -> void:
+	c.set_anchors_preset(preset)
+	c.offset_left = x
+	c.offset_top = y
+	c.offset_right = x + w
+	c.offset_bottom = y + h
 
 func _label(pos: Vector2, size: int) -> Label:
 	var l := Label.new()
@@ -162,9 +157,7 @@ func _label(pos: Vector2, size: int) -> Label:
 
 func _center_panel(title: String, buttons: Array) -> PanelContainer:
 	var p := PanelContainer.new()
-	p.set_anchors_preset(Control.PRESET_CENTER)
-	p.position = Vector2(-220, -150)
-	p.size = Vector2(440, 300)
+	_place(p, Control.PRESET_CENTER, -240, -190, 480, 380)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	p.add_child(v)
@@ -263,12 +256,28 @@ func show_dead(on: bool) -> void:
 	dead_panel.visible = on
 	touch.visible = touch_on and not on
 
+func _gfx_button() -> Button:
+	for b in pause_panel.get_child(0).get_children():
+		if b is Button and String(b.text).begins_with("Graphics"):
+			return b
+	return null
+
+func _gfx_label() -> void:
+	var b := _gfx_button()
+	if b and Game.main:
+		b.text = "Graphics: " + Quality.NAMES[Game.main.quality] + "  (tap to change)"
+
+func _cycle_gfx() -> void:
+	Game.main.cycle_quality()
+	_gfx_label()
+
 func toggle_pause() -> void:
 	Game.paused = not Game.paused
 	get_tree().paused = Game.paused
 	pause_panel.visible = Game.paused
 	if Game.paused:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_gfx_label()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST and not Game.paused:
