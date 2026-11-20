@@ -29,6 +29,7 @@ var bark_cd := 0.0
 var ap: AnimationPlayer   # people use Quaternius bodies; creatures keep their original models
 var act_t := 0.0          # a one-shot animation (shoot, hit, punch) is playing
 var near := true
+var idx := -1
 
 # outfit, cloth tint, skin tint for the human hostiles
 const PEOPLE := {
@@ -115,6 +116,8 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 
 func die(dir: Vector3) -> void:
 	dead = true
+	if idx >= 0:
+		Game.dead[str(idx)] = true
 	state = "dead"
 	collision_layer = 0
 	Sfx.play_at("o_creature2" if quad else ["o_mdie1", "o_mdie2"][randi() % 2], global_position + Vector3.UP)

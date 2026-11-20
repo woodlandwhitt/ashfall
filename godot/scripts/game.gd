@@ -13,28 +13,194 @@ var hd := 0
 var x0 := 0.0
 var z0 := 0.0
 
-var inv: Dictionary = {}
+var inv: Dictionary = {"vault_suit": 1, "pipe_pistol": 1, "ammo_9": 36, "stimpak": 2}
 var flags: Dictionary = {}
 var quests: Dictionary = {}   # id -> {"stage": int, "done": bool}
 var kills: Dictionary = {}    # enemy type -> count
 var hp := 100.0
-var hp_max := 100.0
 var caps := 25
 var xp := 0
 var level := 1
-var mag := 12
-var mag_size := 12
-var reserve := 48
+var points := 0               # unspent stat points
+var stats := {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}
+var perks: Dictionary = {}
+var karma := 0
+var weapon := "pipe_pistol"
+var armor := "vault_suit"
+var magd := {"pipe_pistol": 8}  # rounds loaded, per weapon
+var discovered: Dictionary = {}
+var dead: Dictionary = {}     # enemy spawn index -> true (they stay dead)
+var looted: Dictionary = {}
 var player: Node3D
 var main: Node3D
 var nav_ready := false
 var touch_move := Vector2.ZERO
 var paused := false
+var DB: Dictionary = {}       # items, enemies, loot, perks, stats, places, vendors, gun fits (data/game.json)
 
-const ITEMS := {
-	"sample_well": "Well Water Sample", "sample_glow": "Glowing Water Sample", "stimpak": "Stim Shot",
-	"ammo_9": "9mm Rounds", "hound_hide": "Hound Hide", "scrap": "Scrap Metal",
+# the slice's own quest items, on top of the original game's 134
+const EXTRA_ITEMS := {
+	"sample_well": {"n": "Well Water Sample", "t": "quest", "w": 0.5, "v": 0, "desc": "A flask of Dustwell's well water. Faintly green."},
+	"sample_glow": {"n": "Glowing Water Sample", "t": "quest", "w": 0.5, "v": 0, "desc": "A flask from an irradiated pool. It glows in the dark."},
 }
+
+var hp_max: float:
+	get:
+		return float(maxi(20, 60 + int(stats.endurance) * 8 + level * 6))
+
+var mag: int:
+	get:
+		return int(magd.get(weapon, 0))
+	set(v):
+		magd[weapon] = v
+
+var mag_size: int:
+	get:
+		return int(item(weapon).get("mag", 0))
+
+var reserve: int:
+	get:
+		var a = item(weapon).get("ammo")
+		return count(a) if a else 0
+	set(v):
+		var a = item(weapon).get("ammo")
+		if a:
+			if v <= 0:
+				inv.erase(a)
+			else:
+				inv[a] = v
+
+func item(id) -> Dictionary:
+	return DB.items.get(id, {}) if id != null else {}
+
+func iname(id) -> String:
+	return String(item(id).get("n", str(id)))
+
+func count(id) -> int:
+	return int(inv.get(id, 0))
+
+func xp_need() -> int:
+	return 60 + level * 70
+
+func carry_max() -> float:
+	return 90.0 + int(stats.might) * 12.0
+
+func carry_now() -> float:
+	var w := 0.0
+	for k in inv:
+		w += float(item(k).get("w", 0.0)) * int(inv[k])
+	return w
+
+func equip(id: String) -> void:
+	var it := item(id)
+	if it.is_empty() or not has(id):
+		return
+	if it.t == "weapon":
+		weapon = id
+		if it.has("mag") and not magd.has(id):
+			magd[id] = 0
+		if player:
+			player.weapon_changed()
+		msg("Equipped " + iname(id))
+	elif it.t == "armor":
+		_armor_bonus(armor, -1)
+		armor = id
+		_armor_bonus(id, 1)
+		msg("Wearing " + iname(id))
+	stats_changed.emit()
+
+func _armor_bonus(id, sgn: int) -> void:
+	var b: Dictionary = item(id).get("bonus", {})
+	for k in b:
+		stats[k] = clampi(int(stats[k]) + int(b[k]) * sgn, 1, 12)
+
+# eat, drink, inject: the aid items' effects from the original
+func use_item(id: String) -> void:
+	var it := item(id)
+	if it.is_empty() or not has(id):
+		return
+	match String(it.t):
+		"weapon", "armor":
+			equip(id)
+			return
+		"aid":
+			if it.get("throw"):
+				msg("Grenades come in the next build.")
+				return
+			take(id)
+			var heal := float(it.get("heal", 0))
+			if heal > 0:
+				hp = minf(hp_max, hp + heal * (1.25 if perks.has("iron_gut") else 1.0))
+			msg("Used " + iname(id) + (" (+" + str(int(heal)) + " HP)" if heal > 0 else ""))
+			Sfx.play("o_coin", -12.0, 1.6)
+	stats_changed.emit()
+
+func discover(k: String) -> void:
+	if discovered.has(k):
+		return
+	discovered[k] = true
+	var L: Dictionary = DB.locs[k]
+	msg("Discovered: " + String(L.name) + "  (+20 XP)")
+	add_xp(20)
+
+# ---------------------------------------------------------------- save / load (three slots and an autosave)
+func save_game(slot: String) -> bool:
+	if player == null:
+		return false
+	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
+		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points,
+		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "armor": armor, "magd": magd, "discovered": discovered,
+		"dead": dead, "looted": looted}
+	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(s))
+	return true
+
+func save_info(slot: String) -> String:
+	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.READ)
+	if f == null:
+		return ""
+	var s = JSON.parse_string(f.get_as_text())
+	if s == null:
+		return ""
+	return "Level %d, %s" % [int(s.level), String(s.time).replace("T", " ")]
+
+func load_game(slot: String) -> bool:
+	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.READ)
+	if f == null:
+		return false
+	var s = JSON.parse_string(f.get_as_text())
+	if s == null:
+		return false
+	for k in ["inv", "flags", "quests", "kills", "stats", "perks", "magd", "discovered", "dead", "looted"]:
+		set(k, s[k])
+	for k in ["hp", "caps", "xp", "level", "points", "karma", "weapon", "armor"]:
+		set(k, s[k])
+	for k in ["caps", "xp", "level", "points", "karma"]:
+		set(k, int(get(k)))
+	pending_pos = s.pos
+	main.restart_keep()
+	return true
+
+var pending_pos = null
+
+func reset() -> void:
+	inv = {"vault_suit": 1, "pipe_pistol": 1, "ammo_9": 36, "stimpak": 2}
+	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted"]:
+		set(k, {})
+	stats = {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}
+	caps = 25
+	xp = 0
+	level = 1
+	points = 0
+	karma = 0
+	weapon = "pipe_pistol"
+	armor = "vault_suit"
+	magd = {"pipe_pistol": 8}
+	hp = hp_max
+	nav_ready = false
+	paused = false
 
 const QUESTS := {
 	"bad_water": {"t": "Bad Water", "stages": [
@@ -77,6 +243,10 @@ var DIALOGUE := {
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	var gf := FileAccess.open("res://data/game.json", FileAccess.READ)
+	DB = JSON.parse_string(gf.get_as_text())
+	for k in EXTRA_ITEMS:
+		DB.items[k] = EXTRA_ITEMS[k]
 	var f := FileAccess.open("res://data/region.json", FileAccess.READ)
 	region = JSON.parse_string(f.get_as_text())
 	var hf := FileAccess.open("res://data/height.f32", FileAccess.READ)
@@ -162,11 +332,12 @@ func check_quests() -> void:
 
 func add_xp(n: int) -> void:
 	xp += n
-	while xp >= level * 200:
+	while xp >= xp_need():
+		xp -= xp_need()
 		level += 1
-		hp_max += 10
+		points += 1
 		hp = hp_max
-		msg("Level up! You are now level " + str(level) + ".")
+		msg("Level up! You are now level " + str(level) + ". A stat point is waiting in the Pip menu.")
 		Sfx.play("o_levelup")
 	stats_changed.emit()
 

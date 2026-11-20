@@ -14,7 +14,7 @@ func _ready():
 		if a.begins_with("grip="):
 			var v := a.trim_prefix("grip=").split(",")
 			Viewmodel.GRIP = Vector3(float(v[0]), float(v[1]), float(v[2]))
-	vm.setup(load("res://guns/Pistol_4.glb"))
+	vm.setup(load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121))
 	var args := OS.get_cmdline_user_args()
 	for a in args:
 		if a.begins_with("off="):

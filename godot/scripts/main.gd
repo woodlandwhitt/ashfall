@@ -24,6 +24,13 @@ var quality := 1
 var terrain_mi: MeshInstance3D
 var terrain_full: ShaderMaterial
 var terrain_lite: ShaderMaterial
+var people: Dictionary = {}      # chunk key -> [["n"|"e", index]]
+var live_npc: Dictionary = {}
+var live_enemy: Dictionary = {}
+var nav_center := Vector3(1e9, 0, 1e9)
+var nav_busy := false
+var disc_t := 1.0
+var auto_t := 180.0
 
 func _ready() -> void:
 	Game.main = self
@@ -33,42 +40,91 @@ func _ready() -> void:
 	_colliders()
 	_pools()
 	_lamps()
-	_grass()
 	for p in R.points:
 		if p.id == "well":
 			well = Vector3(p.x, Game.height(p.x, p.z), p.z)
 	if R.locs.has("dens"):
 		dens = Vector3(R.locs.dens.x, Game.height(R.locs.dens.x, R.locs.dens.z), R.locs.dens.z)
 	start_pos = Vector3(R.start.x, Game.height(R.start.x, R.start.z) + 0.2, R.start.z)
-	_world()
+	var start_yaw := PI
+	if Game.pending_pos != null:
+		var pp: Array = Game.pending_pos
+		start_pos = Vector3(pp[0], Game.height(pp[0], pp[2]) + 0.2, pp[2])
+		start_yaw = float(pp[3])
+		Game.pending_pos = null
+	# townsfolk and hostiles are spawned chunk by chunk as the world streams in
+	for i in R.npcs.size():
+		var d: Dictionary = R.npcs[i]
+		var k: String = chunks.key_of(Vector3(d.x, 0, d.z))
+		if not people.has(k):
+			people[k] = []
+		people[k].append(["n", i])
+	for i in R.enemies.size():
+		var d: Dictionary = R.enemies[i]
+		var k: String = chunks.key_of(Vector3(d.x, 0, d.z))
+		if not people.has(k):
+			people[k] = []
+		people[k].append(["e", i])
+	chunks.on_enter = _spawn_chunk
+	chunks.on_leave = _despawn_chunk
 	player = preload("res://scripts/player.gd").new()
 	player.position = start_pos
-	player.yaw = PI
+	player.yaw = start_yaw
 	add_child(player)
 	Game.player = player
-	for d in R.npcs:
-		if not ResourceLoader.exists("res://data/chars/npc_" + d.id + ".glb"):
-			continue
-		var n = preload("res://scripts/npc.gd").new()
-		add_child(n)
-		n.setup(d)
-		npcs.append(n)
-	for d in R.enemies:
-		if not ResourceLoader.exists("res://data/chars/enemy_" + d.type + ".glb"):
-			continue
-		var e = preload("res://scripts/enemy.gd").new()
-		add_child(e)
-		e.setup(d, R.etypes[d.type])
-		enemies.append(e)
 	hud = preload("res://scripts/hud.gd").new()
 	add_child(hud)
 	set_quality(Quality.load_level())
+	chunks.load_now(start_pos)
 	Sfx.loop("o_wind", -14.0)
-	Game.msg("Dustwell. Find Sheriff Voss in the square.")
-	_bake_nav.call_deferred()
+	if not Game.flags.has("met_sheriff"):
+		Game.msg("Dustwell. Find Sheriff Voss in the square.")
 	_test_hooks.call_deferred()
-	if OS.get_cmdline_user_args().has("--find"):
-		add_child(load("res://zz_find.gd").new())
+
+# people belonging to a chunk come and go with it; the dead stay dead
+func _spawn_chunk(k: String) -> void:
+	for it in people.get(k, []):
+		var i: int = it[1]
+		if it[0] == "n":
+			var d: Dictionary = Game.region.npcs[i]
+			if live_npc.has(i):
+				continue
+			var n = preload("res://scripts/npc.gd").new()
+			add_child(n)
+			n.setup(d)
+			n.set_meta("idx", i)
+			npcs.append(n)
+			live_npc[i] = n
+		else:
+			var d: Dictionary = Game.region.enemies[i]
+			if live_enemy.has(i) or Game.dead.has(str(i)):
+				continue
+			if not ResourceLoader.exists("res://data/chars/enemy_" + d.type + ".glb") or not Game.region.etypes.has(d.type):
+				continue
+			var e = preload("res://scripts/enemy.gd").new()
+			add_child(e)
+			e.setup(d, Game.region.etypes[d.type])
+			e.idx = i
+			enemies.append(e)
+			live_enemy[i] = e
+
+func _despawn_chunk(k: String) -> void:
+	for it in people.get(k, []):
+		var i: int = it[1]
+		if it[0] == "n" and live_npc.has(i):
+			var n = live_npc[i]
+			if n == dialog_npc:
+				continue
+			npcs.erase(n)
+			live_npc.erase(i)
+			n.queue_free()
+		elif it[0] == "e" and live_enemy.has(i):
+			var e = live_enemy[i]
+			if e.state == "chase" and not e.dead:
+				continue
+			enemies.erase(e)
+			live_enemy.erase(i)
+			e.queue_free()
 
 # ---------------------------------------------------------------- command-line hooks for automated checks:
 #   -- --shot=/path.png --at=x,z,yaw,pitch   render a few frames from a spot, save a screenshot, quit
@@ -87,6 +143,12 @@ func _test_hooks() -> void:
 		await _selftest()
 	if args.has("perf"):
 		await _perf_report()
+	if args.has("pip"):
+		Game.discover("dustwell")
+		Game.give("magnum", 1)
+		Game.give("combat_knife", 1)
+		hud.toggle_pip()
+		hud.pip.show_tab(String(args.pip))
 	if args.has("shot"):
 		for i in int(args.get("frames", "40")):
 			await get_tree().process_frame
@@ -243,6 +305,57 @@ func _selftest() -> void:
 			others.append(n.id + ":" + ("ok" if Game.DIALOGUE.has(n.id) else "silent"))
 	out.append("others " + " ".join(others))
 	out.append("nav ready " + str(Game.nav_ready))
+	# weapons: every kind fires and uses its own ammo
+	for w in ["scatter_gun", "rattler", "arc_pistol", "magnum", "combat_knife", "hunting_rifle"]:
+		Game.give(w, 1)
+		var am = Game.item(w).get("ammo")
+		if am:
+			Game.give(am, 20)
+		Game.equip(w)
+		await _wait(2)
+		player.reload_t = 0.0
+		Game.mag = Game.mag_size
+		var m0 := Game.mag
+		player.fire_cd = 0.0
+		player.fire()
+		out.append("weapon %s (%s): mag %d -> %d, model %s" % [w, Game.item(w).kind, m0, Game.mag, "arms+" + ("gun" if player.vm.gun else "fists")])
+	Game.equip("pipe_pistol")
+	# loot a corpse
+	var corpse = null
+	for e in enemies:
+		if e.dead:
+			corpse = e
+	if corpse:
+		out.append("loot: " + ", ".join(loot_for(corpse.type)))
+	# aid
+	Game.hp = 30.0
+	var st0 := Game.count("stimpak")
+	Game.use_item("stimpak")
+	out.append("stimpak: hp %.0f, stims %d -> %d" % [Game.hp, st0, Game.count("stimpak")])
+	# discovery, map and travel
+	Game.discover("dustwell")
+	var far_k := ""
+	for k in Game.DB.locs:
+		var L: Dictionary = Game.DB.locs[k]
+		if k != "dustwell" and in_region(float(L.x), float(L.z)) and Vector2(float(L.x) - player.global_position.x, float(L.z) - player.global_position.z).length() > 150.0:
+			far_k = k
+	if far_k != "":
+		Game.discover(far_k)
+		for e in enemies:
+			e.state = "idle"
+		fast_travel(far_k)
+		await _wait(10)
+		out.append("travelled to %s: at %s, chunks %d, people %d" % [far_k, str(player.global_position.round()), chunks.count(), npcs.size() + enemies.size()])
+	# save, change things, load back
+	Game.save_game("3")
+	var caps0 := Game.caps
+	Game.caps = 1
+	out.append("save slot 3: " + Game.save_info("3"))
+	var f := FileAccess.open("user://save_3.json", FileAccess.READ)
+	var sv = JSON.parse_string(f.get_as_text())
+	out.append("saved caps %d (now %d), weapon %s, level %d" % [int(sv.caps), Game.caps, sv.weapon, int(sv.level)])
+	Game.caps = caps0
+	out.append("xp %d/%d level %d points %d carry %.0f/%.0f" % [Game.xp, Game.xp_need(), Game.level, Game.points, Game.carry_now(), Game.carry_max()])
 	for l in out:
 		print("TEST ", l)
 
@@ -289,70 +402,31 @@ func _environment() -> void:
 	sun.shadow_blur = 1.2
 	add_child(sun)
 
-# ---------------------------------------------------------------- terrain: a 2 m render mesh and a 1 m physics heightfield
+# ---------------------------------------------------------------- terrain: streamed ground meshes, one physics heightfield
 func _terrain() -> void:
 	var w := Game.hw
 	var dd := Game.hd
-	var step := 2
-	var nx := int((w - 1) / step) + 1
-	var nz := int((dd - 1) / step) + 1
-	var verts := PackedVector3Array()
-	var norms := PackedVector3Array()
-	var uvs := PackedVector2Array()
-	verts.resize(nx * nz)
-	norms.resize(nx * nz)
-	uvs.resize(nx * nz)
-	for j in nz:
-		for i in nx:
-			var x := Game.x0 + i * step
-			var z := Game.z0 + j * step
-			var h := Game.height(x, z)
-			var k := j * nx + i
-			verts[k] = Vector3(x, h, z)
-			var hl := Game.height(x - 1.0, z)
-			var hr := Game.height(x + 1.0, z)
-			var hdn := Game.height(x, z - 1.0)
-			var hu := Game.height(x, z + 1.0)
-			norms[k] = Vector3(hl - hr, 2.0, hdn - hu).normalized()
-			uvs[k] = Vector2(x, z)
-	var idx := PackedInt32Array()
-	for j in nz - 1:
-		for i in nx - 1:
-			var a := j * nx + i
-			idx.append_array([a, a + 1, a + nx, a + 1, a + nx + 1, a + nx])
-	var arr := []
-	arr.resize(Mesh.ARRAY_MAX)
-	arr[Mesh.ARRAY_VERTEX] = verts
-	arr[Mesh.ARRAY_NORMAL] = norms
-	arr[Mesh.ARRAY_TEX_UV] = uvs
-	arr[Mesh.ARRAY_INDEX] = idx
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	var st := SurfaceTool.new()
-	st.create_from(mesh, 0)
-	st.generate_tangents()
-	mesh = st.commit()
-	var mat := ShaderMaterial.new()
-	mat.shader = preload("res://scripts/terrain.gdshader")
+	terrain_full = ShaderMaterial.new()
+	terrain_full.shader = preload("res://scripts/terrain.gdshader")
 	for k in ["sand", "sand_n", "dirt", "rock", "rock_n"]:
-		mat.set_shader_parameter("t_" + k, load("res://tex/" + k + ".webp"))
-	mat.set_shader_parameter("t_road", load("res://tex/asphalt.webp"))
-	mat.set_shader_parameter("t_mask", load("res://data/mask.png"))
-	mat.set_shader_parameter("t_tint", load("res://data/tint.png"))
-	mat.set_shader_parameter("region", Vector4(Game.x0, Game.z0, w - 1, dd - 1))
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = mat
-	add_child(mi)
-	terrain_mi = mi
-	terrain_full = mat
+		terrain_full.set_shader_parameter("t_" + k, load("res://tex/" + k + ".webp"))
+	terrain_full.set_shader_parameter("t_road", load("res://tex/asphalt.webp"))
+	terrain_full.set_shader_parameter("t_mask", load("res://data/mask.png"))
+	terrain_full.set_shader_parameter("t_tint", load("res://data/tint.png"))
+	terrain_full.set_shader_parameter("region", Vector4(Game.x0, Game.z0, w - 1, dd - 1))
 	terrain_lite = ShaderMaterial.new()
 	terrain_lite.shader = preload("res://scripts/terrain_lite.gdshader")
 	for k in ["sand", "rock"]:
 		terrain_lite.set_shader_parameter("t_" + k, load("res://tex/" + k + ".webp"))
 	terrain_lite.set_shader_parameter("t_mask", load("res://data/mask.png"))
 	terrain_lite.set_shader_parameter("region", Vector4(Game.x0, Game.z0, w - 1, dd - 1))
-	# physics: a heightfield, which Jolt handles far more cheaply than a triangle mesh
+	var img: Image = (load("res://data/mask.png") as Texture2D).get_image()
+	if img.is_compressed():
+		img.decompress()
+	chunks = preload("res://scripts/chunks.gd").new()
+	add_child(chunks)
+	chunks.setup(terrain_full, img, _grass_mesh())
+	# physics: one heightfield for the whole map, which Jolt handles far more cheaply than triangles
 	var body := StaticBody3D.new()
 	body.collision_layer = 1
 	var cs := CollisionShape3D.new()
@@ -365,11 +439,8 @@ func _terrain() -> void:
 	body.add_child(cs)
 	add_child(body)
 
-# ---------------------------------------------------------------- buildings and props, exactly as placed in the WebView build
 func _world() -> void:
-	chunks = preload("res://scripts/chunks.gd").new()
-	add_child(chunks)
-	chunks.load_now(start_pos)
+	pass
 
 func cam_far(d: float) -> void:
 	if player:
@@ -379,22 +450,27 @@ func set_quality(l: int) -> void:
 	quality = l
 	Quality.save_level(l)
 	Quality.apply(self, l)
+	chunks.set_material(terrain_lite if l == 0 else terrain_full)
 
 func cycle_quality() -> String:
 	set_quality((quality + 1) % 3)
 	return Quality.NAMES[quality]
 
 func _colliders() -> void:
-	var body := StaticBody3D.new()
-	body.collision_layer = 1
+	var bodies := {}
 	for s in Game.region.solids:
+		var k: String = chunks.key_of(Vector3((s[0] + s[1]) * 0.5, 0, (s[2] + s[3]) * 0.5))
+		if not bodies.has(k):
+			var nb := StaticBody3D.new()
+			nb.collision_layer = 1
+			add_child(nb)
+			bodies[k] = nb
 		var cs := CollisionShape3D.new()
 		var b := BoxShape3D.new()
 		b.size = Vector3(maxf(0.05, s[1] - s[0]), maxf(0.05, s[5] - s[4]), maxf(0.05, s[3] - s[2]))
 		cs.shape = b
 		cs.position = Vector3((s[0] + s[1]) * 0.5, (s[4] + s[5]) * 0.5, (s[2] + s[3]) * 0.5)
-		body.add_child(cs)
-	add_child(body)
+		bodies[k].add_child(cs)
 
 func _pools() -> void:
 	var sh := preload("res://scripts/water.gdshader")
@@ -437,11 +513,8 @@ func _lamps() -> void:
 		o.distance_fade_length = 15.0
 		add_child(o)
 
-# grass tufts in 32 m patches that are only drawn within ~55 m
-func _grass() -> void:
-	var img: Image = (load("res://data/mask.png") as Texture2D).get_image()
-	if img.is_compressed():
-		img.decompress()
+# one grass tuft: seven thin blades leaning out from the centre (chunks scatter them)
+func _grass_mesh() -> Mesh:
 	var blade := ArrayMesh.new()
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
@@ -470,55 +543,22 @@ func _grass() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = preload("res://scripts/grass.gdshader")
 	blade.surface_set_material(0, mat)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	var P := 32.0
-	var cx := int(ceil((Game.hw - 1) / P))
-	var cz := int(ceil((Game.hd - 1) / P))
-	for j in cz:
-		for i in cx:
-			var xf := PackedFloat32Array()
-			var n := 0
-			for s in 900:
-				var x := Game.x0 + i * P + rng.randf() * P
-				var z := Game.z0 + j * P + rng.randf() * P
-				var px := clampi(int(x - Game.x0), 0, img.get_width() - 1)
-				var pz := clampi(int(z - Game.z0), 0, img.get_height() - 1)
-				var mk := img.get_pixel(px, pz)
-				if mk.r > 0.15 or mk.g > 0.5:
-					continue
-				var h := Game.height(x, z)
-				if absf(Game.height(x + 1.0, z) - h) > 0.6 or absf(Game.height(x, z + 1.0) - h) > 0.6:
-					continue
-				var clump := sin(x * 0.13) * cos(z * 0.11) + sin(x * 0.041 + z * 0.037)
-				if clump < -0.2 + rng.randf() * 0.6:
-					continue
-				var sc := rng.randf_range(0.7, 1.3)
-				var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.3), sc))
-				xf.append_array([b.x.x, b.y.x, b.z.x, x, b.x.y, b.y.y, b.z.y, h - 0.03, b.x.z, b.y.z, b.z.z, z])
-				var c := rng.randf_range(0.75, 1.1)
-				xf.append_array([c, c * rng.randf_range(0.92, 1.05), c * 0.9, 1.0])
-				n += 1
-			if n == 0:
-				continue
-			var mm := MultiMesh.new()
-			mm.transform_format = MultiMesh.TRANSFORM_3D
-			mm.use_colors = true
-			mm.mesh = blade
-			mm.instance_count = n
-			mm.buffer = xf
-			var mmi := MultiMeshInstance3D.new()
-			mmi.multimesh = mm
-			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			mmi.visibility_range_end = 55.0
-			mmi.visibility_range_end_margin = 8.0
-			mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-			add_child(mmi)
-			grass_nodes.append(mmi)
+	return blade
 
-# ---------------------------------------------------------------- navigation: baked once on a worker thread
+# ---------------------------------------------------------------- navigation: a 180 m square around the player, rebaked
+# on a worker thread when the player has moved 60 m. The source is built directly from the heightfield and the
+# collider boxes inside the square, so baking never walks the scene tree.
 func _bake_nav() -> void:
-	nav_region = NavigationRegion3D.new()
+	if nav_busy or player == null:
+		return
+	var c: Vector3 = player.global_position
+	if Vector2(c.x - nav_center.x, c.z - nav_center.z).length() < 60.0:
+		return
+	nav_busy = true
+	nav_center = c
+	if nav_region == null:
+		nav_region = NavigationRegion3D.new()
+		add_child(nav_region)
 	var nm := NavigationMesh.new()
 	nm.cell_size = 0.5
 	nm.cell_height = 0.25
@@ -526,17 +566,33 @@ func _bake_nav() -> void:
 	nm.agent_height = 1.7
 	nm.agent_max_climb = 0.5
 	nm.agent_max_slope = 42.0
-	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
-	nm.geometry_collision_mask = 1
-	var c := Vector3(-95, 0, 60)
-	nm.filter_baking_aabb = AABB(Vector3(-210, -50, -60), Vector3(240, 200, 220))
-	nav_region.navigation_mesh = nm
-	add_child(nav_region)
+	var R := 90.0
+	nm.filter_baking_aabb = AABB(Vector3(c.x - R, -200, c.z - R), Vector3(R * 2, 400, R * 2))
 	var src := NavigationMeshSourceGeometryData3D.new()
-	NavigationServer3D.parse_source_geometry_data(nm, src, self)
+	var f := PackedVector3Array()
+	var step := 2.0
+	var x := c.x - R
+	while x < c.x + R:
+		var z := c.z - R
+		while z < c.z + R:
+			var a := Vector3(x, Game.height(x, z), z)
+			var b := Vector3(x + step, Game.height(x + step, z), z)
+			var d := Vector3(x, Game.height(x, z + step), z + step)
+			var e := Vector3(x + step, Game.height(x + step, z + step), z + step)
+			f.append_array([a, b, d, b, e, d])
+			z += step
+		x += step
+	src.add_faces(f, Transform3D.IDENTITY)
+	var box := BoxMesh.new()
+	for s in Game.region.solids:
+		if s[1] < c.x - R or s[0] > c.x + R or s[3] < c.z - R or s[2] > c.z + R:
+			continue
+		var sz := Vector3(maxf(0.05, s[1] - s[0]), maxf(0.05, s[5] - s[4]), maxf(0.05, s[3] - s[2]))
+		src.add_mesh(box, Transform3D(Basis.from_scale(sz), Vector3((s[0] + s[1]) * 0.5, (s[4] + s[5]) * 0.5, (s[2] + s[3]) * 0.5)))
 	NavigationServer3D.bake_from_source_geometry_data_async(nm, src, func():
 		nav_region.navigation_mesh = nm
-		Game.nav_ready = true)
+		Game.nav_ready = true
+		nav_busy = false)
 
 # ---------------------------------------------------------------- interaction
 func _best_target() -> Dictionary:
@@ -579,12 +635,9 @@ func interact() -> void:
 		"loot":
 			var e = t.o
 			e.looted = true
-			var c := randi_range(4, 18)
-			Game.caps += c
-			var a := randi_range(3, 9) if not e.quad else 0
-			Game.reserve += a
+			var got := loot_for(e.type)
 			Sfx.play("o_coin")
-			Game.msg("Found " + str(c) + " caps" + (" and " + str(a) + " rounds" if a > 0 else "") + ".")
+			Game.msg("Found: " + (", ".join(got) if got.size() > 0 else "nothing worth taking") + ".")
 			Game.stats_changed.emit()
 		"well":
 			if Game.stage("bad_water") == 0 and not Game.has("sample_well"):
@@ -602,6 +655,35 @@ func interact() -> void:
 			Sfx.play("o_splash")
 			Game.msg("You hold your breath and fill a flask. It glows faintly in your hand.")
 			Game.check_quests()
+
+# what a dead enemy carries: caps, its own drops and rolls on the shared loot tables (data.js LOOT)
+func loot_for(type: String) -> Array:
+	var def: Dictionary = Game.DB.enemies.get(type, {})
+	var got: Array = []
+	if def.has("caps"):
+		var c := randi_range(int(def.caps[0]), int(def.caps[1]))
+		if c > 0:
+			Game.caps += c
+			got.append(str(c) + " caps")
+	var add := func(id: String, n: int):
+		if n <= 0 or not Game.DB.items.has(id):
+			return
+		if id == "caps":
+			Game.caps += n
+			got.append(str(n) + " caps")
+			return
+		Game.give(id, n)
+		got.append(Game.iname(id) + (" x" + str(n) if n > 1 else ""))
+	for dr in def.get("drops", []):
+		if randf() < float(dr[3]):
+			add.call(String(dr[0]), randi_range(int(dr[1]), int(dr[2])))
+	for lt in def.get("loot", []):
+		if randf() < float(lt[1]):
+			var table: Array = Game.DB.loot.get(lt[0], [])
+			if table.size() > 0:
+				var e: Array = table[randi() % table.size()]
+				add.call(String(e[0]), randi_range(int(e[1]), int(e[2])))
+	return got
 
 func in_dialog() -> bool:
 	return dialog_npc != null
@@ -659,11 +741,53 @@ func speak(text: String, who: String) -> void:
 	var pitch := 0.9 + float(hash(who + "p") % 30) / 100.0
 	DisplayServer.tts_speak(text, v, 80, pitch, 1.05)
 
-func quest_target() -> Variant:
-	var sheriff = null
+func in_region(x: float, z: float) -> bool:
+	return x > Game.x0 + 4.0 and z > Game.z0 + 4.0 and x < Game.x0 + Game.hw - 5.0 and z < Game.z0 + Game.hd - 5.0
+
+# travel to a discovered place: the town fades out, the world around the destination is built, you arrive
+func fast_travel(k: String) -> void:
+	if in_dialog():
+		return
+	for e in enemies:
+		if e.state == "chase" and not e.dead:
+			Game.msg("You can't travel with enemies nearby.")
+			return
+	var L: Dictionary = Game.DB.locs[k]
+	var p := Vector3(float(L.x), 0, float(L.z) + float(L.get("r", 20)) * 0.6)
+	for t in 24:
+		var a := t * 0.7
+		var q := Vector3(float(L.x) + cos(a) * (6.0 + t), 0, float(L.z) + sin(a) * (6.0 + t))
+		q.y = Game.height(q.x, q.z)
+		var hit := get_world_3d().direct_space_state.intersect_shape(_probe(q))
+		if hit.is_empty():
+			p = q
+			break
+	p.y = Game.height(p.x, p.z) + 0.3
+	player.global_position = p
+	player.velocity = Vector3.ZERO
+	chunks.load_now(p)
+	Game.msg("You travel to " + String(L.name) + ".")
+
+func _probe(at: Vector3) -> PhysicsShapeQueryParameters3D:
+	var q := PhysicsShapeQueryParameters3D.new()
+	var c := CapsuleShape3D.new()
+	c.radius = 0.4
+	c.height = 1.7
+	q.shape = c
+	q.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * 1.0)
+	q.collision_mask = 1
+	return q
+
+func npc_pos(id: String) -> Variant:
 	for n in npcs:
-		if n.id == "sheriff":
-			sheriff = n
+		if n.id == id:
+			return n.global_position
+	for d in Game.region.npcs:
+		if d.id == id:
+			return Vector3(d.x, Game.height(d.x, d.z), d.z)
+	return null
+
+func quest_target() -> Variant:
 	match Game.stage("bad_water"):
 		0: return well
 		1:
@@ -675,28 +799,41 @@ func quest_target() -> Variant:
 					bd = d
 					best = p.pos
 			return best
-		2: return sheriff.global_position if sheriff else null
+		2: return npc_pos("sheriff")
 	match Game.stage("hounds"):
 		0: return dens
-		1:
-			for n in npcs:
-				if n.id == "cass":
-					return n.global_position
-			return null
-	if not Game.flags.has("met_sheriff") and sheriff:
-		return sheriff.global_position
+		1: return npc_pos("cass")
+	if not Game.flags.has("met_sheriff"):
+		return npc_pos("sheriff")
 	return null
 
 func hounds_left() -> int:
 	var n := 0
-	for e in enemies:
-		if not e.dead and e.quad and e.global_position.distance_to(dens) < 70.0:
+	for i in Game.region.enemies.size():
+		var d: Dictionary = Game.region.enemies[i]
+		if Game.dead.has(str(i)):
+			continue
+		if Game.region.etypes.get(d.type, {}).get("quad", false) and Vector3(d.x, dens.y, d.z).distance_to(dens) < 70.0:
 			n += 1
 	return n
 
 func _process(d: float) -> void:
 	if player == null or hud == null:
 		return
+	_bake_nav()
+	disc_t -= d
+	if disc_t <= 0.0:
+		disc_t = 1.0
+		var pp: Vector3 = player.global_position
+		for k in Game.DB.locs:
+			var L: Dictionary = Game.DB.locs[k]
+			if not Game.discovered.has(k) and Vector2(pp.x - float(L.x), pp.z - float(L.z)).length() < float(L.get("r", 30)):
+				Game.discover(k)
+		# autosave every three minutes
+		auto_t -= 1.0
+		if auto_t <= 0.0 and not in_dialog() and Game.hp > 0:
+			auto_t = 180.0
+			Game.save_game("auto")
 	var t := _best_target()
 	hud.set_prompt("" if t.is_empty() else "[USE] " + String(t.label))
 	# gunfire wakes up anything that can hear it
@@ -728,18 +865,14 @@ func respawn() -> void:
 	Game.msg("You come to in Dustwell. Somebody dragged you back.")
 
 func restart() -> void:
-	Game.inv.clear()
-	Game.flags.clear()
-	Game.quests.clear()
-	Game.kills.clear()
-	Game.hp = 100.0
-	Game.hp_max = 100.0
-	Game.caps = 25
-	Game.xp = 0
-	Game.level = 1
-	Game.mag = 12
-	Game.reserve = 48
+	Game.reset()
+	get_tree().reload_current_scene()
+
+# reload the scene but keep Game's state (used by Load)
+func restart_keep() -> void:
 	Game.nav_ready = false
+	get_tree().paused = false
+	Game.paused = false
 	get_tree().reload_current_scene()
 
 # ---------------------------------------------------------------- effects
@@ -784,12 +917,12 @@ func blood(pos: Vector3, dir: Vector3) -> void:
 	_puff(pos, -dir, Color(0.45, 0.02, 0.02, 0.95), 12, 2.5)
 	Sfx.play_at(["x_flesh0", "x_flesh1"][randi() % 2], pos, -4.0)
 
-func tracer(a: Vector3, b: Vector3) -> void:
+func tracer(a: Vector3, b: Vector3, col: Color = Color(1.0, 0.85, 0.5, 0.8)) -> void:
 	var mi := MeshInstance3D.new()
 	var im := ImmediateMesh.new()
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_color = Color(1.0, 0.85, 0.5, 0.8)
+	m.albedo_color = col
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	im.surface_begin(Mesh.PRIMITIVE_LINES, m)
 	im.surface_add_vertex(a)

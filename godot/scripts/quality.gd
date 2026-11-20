@@ -35,9 +35,5 @@ static func apply(main: Node, l: int) -> void:
 	sun.directional_shadow_max_distance = 40.0 if q.shadow == 1 else 70.0
 	main.env.glow_enabled = q.glow
 	main.env.fog_density = q.fog
-	main.chunks.configure(q.radius, q.small, q.big)
-	for g in main.grass_nodes:
-		g.visible = q.grass > 0.0
-		g.visibility_range_end = q.grass
+	main.chunks.configure(q.radius, q.small, q.big, q.grass)
 	main.cam_far(q.big)
-	main.terrain_mi.material_override = main.terrain_lite if l == 0 else main.terrain_full

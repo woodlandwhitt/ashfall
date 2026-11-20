@@ -20,6 +20,8 @@ var dead_panel: PanelContainer
 var pause_panel: PanelContainer
 var touch: Control
 var touch_on := false
+var pip
+var weapon_l: Label
 var font: Font
 var fps_acc := 0.0
 var fps_n := 0
@@ -75,7 +77,7 @@ func _ready() -> void:
 	root.add_child(cross)
 
 	fps_l = _label(Vector2(0, 8), 18)
-	_place(fps_l, Control.PRESET_TOP_RIGHT, -250, 8, 170, 24)
+	_place(fps_l, Control.PRESET_TOP_RIGHT, -330, 14, 180, 24)
 	fps_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	quest_l = _label(Vector2(18, 14), 18)
@@ -112,6 +114,9 @@ func _ready() -> void:
 	_place(ammo_l, Control.PRESET_BOTTOM_RIGHT, -190, -52, 170, 36)
 	ammo_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
+	weapon_l = _label(Vector2.ZERO, 17)
+	_place(weapon_l, Control.PRESET_BOTTOM_RIGHT, -330, -80, 310, 26)
+	weapon_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	prompt_l = _label(Vector2.ZERO, 22)
 	_place(prompt_l, Control.PRESET_CENTER, -300, 40, 600, 34)
 	prompt_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -129,6 +134,13 @@ func _ready() -> void:
 	pb.pressed.connect(toggle_pause)
 	root.add_child(pb)
 
+	var pip_b := Button.new()
+	pip_b.text = "PIP"
+	_place(pip_b, Control.PRESET_TOP_RIGHT, -136, 8, 62, 44)
+	pip_b.pressed.connect(toggle_pip)
+	root.add_child(pip_b)
+	pip = preload("res://scripts/pipmenu.gd").new()
+	root.add_child(pip)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
 	pause_panel = _center_panel("Paused\n\nAshfall: Meridian, Godot test build\nDustwell slice", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Restart", func(): toggle_pause(); Game.main.restart()]])
@@ -238,7 +250,9 @@ func add_msg(t: String) -> void:
 func refresh() -> void:
 	hp_bar.max_value = Game.hp_max
 	hp_bar.value = Game.hp
-	ammo_l.text = str(Game.mag) + " / " + str(Game.reserve)
+	var it := Game.item(Game.weapon)
+	ammo_l.text = (str(Game.mag) + " / " + str(Game.reserve)) if it.has("mag") else ""
+	weapon_l.text = Game.iname(Game.weapon)
 	var stims := int(Game.inv.get("stimpak", 0))
 	stat_l.text = "LVL " + str(Game.level) + "   XP " + str(Game.xp) + "   CAPS " + str(Game.caps) + ("   STIMS " + str(stims) if stims > 0 else "")
 	var o := Game.current_objective()
@@ -270,6 +284,36 @@ func _gfx_label() -> void:
 func _cycle_gfx() -> void:
 	Game.main.cycle_quality()
 	_gfx_label()
+
+func toggle_pip() -> void:
+	if Game.main.in_dialog() or Game.hp <= 0:
+		return
+	if pip.visible:
+		pip.visible = false
+		Game.paused = false
+		get_tree().paused = false
+		touch.visible = touch_on
+	else:
+		Game.paused = true
+		get_tree().paused = true
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		touch.visible = false
+		pip.open()
+
+func _unhandled_key_input(e: InputEvent) -> void:
+	if e.pressed and not e.echo and (e.keycode == KEY_TAB or e.keycode == KEY_I):
+		toggle_pip()
+	elif e.pressed and not e.echo and e.keycode == KEY_Q and not Game.paused:
+		swap_weapon()
+
+# cycle through the weapons you carry
+func swap_weapon() -> void:
+	var list: Array = Game.inv.keys().filter(func(k): return String(Game.item(k).get("t", "")) == "weapon")
+	list.sort()
+	if list.size() < 2:
+		return
+	var i := list.find(Game.weapon)
+	Game.equip(list[(i + 1) % list.size()])
 
 func toggle_pause() -> void:
 	Game.paused = not Game.paused
@@ -345,6 +389,7 @@ class TouchPad extends Control:
 			"jump": [Vector2(s.x - 110, s.y - 320), 44.0, "JUMP"],
 			"reload": [Vector2(s.x - 240, s.y - 250), 40.0, "RLD"],
 			"run": [Vector2(250, s.y - 90), 38.0, "RUN"],
+			"swap": [Vector2(s.x - 360, s.y - 70), 36.0, "SWAP"],
 		}
 
 	func _input(e: InputEvent) -> void:
@@ -404,6 +449,7 @@ class TouchPad extends Control:
 			"use": if on: Game.main.interact()
 			"jump": if on: p.jump()
 			"reload": if on: p.reload()
+			"swap": if on: Game.main.hud.swap_weapon()
 			"run":
 				if on:
 					running = not running
