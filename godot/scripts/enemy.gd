@@ -26,6 +26,20 @@ var speed := 3.0
 var dmg := 8.0
 var hostile := true
 var bark_cd := 0.0
+var ap: AnimationPlayer   # people use Quaternius bodies; creatures keep their original models
+var act_t := 0.0          # a one-shot animation (shoot, hit, punch) is playing
+var near := true
+
+# outfit, cloth tint, skin tint for the human hostiles
+const PEOPLE := {
+	"raider": ["Male_Ranger", Color(0.62, 0.5, 0.44), Color(1.0, 0.85, 0.75)],
+	"jackal": ["Male_Peasant", Color(0.7, 0.58, 0.4), Color(0.85, 0.7, 0.6)],
+	"heavy": ["Male_Ranger", Color(0.38, 0.38, 0.42), Color(0.8, 0.66, 0.56)],
+	"marauder": ["Female_Ranger", Color(0.6, 0.32, 0.28), Color(1.0, 0.86, 0.78)],
+	"pyro": ["Male_Peasant", Color(0.4, 0.37, 0.34), Color(0.75, 0.6, 0.5)],
+	"ghoul": ["Male_Peasant", Color(0.48, 0.48, 0.4), Color(0.7, 0.85, 0.55)],
+	"tollking": ["Male_Ranger", Color(0.75, 0.62, 0.3), Color(0.9, 0.75, 0.65)],
+}
 
 func setup(d: Dictionary, td: Dictionary) -> void:
 	type = d.type
@@ -56,10 +70,26 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		cs.shape = cap
 		cs.position.y = 0.88
 	add_child(cs)
-	var ps: PackedScene = load("res://data/chars/enemy_" + type + ".glb")
-	model = ps.instantiate()
-	add_child(model)
-	rig = Rig.new(model, quad)
+	if PEOPLE.has(type) and not quad:
+		var p: Array = PEOPLE[type]
+		model = Humanoid.build(p[0], p[1], p[2])
+		if type == "heavy":
+			model.scale = Vector3.ONE * 1.12
+		add_child(model)
+		ap = model.get_node("AnimationPlayer")
+		if ranged:
+			ap.play("Pistol_Aim_Neutral")
+			ap.seek(0.0, true)
+			Humanoid.hold_aligned(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121), Vector3(0.0, -0.05, 0.07))
+		ap.play("Pistol_Idle" if ranged else "Idle")
+		ap.seek(randf() * 2.0, true)
+	else:
+		var ps: PackedScene = load("res://data/chars/enemy_" + type + ".glb")
+		model = ps.instantiate()
+		add_child(model)
+		rig = Rig.new(model, quad)
+	for mi in model.find_children("*", "GeometryInstance3D", true, false):
+		(mi as GeometryInstance3D).visibility_range_end = 150.0
 	agent = NavigationAgent3D.new()
 	agent.path_desired_distance = 1.0
 	agent.target_desired_distance = 1.2
@@ -72,6 +102,8 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 		return
 	hp -= amount
 	flash = 0.12
+	if ap and hp > 0.0:
+		_one_shot(["Hit_Chest", "Hit_Head"][randi() % 2], 0.45)
 	Game.main.blood(at, dir)
 	Sfx.play_at(("o_bark2" if quad else ["o_mhurt1", "o_mhurt2"][randi() % 2]), at, 0.0, randf_range(0.9, 1.1))
 	if hp <= 0.0:
@@ -86,6 +118,12 @@ func die(dir: Vector3) -> void:
 	state = "dead"
 	collision_layer = 0
 	Sfx.play_at("o_creature2" if quad else ["o_mdie1", "o_mdie2"][randi() % 2], global_position + Vector3.UP)
+	if ap:
+		ap.active = true
+		ap.play("Death01", 0.1)
+		Game.on_kill(type)
+		Game.add_xp(40)
+		return
 	var tw := create_tween()
 	var side := 1.0 if randf() < 0.5 else -1.0
 	tw.tween_property(model, "rotation:z", side * PI / 2.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
@@ -110,8 +148,13 @@ func _physics_process(d: float) -> void:
 	var P := Game.player
 	var pp := P.global_position
 	var dist := global_position.distance_to(pp)
+	var is_near := dist < 55.0
+	if ap and is_near != near:
+		near = is_near
+		ap.active = near
 	if dist > 90.0 and state != "chase":
 		return
+	act_t -= d
 	atk_cd -= d
 	bark_cd -= d
 	var spd := 0.0
@@ -149,11 +192,33 @@ func _physics_process(d: float) -> void:
 	if spd == 0.0:
 		velocity.x = lerpf(velocity.x, 0.0, 1.0 - exp(-8.0 * d))
 		velocity.z = lerpf(velocity.z, 0.0, 1.0 - exp(-8.0 * d))
-	velocity.y = -6.0 if not is_on_floor() else -0.5
-	move_and_slide()
+	# a hostile standing still on the ground skips the physics step
+	if spd > 0.0 or not is_on_floor() or Vector2(velocity.x, velocity.z).length() > 0.05:
+		velocity.y = -6.0 if not is_on_floor() else -0.5
+		move_and_slide()
 	model.rotation.y = face_yaw
-	if dist < 60.0:
-		rig.animate(d, spd, t, aim)
+	if dist < 55.0:
+		if ap:
+			if act_t <= 0.0:
+				var a := "Idle"
+				if spd > 2.0:
+					a = "Jog_Fwd"
+				elif spd > 0.3:
+					a = "Walk"
+				elif aim:
+					a = "Pistol_Aim_Neutral"
+				elif ranged:
+					a = "Pistol_Idle"
+				Humanoid.play(ap, a, clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0)
+		else:
+			rig.animate(d, spd, t, aim)
+
+func _one_shot(anim: String, dur: float) -> void:
+	if ap == null:
+		return
+	ap.play(anim, 0.06)
+	ap.seek(0.0, true)
+	act_t = dur
 
 func _face(p: Vector3, d: float) -> void:
 	var to := p - global_position
@@ -179,10 +244,13 @@ func _move_to(p: Vector3, spd: float, d: float) -> float:
 	return Vector2(velocity.x, velocity.z).length()
 
 func _attack(dist: float) -> void:
+	if not quad and not ranged:
+		_one_shot(["Punch_Jab", "Punch_Cross"][randi() % 2], 0.55)
 	if quad or not ranged:
 		Sfx.play_at("o_bark2" if quad else "x_flesh1", global_position + Vector3.UP, 0.0, randf_range(0.9, 1.1))
 		Game.hurt(dmg * randf_range(0.7, 1.2))
 		return
+	_one_shot("Pistol_Shoot", 0.35)
 	Sfx.play_at("pistol_far" if dist > 14.0 else "pistol", global_position + Vector3.UP * 1.4, -2.0, randf_range(0.9, 1.05))
 	Game.main.tracer(global_position + Vector3.UP * 1.4 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5, Game.player.global_position + Vector3.UP * 1.3 + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 1.5)
 	var chance := clampf(0.75 - dist * 0.022, 0.2, 0.75)

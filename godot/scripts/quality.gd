@@ -40,3 +40,4 @@ static func apply(main: Node, l: int) -> void:
 		g.visible = q.grass > 0.0
 		g.visibility_range_end = q.grass
 	main.cam_far(q.big)
+	main.terrain_mi.material_override = main.terrain_lite if l == 0 else main.terrain_full

@@ -13,6 +13,7 @@ var pitch := 0.0
 var cam: Camera3D
 var gun: Node3D
 var flash: OmniLight3D
+var vm: Viewmodel
 var flash_q: MeshInstance3D
 var running := false
 var step_d := 0.0
@@ -43,23 +44,17 @@ func _ready() -> void:
 	cam.far = 900.0
 	add_child(cam)
 	cam.current = true
-	# the pistol (same CC0 model and fit as the WebView build)
+	# the player's own arms holding the pistol (Quaternius CC0 body and animations), swaying with movement
 	gun = Node3D.new()
 	cam.add_child(gun)
-	var ps: PackedScene = load("res://guns/Pistol_4.glb")
-	var m := ps.instantiate() as Node3D
-	m.scale = Vector3.ONE * 0.121
-	m.rotation.y = PI / 2.0
-	gun.add_child(m)
-	gun.position = Vector3(0.19, -0.19, -0.4)
-	_make_arms(m)
-	_no_shadow(gun)
+	vm = Viewmodel.new()
+	gun.add_child(vm)
+	vm.setup(load("res://guns/Pistol_4.glb"))
 	flash = OmniLight3D.new()
 	flash.light_color = Color(1.0, 0.75, 0.4)
 	flash.omni_range = 7.0
 	flash.light_energy = 0.0
-	flash.position = Vector3(0.0, 0.05, -0.3)
-	gun.add_child(flash)
+	vm.muzzle.add_child(flash)
 	flash_q = MeshInstance3D.new()
 	var q := QuadMesh.new()
 	q.size = Vector2(0.16, 0.16)
@@ -71,93 +66,8 @@ func _ready() -> void:
 	fm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	fm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	flash_q.material_override = fm
-	flash_q.position = Vector3(0.0, 0.04, -0.28)
 	flash_q.visible = false
-	gun.add_child(flash_q)
-
-# First-person arms: vault-suit sleeves, bare forearms and hands, built from capsules around the pistol's grip.
-# The grip is found from the gun model's bounds (the handle is the low, rear part of a pistol).
-func _limb(parent: Node3D, a: Vector3, b: Vector3, r: float, mat: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var cm := CapsuleMesh.new()
-	var len := a.distance_to(b)
-	cm.radius = r
-	cm.height = len + r * 2.0
-	cm.radial_segments = 12
-	cm.rings = 4
-	mi.mesh = cm
-	mi.material_override = mat
-	var y := (b - a).normalized()
-	var x := y.cross(Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
-	var z := x.cross(y)
-	mi.transform = Transform3D(Basis(x, y, z), (a + b) * 0.5)
-	parent.add_child(mi)
-	return mi
-
-func _box(parent: Node3D, c: Vector3, size: Vector3, rot: Vector3, mat: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
-	mi.material_override = mat
-	mi.position = c
-	mi.rotation = rot
-	parent.add_child(mi)
-	return mi
-
-func _make_arms(model: Node3D) -> void:
-	var aabb := AABB()
-	var first := true
-	for c in model.find_children("*", "MeshInstance3D", true, false):
-		var mi := c as MeshInstance3D
-		var xf := gun.global_transform.affine_inverse() * mi.global_transform if mi.is_inside_tree() else model.transform * mi.transform
-		var bb: AABB = xf * mi.get_aabb()
-		aabb = bb if first else aabb.merge(bb)
-		first = false
-	var lo := aabb.position
-	var hi := aabb.end
-	var cx := (lo.x + hi.x) * 0.5
-	var h := hi.y - lo.y
-	var ln := hi.z - lo.z
-	var grip := Vector3(cx, lo.y + h * 0.42, hi.z - ln * 0.2)
-	var skin := StandardMaterial3D.new()
-	skin.albedo_color = Color(0.78, 0.58, 0.45)
-	skin.roughness = 0.75
-	var glove := StandardMaterial3D.new()
-	glove.albedo_color = Color(0.22, 0.16, 0.11)
-	glove.roughness = 0.85
-	var sleeve := StandardMaterial3D.new()
-	sleeve.albedo_color = Color(0.17, 0.27, 0.5)
-	sleeve.roughness = 0.9
-	var cuff := StandardMaterial3D.new()
-	cuff.albedo_color = Color(0.85, 0.68, 0.2)
-	cuff.roughness = 0.8
-	var arms := Node3D.new()
-	arms.name = "Arms"
-	gun.add_child(arms)
-	var k := clampf(ln / 0.2, 0.6, 1.4)   # hand size relative to the gun
-	# right hand: palm on the right of the grip, four fingers wrapped round its front, thumb up the left side
-	_box(arms, grip + Vector3(0.022, -0.004, 0.004) * k, Vector3(0.022, 0.085, 0.07) * k, Vector3(0.1, 0, 0), glove)
-	for f in 4:
-		var fy := grip.y + (0.026 - f * 0.019) * k
-		_limb(arms, Vector3(grip.x + 0.03 * k, fy, grip.z - 0.03 * k), Vector3(grip.x - 0.022 * k, fy - 0.004, grip.z - 0.026 * k), 0.0095 * k, glove)
-	_limb(arms, grip + Vector3(-0.022, 0.03, 0.02) * k, grip + Vector3(-0.024, 0.042, -0.035) * k, 0.011 * k, glove)
-	# left hand: wraps over the right fingers from the left, palm under the grip
-	_box(arms, grip + Vector3(-0.03, -0.03, -0.005) * k, Vector3(0.024, 0.07, 0.075) * k, Vector3(0.15, 0, -0.35), glove)
-	for f in 4:
-		var fy := grip.y + (0.012 - f * 0.018) * k
-		_limb(arms, Vector3(grip.x - 0.04 * k, fy - 0.01 * k, grip.z - 0.045 * k), Vector3(grip.x + 0.03 * k, fy, grip.z - 0.05 * k), 0.0095 * k, glove)
-	# forearms run down and back out of the bottom corners of the screen, into vault-suit sleeves
-	var rw := grip + Vector3(0.02, -0.05, 0.035) * k
-	var rdir := Vector3(0.22, -0.55, 0.8).normalized()
-	_limb(arms, rw, rw + rdir * 0.12, 0.028 * k, glove)
-	_limb(arms, rw + rdir * 0.12, rw + rdir * 0.135, 0.036 * k, cuff)
-	_limb(arms, rw + rdir * 0.135, rw + rdir * 0.5, 0.042 * k, sleeve)
-	var lw := grip + Vector3(-0.035, -0.06, 0.03) * k
-	var ldir := Vector3(-0.42, -0.5, 0.75).normalized()
-	_limb(arms, lw, lw + ldir * 0.12, 0.028 * k, glove)
-	_limb(arms, lw + ldir * 0.12, lw + ldir * 0.135, 0.036 * k, cuff)
-	_limb(arms, lw + ldir * 0.135, lw + ldir * 0.5, 0.042 * k, sleeve)
+	vm.muzzle.add_child(flash_q)
 
 func _no_shadow(n: Node) -> void:
 	if n is GeometryInstance3D:
@@ -241,17 +151,16 @@ func _process(d: float) -> void:
 	rotation.y = yaw
 	cam.position.y = EYE + sin(bob * 2.0) * 0.025
 	var hs := Vector2(velocity.x, velocity.z).length()
-	var target := Vector3(0.19 + sin(bob) * 0.008 * hs * 0.2, -0.19 + absf(cos(bob)) * 0.006 * hs * 0.2, -0.4 + recoil * 0.06)
+	var target := Vector3(sin(bob) * 0.008 * hs * 0.2, absf(cos(bob)) * 0.006 * hs * 0.2, recoil * 0.025)
 	if reload_t > 0.0:
 		reload_t -= d
-		target += Vector3(0, -0.12 * sin(clampf(reload_t / 1.3, 0.0, 1.0) * PI), 0)
 		if reload_t <= 0.0:
 			var n := mini(Game.mag_size - Game.mag, Game.reserve)
 			Game.mag += n
 			Game.reserve -= n
 			Game.stats_changed.emit()
 	gun.position = gun.position.lerp(target, 1.0 - exp(-20.0 * d))
-	gun.rotation.x = recoil * 0.35
+	gun.rotation.x = recoil * 0.06
 	if flash.light_energy > 0.0:
 		flash.light_energy = maxf(0.0, flash.light_energy - d * 60.0)
 		flash_q.visible = flash.light_energy > 0.5
@@ -260,6 +169,7 @@ func reload() -> void:
 	if reload_t > 0.0 or Game.mag >= Game.mag_size or Game.reserve <= 0:
 		return
 	reload_t = 1.3
+	vm.reload(1.3)
 	Sfx.play("k_draw", -4.0)
 
 func fire() -> void:
@@ -274,6 +184,7 @@ func fire() -> void:
 	Game.stats_changed.emit()
 	fire_cd = 0.28
 	recoil = 1.0
+	vm.shoot()
 	flash.light_energy = 6.0
 	flash_q.visible = true
 	flash_q.rotation.z = randf() * TAU
