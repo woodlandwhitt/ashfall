@@ -1,0 +1,14 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+
+[deps]
+
+source_file="res://data/mask.png"
+
+[params]
+
+compress/mode=0
+mipmaps/generate=false
+detect_3d/compress_to=0
