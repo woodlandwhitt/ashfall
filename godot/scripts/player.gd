@@ -135,24 +135,29 @@ func _make_arms(model: Node3D) -> void:
 	var arms := Node3D.new()
 	arms.name = "Arms"
 	gun.add_child(arms)
-	# right hand wraps the grip: palm and fingers around it, thumb along the left side
-	_box(arms, grip + Vector3(0.012, -0.005, 0.012), Vector3(0.07, 0.095, 0.085), Vector3(0.12, 0, 0), glove)
-	_box(arms, grip + Vector3(-0.004, -0.008, -0.04), Vector3(0.064, 0.085, 0.028), Vector3(0.12, 0, 0), glove)
-	_limb(arms, grip + Vector3(-0.035, 0.03, 0.02), grip + Vector3(-0.038, 0.045, -0.03), 0.014, glove)
-	var rw := grip + Vector3(0.025, -0.03, 0.07)
-	var re := rw + Vector3(0.11, -0.16, 0.3)
-	_limb(arms, rw, re, 0.034, skin)
-	_limb(arms, re - (re - rw).normalized() * 0.02, re + (re - rw).normalized() * 0.03, 0.044, cuff)
-	_limb(arms, re, re + Vector3(0.12, -0.2, 0.36), 0.05, sleeve)
-	# left hand cups the right from below and to the left
-	var lg := grip + Vector3(-0.045, -0.04, 0.0)
-	_box(arms, lg, Vector3(0.06, 0.07, 0.095), Vector3(0.2, 0.0, 0.5), glove)
-	_box(arms, lg + Vector3(0.03, -0.012, -0.02), Vector3(0.05, 0.03, 0.07), Vector3(0.2, 0.0, 0.2), glove)
-	var lw := lg + Vector3(-0.03, -0.04, 0.06)
-	var le := lw + Vector3(-0.2, -0.17, 0.26)
-	_limb(arms, lw, le, 0.033, skin)
-	_limb(arms, le - (le - lw).normalized() * 0.02, le + (le - lw).normalized() * 0.03, 0.043, cuff)
-	_limb(arms, le, le + Vector3(-0.2, -0.2, 0.32), 0.05, sleeve)
+	var k := clampf(ln / 0.2, 0.6, 1.4)   # hand size relative to the gun
+	# right hand: palm on the right of the grip, four fingers wrapped round its front, thumb up the left side
+	_box(arms, grip + Vector3(0.022, -0.004, 0.004) * k, Vector3(0.022, 0.085, 0.07) * k, Vector3(0.1, 0, 0), glove)
+	for f in 4:
+		var fy := grip.y + (0.026 - f * 0.019) * k
+		_limb(arms, Vector3(grip.x + 0.03 * k, fy, grip.z - 0.03 * k), Vector3(grip.x - 0.022 * k, fy - 0.004, grip.z - 0.026 * k), 0.0095 * k, glove)
+	_limb(arms, grip + Vector3(-0.022, 0.03, 0.02) * k, grip + Vector3(-0.024, 0.042, -0.035) * k, 0.011 * k, glove)
+	# left hand: wraps over the right fingers from the left, palm under the grip
+	_box(arms, grip + Vector3(-0.03, -0.03, -0.005) * k, Vector3(0.024, 0.07, 0.075) * k, Vector3(0.15, 0, -0.35), glove)
+	for f in 4:
+		var fy := grip.y + (0.012 - f * 0.018) * k
+		_limb(arms, Vector3(grip.x - 0.04 * k, fy - 0.01 * k, grip.z - 0.045 * k), Vector3(grip.x + 0.03 * k, fy, grip.z - 0.05 * k), 0.0095 * k, glove)
+	# forearms run down and back out of the bottom corners of the screen, into vault-suit sleeves
+	var rw := grip + Vector3(0.02, -0.05, 0.035) * k
+	var rdir := Vector3(0.22, -0.55, 0.8).normalized()
+	_limb(arms, rw, rw + rdir * 0.12, 0.028 * k, glove)
+	_limb(arms, rw + rdir * 0.12, rw + rdir * 0.135, 0.036 * k, cuff)
+	_limb(arms, rw + rdir * 0.135, rw + rdir * 0.5, 0.042 * k, sleeve)
+	var lw := grip + Vector3(-0.035, -0.06, 0.03) * k
+	var ldir := Vector3(-0.42, -0.5, 0.75).normalized()
+	_limb(arms, lw, lw + ldir * 0.12, 0.028 * k, glove)
+	_limb(arms, lw + ldir * 0.12, lw + ldir * 0.135, 0.036 * k, cuff)
+	_limb(arms, lw + ldir * 0.135, lw + ldir * 0.5, 0.042 * k, sleeve)
 
 func _no_shadow(n: Node) -> void:
 	if n is GeometryInstance3D:

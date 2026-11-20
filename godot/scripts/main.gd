@@ -64,6 +64,8 @@ func _ready() -> void:
 	Game.msg("Dustwell. Find Sheriff Voss in the square.")
 	_bake_nav.call_deferred()
 	_test_hooks.call_deferred()
+	if OS.get_cmdline_user_args().has("--find"):
+		add_child(load("res://zz_find.gd").new())
 
 # ---------------------------------------------------------------- command-line hooks for automated checks:
 #   -- --shot=/path.png --at=x,z,yaw,pitch   render a few frames from a spot, save a screenshot, quit

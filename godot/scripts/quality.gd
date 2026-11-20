@@ -25,7 +25,7 @@ static func save_level(l: int) -> void:
 static func apply(main: Node, l: int) -> void:
 	var q: Dictionary = P[l]
 	var vp := main.get_viewport()
-	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if q.scale < 1.0 else Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	vp.scaling_3d_scale = q.scale
 	vp.msaa_3d = Viewport.MSAA_2X if q.msaa == 1 else Viewport.MSAA_DISABLED
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if q.msaa == 0 and l > 0 else Viewport.SCREEN_SPACE_AA_DISABLED
