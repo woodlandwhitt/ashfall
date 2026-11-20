@@ -46,7 +46,7 @@ void fragment() {
 	vec3 rC = texture(t_rock, uvw / 8.3).rgb;
 	float rW = smoothstep(0.2, 0.55, (1.0 - n0.y) * 3.2 + (rC.g - 0.5) * 0.5 + smoothstep(20.0, 36.0, wp.y) * 0.6);
 	alb = mix(alb, rC * vec3(0.64, 0.52, 0.42), rW);
-	vec3 aC = texture(t_road, uvw / 5.7).rgb;
+	vec3 aC = texture(t_road, uvw / 5.7).rgb * 0.55;
 	float roW = smoothstep(0.42, 0.6, mk.r + (aC.g - 0.4) * 1.1 * (1.0 - mk.r) * step(0.02, mk.r));
 	alb = mix(alb, aC * vec3(1.0, 0.97, 0.93), roW);
 	alb *= 0.82 + mac * 0.36;

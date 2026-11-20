@@ -379,11 +379,18 @@ func _grass() -> void:
 	var v := PackedVector3Array()
 	var uv := PackedVector2Array()
 	var nrm := PackedVector3Array()
-	for k in 3:
-		var a := k * PI / 3.0
-		var dx := cos(a) * 0.22
-		var dz := sin(a) * 0.22
-		v.append_array([Vector3(-dx, 0, -dz), Vector3(dx, 0, dz), Vector3(dx, 0.55, dz), Vector3(-dx, 0, -dz), Vector3(dx, 0.55, dz), Vector3(-dx, 0.55, -dz)])
+	# one tuft: seven thin blades leaning out from the centre
+	var brng := RandomNumberGenerator.new()
+	brng.seed = 3
+	for k in 7:
+		var a := k * TAU / 7.0 + brng.randf() * 0.5
+		var w := 0.035
+		var hgt := brng.randf_range(0.28, 0.5)
+		var lean := brng.randf_range(0.05, 0.16)
+		var off := Vector3(cos(a), 0, sin(a)) * brng.randf_range(0.0, 0.08)
+		var side := Vector3(-sin(a), 0, cos(a)) * w
+		var tip := off + Vector3(cos(a) * lean, hgt, sin(a) * lean)
+		v.append_array([off - side, off + side, tip + side * 0.2, off - side, tip + side * 0.2, tip - side * 0.2])
 		uv.append_array([Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 1), Vector2(1, 0), Vector2(0, 0)])
 		for i in 6:
 			nrm.append(Vector3.UP)
@@ -405,7 +412,7 @@ func _grass() -> void:
 		for i in cx:
 			var xf := PackedFloat32Array()
 			var n := 0
-			for s in 520:
+			for s in 900:
 				var x := Game.x0 + i * P + rng.randf() * P
 				var z := Game.z0 + j * P + rng.randf() * P
 				var px := clampi(int(x - Game.x0), 0, img.get_width() - 1)
@@ -419,8 +426,8 @@ func _grass() -> void:
 				var clump := sin(x * 0.13) * cos(z * 0.11) + sin(x * 0.041 + z * 0.037)
 				if clump < -0.2 + rng.randf() * 0.6:
 					continue
-				var sc := rng.randf_range(0.6, 1.4)
-				var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.5), sc))
+				var sc := rng.randf_range(0.7, 1.3)
+				var b := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.3), sc))
 				xf.append_array([b.x.x, b.y.x, b.z.x, x, b.x.y, b.y.y, b.z.y, h - 0.03, b.x.z, b.y.z, b.z.z, z])
 				var c := rng.randf_range(0.75, 1.1)
 				xf.append_array([c, c * rng.randf_range(0.92, 1.05), c * 0.9, 1.0])

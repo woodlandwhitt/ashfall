@@ -48,10 +48,10 @@ func _ready() -> void:
 	cam.add_child(gun)
 	var ps: PackedScene = load("res://guns/Pistol_4.glb")
 	var m := ps.instantiate() as Node3D
-	m.scale = Vector3.ONE * 0.121 * 1.25
+	m.scale = Vector3.ONE * 0.121
 	m.rotation.y = PI / 2.0
 	gun.add_child(m)
-	gun.position = Vector3(0.17, -0.16, -0.36)
+	gun.position = Vector3(0.19, -0.19, -0.4)
 	_no_shadow(gun)
 	flash = OmniLight3D.new()
 	flash.light_color = Color(1.0, 0.75, 0.4)
@@ -156,7 +156,7 @@ func _process(d: float) -> void:
 	rotation.y = yaw
 	cam.position.y = EYE + sin(bob * 2.0) * 0.025
 	var hs := Vector2(velocity.x, velocity.z).length()
-	var target := Vector3(0.17 + sin(bob) * 0.008 * hs * 0.2, -0.16 + absf(cos(bob)) * 0.006 * hs * 0.2, -0.36 + recoil * 0.06)
+	var target := Vector3(0.19 + sin(bob) * 0.008 * hs * 0.2, -0.19 + absf(cos(bob)) * 0.006 * hs * 0.2, -0.4 + recoil * 0.06)
 	if reload_t > 0.0:
 		reload_t -= d
 		target += Vector3(0, -0.12 * sin(clampf(reload_t / 1.3, 0.0, 1.0) * PI), 0)
