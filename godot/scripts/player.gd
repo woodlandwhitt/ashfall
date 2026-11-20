@@ -52,6 +52,7 @@ func _ready() -> void:
 	m.rotation.y = PI / 2.0
 	gun.add_child(m)
 	gun.position = Vector3(0.19, -0.19, -0.4)
+	_make_arms(m)
 	_no_shadow(gun)
 	flash = OmniLight3D.new()
 	flash.light_color = Color(1.0, 0.75, 0.4)
@@ -73,6 +74,85 @@ func _ready() -> void:
 	flash_q.position = Vector3(0.0, 0.04, -0.28)
 	flash_q.visible = false
 	gun.add_child(flash_q)
+
+# First-person arms: vault-suit sleeves, bare forearms and hands, built from capsules around the pistol's grip.
+# The grip is found from the gun model's bounds (the handle is the low, rear part of a pistol).
+func _limb(parent: Node3D, a: Vector3, b: Vector3, r: float, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CapsuleMesh.new()
+	var len := a.distance_to(b)
+	cm.radius = r
+	cm.height = len + r * 2.0
+	cm.radial_segments = 12
+	cm.rings = 4
+	mi.mesh = cm
+	mi.material_override = mat
+	var y := (b - a).normalized()
+	var x := y.cross(Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
+	var z := x.cross(y)
+	mi.transform = Transform3D(Basis(x, y, z), (a + b) * 0.5)
+	parent.add_child(mi)
+	return mi
+
+func _box(parent: Node3D, c: Vector3, size: Vector3, rot: Vector3, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.material_override = mat
+	mi.position = c
+	mi.rotation = rot
+	parent.add_child(mi)
+	return mi
+
+func _make_arms(model: Node3D) -> void:
+	var aabb := AABB()
+	var first := true
+	for c in model.find_children("*", "MeshInstance3D", true, false):
+		var mi := c as MeshInstance3D
+		var xf := gun.global_transform.affine_inverse() * mi.global_transform if mi.is_inside_tree() else model.transform * mi.transform
+		var bb: AABB = xf * mi.get_aabb()
+		aabb = bb if first else aabb.merge(bb)
+		first = false
+	var lo := aabb.position
+	var hi := aabb.end
+	var cx := (lo.x + hi.x) * 0.5
+	var h := hi.y - lo.y
+	var ln := hi.z - lo.z
+	var grip := Vector3(cx, lo.y + h * 0.42, hi.z - ln * 0.2)
+	var skin := StandardMaterial3D.new()
+	skin.albedo_color = Color(0.78, 0.58, 0.45)
+	skin.roughness = 0.75
+	var glove := StandardMaterial3D.new()
+	glove.albedo_color = Color(0.22, 0.16, 0.11)
+	glove.roughness = 0.85
+	var sleeve := StandardMaterial3D.new()
+	sleeve.albedo_color = Color(0.17, 0.27, 0.5)
+	sleeve.roughness = 0.9
+	var cuff := StandardMaterial3D.new()
+	cuff.albedo_color = Color(0.85, 0.68, 0.2)
+	cuff.roughness = 0.8
+	var arms := Node3D.new()
+	arms.name = "Arms"
+	gun.add_child(arms)
+	# right hand wraps the grip: palm and fingers around it, thumb along the left side
+	_box(arms, grip + Vector3(0.012, -0.005, 0.012), Vector3(0.07, 0.095, 0.085), Vector3(0.12, 0, 0), glove)
+	_box(arms, grip + Vector3(-0.004, -0.008, -0.04), Vector3(0.064, 0.085, 0.028), Vector3(0.12, 0, 0), glove)
+	_limb(arms, grip + Vector3(-0.035, 0.03, 0.02), grip + Vector3(-0.038, 0.045, -0.03), 0.014, glove)
+	var rw := grip + Vector3(0.025, -0.03, 0.07)
+	var re := rw + Vector3(0.11, -0.16, 0.3)
+	_limb(arms, rw, re, 0.034, skin)
+	_limb(arms, re - (re - rw).normalized() * 0.02, re + (re - rw).normalized() * 0.03, 0.044, cuff)
+	_limb(arms, re, re + Vector3(0.12, -0.2, 0.36), 0.05, sleeve)
+	# left hand cups the right from below and to the left
+	var lg := grip + Vector3(-0.045, -0.04, 0.0)
+	_box(arms, lg, Vector3(0.06, 0.07, 0.095), Vector3(0.2, 0.0, 0.5), glove)
+	_box(arms, lg + Vector3(0.03, -0.012, -0.02), Vector3(0.05, 0.03, 0.07), Vector3(0.2, 0.0, 0.2), glove)
+	var lw := lg + Vector3(-0.03, -0.04, 0.06)
+	var le := lw + Vector3(-0.2, -0.17, 0.26)
+	_limb(arms, lw, le, 0.033, skin)
+	_limb(arms, le - (le - lw).normalized() * 0.02, le + (le - lw).normalized() * 0.03, 0.043, cuff)
+	_limb(arms, le, le + Vector3(-0.2, -0.2, 0.32), 0.05, sleeve)
 
 func _no_shadow(n: Node) -> void:
 	if n is GeometryInstance3D:

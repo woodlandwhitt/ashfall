@@ -145,7 +145,8 @@ func _ready() -> void:
 
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
-	pause_panel = _center_panel("Paused\n\nAshfall: Meridian, Godot test build\nDustwell slice", [["Resume", toggle_pause], ["Restart", func(): toggle_pause(); Game.main.restart()]])
+	pause_panel = _center_panel("Paused\n\nAshfall: Meridian, Godot test build\nDustwell slice", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Restart", func(): toggle_pause(); Game.main.restart()]])
+	_gfx_label()
 
 	Game.message.connect(add_msg)
 	Game.stats_changed.connect(refresh)
@@ -163,8 +164,8 @@ func _label(pos: Vector2, size: int) -> Label:
 func _center_panel(title: String, buttons: Array) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.set_anchors_preset(Control.PRESET_CENTER)
-	p.position = Vector2(-220, -150)
-	p.size = Vector2(440, 300)
+	p.position = Vector2(-240, -190)
+	p.size = Vector2(480, 380)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	p.add_child(v)
@@ -263,12 +264,28 @@ func show_dead(on: bool) -> void:
 	dead_panel.visible = on
 	touch.visible = touch_on and not on
 
+func _gfx_button() -> Button:
+	for b in pause_panel.get_child(0).get_children():
+		if b is Button and String(b.text).begins_with("Graphics"):
+			return b
+	return null
+
+func _gfx_label() -> void:
+	var b := _gfx_button()
+	if b and Game.main:
+		b.text = "Graphics: " + Quality.NAMES[Game.main.quality] + "  (tap to change)"
+
+func _cycle_gfx() -> void:
+	Game.main.cycle_quality()
+	_gfx_label()
+
 func toggle_pause() -> void:
 	Game.paused = not Game.paused
 	get_tree().paused = Game.paused
 	pause_panel.visible = Game.paused
 	if Game.paused:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_gfx_label()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST and not Game.paused:
