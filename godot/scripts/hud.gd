@@ -21,6 +21,7 @@ var pause_panel: PanelContainer
 var touch: Control
 var touch_on := false
 var pip
+var screens: Screens
 var weapon_l: Label
 var font: Font
 var fps_acc := 0.0
@@ -141,6 +142,8 @@ func _ready() -> void:
 	root.add_child(pip_b)
 	pip = preload("res://scripts/pipmenu.gd").new()
 	root.add_child(pip)
+	screens = Screens.new()
+	root.add_child(screens)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
 	pause_panel = _center_panel("Paused\n\nAshfall: Meridian, Godot test build\nDustwell slice", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Restart", func(): toggle_pause(); Game.main.restart()]])
@@ -224,6 +227,7 @@ func show_dialogue(who: String, text: String, opts: Array, cb: Callable) -> void
 		b.text = "> " + String(opts[i].t)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.custom_minimum_size = Vector2(0, 46)
+		b.disabled = opts[i].get("off", false)
 		b.pressed.connect(cb.bind(i))
 		dlg_opts.add_child(b)
 	touch.visible = false
@@ -286,8 +290,9 @@ func _cycle_gfx() -> void:
 	_gfx_label()
 
 func toggle_pip() -> void:
-	if Game.main.in_dialog() or Game.hp <= 0:
+	if Game.main.in_dialog() or Game.hp <= 0 or screens.is_open():
 		return
+	pip.at_bench = false
 	if pip.visible:
 		pip.visible = false
 		Game.paused = false
@@ -299,6 +304,14 @@ func toggle_pip() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		touch.visible = false
 		pip.open()
+
+# the workbench opens the Pip menu on its CRAFT tab with the tools to hand
+func open_craft(bench: bool) -> void:
+	if pip.visible:
+		return
+	toggle_pip()
+	pip.at_bench = bench
+	pip.show_tab("CRAFT")
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if e.pressed and not e.echo and (e.keycode == KEY_TAB or e.keycode == KEY_I):

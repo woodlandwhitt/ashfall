@@ -140,6 +140,9 @@ func _grass(i: int, j: int) -> MultiMeshInstance3D:
 func _key_at(p: Vector3) -> Vector2i:
 	return Vector2i(int(floor((p.x - Game.x0) / SIZE)), int(floor((p.z - Game.z0) / SIZE)))
 
+func loaded_keys() -> Array:
+	return loaded.keys()
+
 func key_of(p: Vector3) -> String:
 	var c := _key_at(p)
 	return str(c.x) + "_" + str(c.y)

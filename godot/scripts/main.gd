@@ -11,11 +11,12 @@ var sun: DirectionalLight3D
 var env: Environment
 var nav_region: NavigationRegion3D
 var dialog_npc = null
+var dialog_id := ""
 var dialog_node := ""
+var pending_trade := ""
+var objects: WorldObjects
 var dialog_opts: Array = []
 var pools: Array = []
-var well := Vector3.ZERO
-var dens := Vector3.ZERO
 var start_pos := Vector3.ZERO
 var talk_cd := 0.0
 var chunks
@@ -40,11 +41,6 @@ func _ready() -> void:
 	_colliders()
 	_pools()
 	_lamps()
-	for p in R.points:
-		if p.id == "well":
-			well = Vector3(p.x, Game.height(p.x, p.z), p.z)
-	if R.locs.has("dens"):
-		dens = Vector3(R.locs.dens.x, Game.height(R.locs.dens.x, R.locs.dens.z), R.locs.dens.z)
 	start_pos = Vector3(R.start.x, Game.height(R.start.x, R.start.z) + 0.2, R.start.z)
 	var start_yaw := PI
 	if Game.pending_pos != null:
@@ -65,6 +61,9 @@ func _ready() -> void:
 		if not people.has(k):
 			people[k] = []
 		people[k].append(["e", i])
+	objects = WorldObjects.new()
+	add_child(objects)
+	objects.setup(self)
 	chunks.on_enter = _spawn_chunk
 	chunks.on_leave = _despawn_chunk
 	player = preload("res://scripts/player.gd").new()
@@ -83,6 +82,7 @@ func _ready() -> void:
 
 # people belonging to a chunk come and go with it; the dead stay dead
 func _spawn_chunk(k: String) -> void:
+	objects.spawn_chunk(k)
 	for it in people.get(k, []):
 		var i: int = it[1]
 		if it[0] == "n":
@@ -97,7 +97,7 @@ func _spawn_chunk(k: String) -> void:
 			live_npc[i] = n
 		else:
 			var d: Dictionary = Game.region.enemies[i]
-			if live_enemy.has(i) or Game.dead.has(str(i)):
+			if live_enemy.has(i) or Game.dead.has(str(i)) or Game.killed.has(String(d.get("id", "-"))) or not Game.spawn_allowed(d):
 				continue
 			if not ResourceLoader.exists("res://data/chars/enemy_" + d.type + ".glb") or not Game.region.etypes.has(d.type):
 				continue
@@ -109,6 +109,7 @@ func _spawn_chunk(k: String) -> void:
 			live_enemy[i] = e
 
 func _despawn_chunk(k: String) -> void:
+	objects.despawn_chunk(k)
 	for it in people.get(k, []):
 		var i: int = it[1]
 		if it[0] == "n" and live_npc.has(i):
@@ -125,6 +126,47 @@ func _despawn_chunk(k: String) -> void:
 			enemies.erase(e)
 			live_enemy.erase(i)
 			e.queue_free()
+
+# a quest started or finished: anyone it summons appears if their chunk is already loaded
+func refresh_spawns() -> void:
+	if chunks == null:
+		return
+	for k in chunks.loaded_keys():
+		_spawn_chunk(k)
+
+func make_hostile(id: String) -> void:
+	for e in enemies:
+		if String(e.get("eid")) == id and not e.dead:
+			e.hostile = true
+			e.state = "chase"
+			for o in enemies:
+				if o != e and not o.dead and o.group != "" and o.group == e.group:
+					o.hostile = true
+					o.state = "chase"
+
+func nearest_pool() -> Variant:
+	var best = null
+	var bd := 1e9
+	for p in Game.region.pools:
+		var d := Vector2(float(p.x) - player.global_position.x, float(p.z) - player.global_position.z).length()
+		if p.get("glow", false) and d < bd:
+			bd = d
+			best = {"x": p.x, "z": p.z}
+	return best
+
+func nearest_pickup(item: String, fallback: String) -> Variant:
+	var best = null
+	var bd := 1e9
+	for p in Game.W.get("pickups", []):
+		if String(p.item) == item and not Game.looted.has("pk_" + String(p.id)):
+			var d := Vector2(float(p.x) - player.global_position.x, float(p.z) - player.global_position.z).length()
+			if d < bd:
+				bd = d
+				best = {"x": p.x, "z": p.z}
+	return best if best != null else Game.DB.locs.get(fallback)
+
+func queue_trade(id: String) -> void:
+	pending_trade = id
 
 # ---------------------------------------------------------------- command-line hooks for automated checks:
 #   -- --shot=/path.png --at=x,z,yaw,pitch   render a few frames from a spot, save a screenshot, quit
@@ -226,6 +268,8 @@ func _talk(id: String, picks: Array) -> String:
 	var f := Vector3(sin(n.face_yaw), 0, cos(n.face_yaw))
 	await _goto(n.global_position + f * 1.8, n.global_position)
 	var t := _best_target()
+	if hud.screens.is_open():
+		hud.screens.close()
 	if t.is_empty() or t.k != "npc" or t.o != n:
 		return "can't reach " + id + " (" + str(t.get("label", "nothing")) + ")"
 	interact()
@@ -243,32 +287,148 @@ func _talk(id: String, picks: Array) -> String:
 	end_dialog()
 	return id + " ok " + str(said)
 
+func _obj_point(id: String):
+	for k in objects.grid:
+		for o in objects.grid[k]:
+			if o._k == "point" and String(o.id) == id:
+				return o
+	return null
+
+func _obj_near(kind: String, sub := ""):
+	var best = null
+	var bd := 1e9
+	for k in objects.grid:
+		for o in objects.grid[k]:
+			if o._k == kind and (sub == "" or String(o.get("kind", "")) == sub):
+				var d := Vector2(float(o.x) - player.global_position.x, float(o.z) - player.global_position.z).length()
+				if d < bd:
+					bd = d
+					best = o
+	return best
+
+func _obj_pos(o: Dictionary) -> Vector3:
+	return Vector3(float(o.x), Game.height(float(o.x), float(o.z)), float(o.z))
+
 func _selftest() -> void:
 	await _wait(10)
 	var out := []
 	out.append("npcs %d enemies %d pools %d solids %d" % [npcs.size(), enemies.size(), pools.size(), Game.region.solids.size()])
 	out.append(await _talk("sheriff", ["What happened", "I'll get him", "Thanks"]))
-	out.append("bad_water stage %d stims %d" % [Game.stage("bad_water"), int(Game.inv.get("stimpak", 0))])
-	await _goto(well + Vector3(1.5, 0, 0), well)
-	out.append("at well: " + str(_best_target().get("label", "nothing")))
-	interact()
+	out.append("bad_water stage %d daylight done %s stims %d track %s" % [Game.stage("bad_water"), Game.is_done("daylight"), int(Game.inv.get("stimpak", 0)), str(Game.flags.get("track"))])
+	out.append("objective: " + str(Game.current_objective()))
+	var wp = _obj_point("well")
+	if wp:
+		await _goto(_obj_pos(wp) + Vector3(1.2, 0, 0.4), _obj_pos(wp))
+		out.append("at well: " + str(_best_target().get("label", "nothing")))
+		interact()
 	out.append("sample_well %s stage %d" % [Game.has("sample_well"), Game.stage("bad_water")])
-	var pp: Vector3 = quest_target()
-	await _goto(pp + Vector3(2, 0, 0), pp)
-	out.append("at pool: " + str(_best_target().get("label", "nothing")))
-	interact()
-	out.append("sample_glow %s stage %d" % [Game.has("sample_glow"), Game.stage("bad_water")])
-	out.append(await _talk("sheriff", ["I have both"]))
-	out.append("bad_water done %s caps %d xp %d" % [Game.is_done("bad_water"), Game.caps, Game.xp])
+	var pp = quest_target()
+	out.append("pool target " + str(pp))
+	if pp != null:
+		var pool_c: Vector3 = pp
+		for p in Game.region.pools:
+			if Vector2(float(p.x) - pp.x, float(p.z) - pp.z).length() < 1.0:
+				await _goto(pool_c + Vector3(float(p.r) + 1.0, 0, 0), pool_c)
+		out.append("at pool: " + str(_best_target().get("label", "nothing")))
+		interact()
+	out.append("sample_glow %s stage %d target %s" % [Game.has("sample_glow"), Game.stage("bad_water"), str(quest_target())])
+	# Halloran is at Bunker Nine; the quest marker points there
+	fast_travel("bunker")
+	await _wait(10)
+	out.append(await _talk("halloran", ["Sheriff Voss sent"]))
+	out.append("bad_water done %s, signal stage %d, caps %d xp %d" % [Game.is_done("bad_water"), Game.stage("signal"), Game.caps, Game.xp])
+	# barter: buy from Halloran's dispensary, sell something back
+	out.append(await _talk("halloran", ["Medicine"]))
+	if hud.screens.mode == "trade":
+		var st := Game.shop_state("halloran")
+		var first: String = st.stock.keys()[0]
+		var c0 := Game.caps
+		Game.caps += 200
+		hud.screens._trade(first)
+		hud.screens.shop_tab = "sell"
+		Game.give("scrap_metal", 3)
+		hud.screens._trade("scrap_metal")
+		out.append("trade: bought %s (%d ch), sold scrap, caps %d -> %d, info '%s'" % [first, hud.screens.buy_price(first), c0 + 200, Game.caps, hud.screens.shop_info])
+		hud.screens.close()
+	else:
+		out.append("trade screen did not open: " + hud.screens.mode)
+	# the workbench: craft something
+	var bench = _obj_near("bench")
+	if bench:
+		await _goto(_obj_pos(bench) + Vector3(1.4, 0, 0), _obj_pos(bench))
+		out.append("at bench: " + str(_best_target().get("label", "nothing")))
+		interact()
+		var r: Dictionary = {}
+		for rc in Game.L.recipes:
+			if rc.has("out") and not rc.has("flag"):
+				r = rc
+				break
+		for k in r.need:
+			Game.give(k, int(r.need[k]))
+		var n0 := Game.count(String(r.out[0]))
+		for k in r.need:
+			Game.take(k, int(r.need[k]))
+		Game.give(String(r.out[0]), int(r.out[1]))
+		out.append("craft %s: %d -> %d, pip tab %s bench %s" % [r.n, n0, Game.count(String(r.out[0])), hud.pip.current, hud.pip.at_bench])
+		hud.toggle_pip()
+	# terminals: read the bunker's
+	var term = _obj_near("term", "lore")
+	if term:
+		await _goto(_obj_pos(term) + Vector3(1.2, 0, 0), _obj_pos(term))
+		out.append("at terminal: " + str(_best_target().get("label", "nothing")))
+		interact()
+		out.append("terminal open %s '%s'" % [hud.screens.mode, hud.screens.term_text.substr(0, 50)])
+		hud.screens.close()
+	# containers: a locked one (pick it), then loot
+	var locked = null
+	var bd := 1e9
+	for c in Game.W.get("chests", []):
+		var d := Vector2(float(c.x) - player.global_position.x, float(c.z) - player.global_position.z).length()
+		if c.get("lock") != null and int(c.lock) <= 1 and d < bd and in_region(float(c.x), float(c.z)):
+			bd = d
+			locked = c
+	if locked:
+		for o in objects.grid.get(objects.key_of(float(locked.x), float(locked.z)), []):
+			if o.get("id") == locked.id:
+				locked = o
+		Game.give("bobby_pin", 3)
+		Game.stats.agility = 6
+		await _goto(_obj_pos(locked) + Vector3(1.0, 0, 0.3), _obj_pos(locked))
+		out.append("at locked %s: %s" % [locked.id, str(_best_target().get("label", "nothing"))])
+		objects.use(locked)
+		out.append("lockpick open: " + hud.screens.mode)
+		hud.screens.lp_solve()
+		hud.screens.lp_hold = true
+		for i in 40:
+			if hud.screens.mode == "lockpick" and not hud.screens.lp.is_empty():
+				hud.screens._lp_step(0.05)
+		await get_tree().create_timer(0.8, true, false, true).timeout
+		out.append("after picking: mode %s, unlocked %s, loot %s" % [hud.screens.mode, Game.opened.has("u_" + String(locked.id)), str(Game.opened.get(String(locked.id)))])
+		if hud.screens.mode == "loot":
+			hud.screens._take_all()
+		hud.screens.close()
+	out.append("vm errors %d %s" % [Game.vm.errors, Game.vm.last_error])
+	fast_travel("dustwell")
+	await _wait(10)
 	out.append(await _talk("cass", ["Heard you have", "Consider"]))
-	out.append("hounds stage %d, hounds at dens %d" % [Game.stage("hounds"), hounds_left()])
+	out.append("hounds stage %d" % [Game.stage("hounds")])
+	var dens: Vector3 = Vector3(float(Game.DB.locs.dens.x), 0, float(Game.DB.locs.dens.z))
+	for e in Game.region.enemies:
+		pass
+	player.global_position = dens + Vector3(0, Game.height(dens.x, dens.z) + 0.3, 0)
+	chunks.load_now(player.global_position)
+	await _wait(10)
+	var nh := 0
 	for e in enemies:
-		if e.quad and e.global_position.distance_to(dens) < 70.0:
+		if e.type == "hound" and not e.dead and Vector2(e.global_position.x - dens.x, e.global_position.z - dens.z).length() < 70.0:
 			e.hit(9999.0, e.global_position + Vector3.UP, Vector3.FORWARD)
+			nh += 1
 	Game.check_quests()
-	out.append("after the dens: stage %d" % Game.stage("hounds"))
+	out.append("killed %d hounds: stage %d" % [nh, Game.stage("hounds")])
+	fast_travel("dustwell")
+	await _wait(10)
 	out.append(await _talk("cass", ["The hounds are dead"]))
-	out.append("hounds done %s level %d" % [Game.is_done("hounds"), Game.level])
+	out.append("hounds done %s level %d karma %d" % [Game.is_done("hounds"), Game.level, Game.karma])
 	# shoot something: aim at the nearest live enemy and pull the trigger
 	var tgt = null
 	for e in enemies:
@@ -303,6 +463,7 @@ func _selftest() -> void:
 	for n in npcs:
 		if n.id != "sheriff" and n.id != "cass":
 			others.append(n.id + ":" + ("ok" if Game.DIALOGUE.has(n.id) else "silent"))
+	out.append("quests known %d, active %s" % [Game.quests.size(), str(Game.quests.keys().filter(func(q): return not Game.quests[q].done))])
 	out.append("others " + " ".join(others))
 	out.append("nav ready " + str(Game.nav_ready))
 	# weapons: every kind fires and uses its own ammo
@@ -326,7 +487,7 @@ func _selftest() -> void:
 		if e.dead:
 			corpse = e
 	if corpse:
-		out.append("loot: " + ", ".join(loot_for(corpse.type)))
+		out.append("loot: " + str(loot_for(corpse.type)))
 	# aid
 	Game.hp = 30.0
 	var st0 := Game.count("stimpak")
@@ -637,7 +798,7 @@ func _best_target() -> Dictionary:
 	var pp: Vector3 = player.global_position
 	var fwd := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
 	var best := {}
-	var bd := 1e9
+	var bd := 3.6
 	for n in npcs:
 		var to: Vector3 = n.global_position - pp
 		to.y = 0
@@ -646,72 +807,48 @@ func _best_target() -> Dictionary:
 			bd = d
 			best = {"k": "npc", "o": n, "label": "Talk: " + String(n.display_name)}
 	for e in enemies:
+		var d: float = e.global_position.distance_to(pp)
+		if d >= bd:
+			continue
 		if e.dead and not e.looted:
-			var d: float = e.global_position.distance_to(pp)
-			if d < 2.6 and d < bd:
+			if d < 2.8:
 				bd = d
 				best = {"k": "loot", "o": e, "label": "Search the " + String(e.def.get("name", e.type)).to_lower()}
-	if well != Vector3.ZERO and pp.distance_to(well) < 3.0:
-		var lbl := "Draw a water sample" if (Game.stage("bad_water") == 0 and not Game.has("sample_well")) else "Drink from the well"
-		if pp.distance_to(well) < bd:
-			bd = pp.distance_to(well)
-			best = {"k": "well", "label": lbl}
-	for p in pools:
-		var d := Vector2(pp.x - p.pos.x, pp.z - p.pos.z).length()
-		if d < p.r + 1.5 and Game.stage("bad_water") == 1 and not Game.has("sample_glow"):
-			best = {"k": "pool", "label": "Fill a flask from the glowing pool"}
+		elif not e.dead and not e.hostile and Game.DIALOGUE.has(String(e.eid)) and d < 3.4:
+			bd = d
+			best = {"k": "talk", "o": e, "label": "Talk: " + String(Game.DB.enemies.get(e.type, {}).get("n", e.type))}
+	var ob := objects.best(pp, fwd, bd)
+	if not ob.is_empty():
+		best = ob
 	return best
 
 func interact() -> void:
-	if in_dialog() or Game.hp <= 0:
+	if in_dialog() or Game.hp <= 0 or hud.screens.is_open():
 		return
 	var t := _best_target()
 	if t.is_empty():
 		return
 	match t.k:
-		"npc": start_dialog(t.o)
+		"npc": start_dialog(t.o, String(t.o.id))
+		"talk": start_dialog(t.o, String(t.o.eid))
 		"loot":
 			var e = t.o
-			e.looted = true
-			var got := loot_for(e.type)
-			Sfx.play("o_coin")
-			Game.msg("Found: " + (", ".join(got) if got.size() > 0 else "nothing worth taking") + ".")
-			Game.stats_changed.emit()
-		"well":
-			if Game.stage("bad_water") == 0 and not Game.has("sample_well"):
-				Game.give("sample_well")
-				Sfx.play("o_splash")
-				Game.msg("You fill a flask from the well. The water has a faint green cast.")
-				Game.check_quests()
-			else:
-				Game.hp = minf(Game.hp_max, Game.hp + 10.0)
-				Game.stats_changed.emit()
-				Sfx.play("o_splash", -6.0)
-				Game.msg("You drink. It tastes of pennies. (+10 HP)")
-		"pool":
-			Game.give("sample_glow")
-			Sfx.play("o_splash")
-			Game.msg("You hold your breath and fill a flask. It glows faintly in your hand.")
-			Game.check_quests()
+			if e.loot == null:
+				e.loot = loot_for(e.type)
+			hud.screens.open_loot(String(e.def.get("name", e.type)), e.loot, func(empty): e.looted = empty)
+		"obj": objects.use(t.o)
 
 # what a dead enemy carries: caps, its own drops and rolls on the shared loot tables (data.js LOOT)
 func loot_for(type: String) -> Array:
 	var def: Dictionary = Game.DB.enemies.get(type, {})
-	var got: Array = []
+	var got := {}
 	if def.has("caps"):
 		var c := randi_range(int(def.caps[0]), int(def.caps[1]))
 		if c > 0:
-			Game.caps += c
-			got.append(str(c) + " caps")
+			got["caps"] = c
 	var add := func(id: String, n: int):
-		if n <= 0 or not Game.DB.items.has(id):
-			return
-		if id == "caps":
-			Game.caps += n
-			got.append(str(n) + " caps")
-			return
-		Game.give(id, n)
-		got.append(Game.iname(id) + (" x" + str(n) if n > 1 else ""))
+		if n > 0 and (id == "caps" or Game.DB.items.has(id)):
+			got[id] = int(got.get(id, 0)) + n
 	for dr in def.get("drops", []):
 		if randf() < float(dr[3]):
 			add.call(String(dr[0]), randi_range(int(dr[1]), int(dr[2])))
@@ -721,47 +858,64 @@ func loot_for(type: String) -> Array:
 			if table.size() > 0:
 				var e: Array = table[randi() % table.size()]
 				add.call(String(e[0]), randi_range(int(e[1]), int(e[2])))
-	return got
+	var out := []
+	for k in got:
+		out.append([k, got[k]])
+	return out
 
 func in_dialog() -> bool:
 	return dialog_npc != null
 
-func start_dialog(n) -> void:
-	if not Game.DIALOGUE.has(n.id):
-		Game.msg(n.display_name + " has nothing to say.")
+func start_dialog(n, id: String) -> void:
+	if not Game.DIALOGUE.has(id):
+		Game.msg((String(n.display_name) if n else "They") + " has nothing to say.")
 		return
-	dialog_npc = n
-	n.talking = true
+	dialog_npc = n if n else self
+	dialog_id = id
+	if n and "talking" in n:
+		n.talking = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	player.trigger = false
 	Game.touch_move = Vector2.ZERO
-	show_node(Game.entry_node(n.id))
+	pending_trade = ""
+	show_node(Game.dlg_entry(id))
 
 func show_node(id: String) -> void:
 	dialog_node = id
-	var d: Dictionary = Game.DIALOGUE[dialog_npc.id]
-	var node: Dictionary = d.nodes[id]
-	dialog_opts = []
-	for o in node.opts:
-		if Game.cond(o.get("if")):
-			dialog_opts.append(o)
-	var say := String(node.say)
-	hud.show_dialogue(String(d.name), say, dialog_opts, choose)
-	speak(say, dialog_npc.id)
+	dialog_opts = Game.dlg_options(dialog_id, id)
+	if dialog_opts.is_empty():
+		dialog_opts = [{"t": "Goodbye.", "o": {}, "off": false}]
+	var say := Game.dlg_say(dialog_id, id)
+	hud.show_dialogue(Game.subst(String(Game.DIALOGUE[dialog_id].get("name", dialog_id))), say, dialog_opts, choose)
+	speak(say, dialog_id)
 
 func choose(i: int) -> void:
-	if dialog_npc == null or i >= dialog_opts.size():
+	if dialog_npc == null or i >= dialog_opts.size() or dialog_opts[i].get("off", false):
 		return
-	var o: Dictionary = dialog_opts[i]
+	var o: Dictionary = dialog_opts[i].o
+	var at := dialog_id
 	Sfx.play("k_click", -8.0)
-	Game.act(o.get("act"))
-	if o.has("go"):
-		show_node(o.go)
+	if o.has("act"):
+		Game.vm.call_value(o.act, [Game.G])
+		Game.check_quests()
+	if pending_trade != "":
+		var v := pending_trade
+		pending_trade = ""
+		end_dialog()
+		hud.screens.open_trade(v)
+		return
+	if dialog_npc == null or dialog_id != at or hud.screens.is_open():
+		if dialog_npc != null:
+			end_dialog()
+		return
+	var go = o.get("go")
+	if go != null and Game.DIALOGUE[dialog_id].nodes.has(String(go)):
+		show_node(String(go))
 	else:
 		end_dialog()
 
 func end_dialog() -> void:
-	if dialog_npc:
+	if dialog_npc and dialog_npc != self and "talking" in dialog_npc:
 		dialog_npc.talking = false
 	dialog_npc = null
 	hud.hide_dialogue()
@@ -826,34 +980,7 @@ func npc_pos(id: String) -> Variant:
 	return null
 
 func quest_target() -> Variant:
-	match Game.stage("bad_water"):
-		0: return well
-		1:
-			var best = null
-			var bd := 1e9
-			for p in pools:
-				var d: float = p.pos.distance_to(player.global_position)
-				if d < bd:
-					bd = d
-					best = p.pos
-			return best
-		2: return npc_pos("sheriff")
-	match Game.stage("hounds"):
-		0: return dens
-		1: return npc_pos("cass")
-	if not Game.flags.has("met_sheriff"):
-		return npc_pos("sheriff")
-	return null
-
-func hounds_left() -> int:
-	var n := 0
-	for i in Game.region.enemies.size():
-		var d: Dictionary = Game.region.enemies[i]
-		if Game.dead.has(str(i)):
-			continue
-		if Game.region.etypes.get(d.type, {}).get("quad", false) and Vector3(d.x, dens.y, d.z).distance_to(dens) < 70.0:
-			n += 1
-	return n
+	return Game.quest_target()
 
 func _process(d: float) -> void:
 	if player == null or hud == null:

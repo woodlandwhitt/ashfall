@@ -1,5 +1,5 @@
 # The Pip menu: STATS (levels, the six stats, spending points, perks), ITEMS (everything you carry, by category,
-# with equip / use / drop), QUESTS, MAP (discovered places, fast travel) and SYSTEM (three save slots, the
+# with equip / use / drop), QUESTS (track one), CRAFT (recipes and upgrades at a workbench), MAP (discovered places, fast travel) and SYSTEM (three save slots, the
 # autosave, graphics). The game pauses while it is open.
 extends PanelContainer
 
@@ -11,6 +11,7 @@ var current := "STATS"
 var item_cat := "weapon"
 var selected := ""
 var map_tex: ImageTexture
+var at_bench := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -50,7 +51,7 @@ func _ready() -> void:
 	tabs = HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
 	v.add_child(tabs)
-	for t in ["STATS", "ITEMS", "QUESTS", "MAP", "SYSTEM"]:
+	for t in ["STATS", "ITEMS", "QUESTS", "CRAFT", "MAP", "SYSTEM"]:
 		var b := Button.new()
 		b.text = t
 		b.custom_minimum_size = Vector2(0, 50)
@@ -81,6 +82,7 @@ func show_tab(t: String) -> void:
 		"STATS": _stats()
 		"ITEMS": _items()
 		"QUESTS": _quests()
+		"CRAFT": _craft()
 		"MAP": _map()
 		"SYSTEM": _system()
 
@@ -228,16 +230,106 @@ func _quests() -> void:
 	var done := []
 	for q in Game.quests:
 		(done if Game.quests[q].done else active).append(q)
+	active.sort_custom(func(a, b): return int(Game.qdef(a).get("main", false)) > int(Game.qdef(b).get("main", false)))
 	_label(v, "ACTIVE", 21)
 	if active.is_empty():
 		_label(v, "No active quests. Talk to people.", 18, DIM)
 	for q in active:
-		var d: Dictionary = Game.QUESTS[q]
-		_label(v, String(d.t), 20, Color(0.85, 1.0, 0.85))
-		_label(v, "  " + String(d.stages[Game.stage(q)]), 18)
+		var d: Dictionary = Game.qdef(q)
+		var row := HBoxContainer.new()
+		v.add_child(row)
+		var tracked: bool = Game.flags.get("track") == q
+		var l := _label(row, ("» " if tracked else "") + String(d.t) + ("  [MAIN]" if d.get("main", false) else ""), 20, Color(1.0, 0.92, 0.6) if tracked else Color(0.85, 1.0, 0.85))
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if not tracked:
+			var b := Button.new()
+			b.text = "TRACK"
+			b.pressed.connect(func():
+				Game.flags["track"] = q
+				Game.quest_changed.emit()
+				show_tab("QUESTS"))
+			row.add_child(b)
+		if d.has("desc"):
+			_label(v, "  " + Game.subst(Game.vm.to_str(Game.vm.val(d.desc, [Game.G]))), 17, DIM)
+		_label(v, "  > " + Game.stage_text(q), 18)
 	_label(v, "COMPLETED", 21)
+	if done.is_empty():
+		_label(v, "None yet.", 18, DIM)
 	for q in done:
-		_label(v, String(Game.QUESTS[q].t), 18, DIM)
+		_label(v, String(Game.qdef(q).get("t", q)), 18, DIM)
+
+# ---------------------------------------------------------------- CRAFT
+# a recipe's ingredients; the two upgrade recipes cost more each level (main.js recipeNeed)
+func recipe_need(r: Dictionary) -> Variant:
+	var id := String(r.get("id", ""))
+	if id == "up_w":
+		if Game.weapon == "":
+			return null
+		var l := int(Game.upgrades.get(Game.weapon, 0))
+		if l >= 3:
+			return null
+		var n := {"scrap_metal": 2 + 2 * l, "duct_tape": 1 + l}
+		if l > 0:
+			n["gears"] = l
+		if String(Game.item(Game.weapon).get("kind", "")) == "energy":
+			n["circuit"] = 1 + l
+		return n
+	if id == "up_a":
+		if Game.armor == "":
+			return null
+		var l := int(Game.upgrades.get(Game.armor, 0))
+		if l >= 3:
+			return null
+		return {"scrap_metal": 3 + 2 * l, "duct_tape": 1 + l}
+	return r.get("need", {})
+
+func _craft() -> void:
+	var v := _scroll()
+	_label(v, "WORKBENCH", 21, Color(1.0, 0.92, 0.6))
+	_label(v, "Tools ready." if at_bench else "You need to be at a workbench to craft. There is one in Dustwell and one in Bunker Nine.", 18, DIM)
+	_label(v, "Scrap %d  ·  Tape %d  ·  Circuits %d  ·  Gears %d" % [Game.count("scrap_metal"), Game.count("duct_tape"), Game.count("circuit"), Game.count("gears")], 18)
+	for r in Game.L.get("recipes", []):
+		if r.has("flag") and not Game.flags.get(String(r.flag)):
+			continue
+		var need = recipe_need(r)
+		var nm := String(r.get("n", r.get("id", "")))
+		if r.get("id") == "up_w":
+			nm = ("Tune " + Game.iname(Game.weapon) + "  (level %d)" % int(Game.upgrades.get(Game.weapon, 0))) if Game.weapon != "" else "Tune weapon (none equipped)"
+		elif r.get("id") == "up_a":
+			nm = ("Reinforce " + Game.iname(Game.armor) + "  (level %d)" % int(Game.upgrades.get(Game.armor, 0))) if Game.armor != "" else "Reinforce armor (none worn)"
+		var ok: bool = need != null
+		var parts := []
+		if need != null:
+			for k in need:
+				var have := Game.count(k)
+				parts.append("%s %d/%d" % [Game.iname(k), have, int(need[k])])
+				if have < int(need[k]):
+					ok = false
+		var row := HBoxContainer.new()
+		v.add_child(row)
+		var box := VBoxContainer.new()
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(box)
+		_label(box, nm, 20, Color(0.85, 1.0, 0.85))
+		_label(box, ("  ·  ".join(parts) if need != null else "Fully upgraded") + ("  —  " + String(r.d) if r.has("d") else ""), 16, DIM if ok else Color(0.75, 0.55, 0.4))
+		var b := Button.new()
+		b.text = "CRAFT" if r.has("out") else "UPGRADE"
+		b.custom_minimum_size = Vector2(140, 50)
+		b.disabled = not at_bench or not ok
+		b.pressed.connect(func():
+			for k in need:
+				Game.take(k, int(need[k]))
+			if r.has("out"):
+				Game.give(String(r.out[0]), int(r.out[1]))
+				Game.msg("Crafted " + String(r.n))
+			else:
+				var id: String = Game.weapon if r.id == "up_w" else Game.armor
+				Game.upgrades[id] = int(Game.upgrades.get(id, 0)) + 1
+				Game.msg(Game.iname(id) + " upgraded")
+			Sfx.play("k_metal_latch", -2.0)
+			Game.check_quests()
+			show_tab("CRAFT"))
+		row.add_child(b)
 
 # ---------------------------------------------------------------- MAP
 func _map_image() -> ImageTexture:

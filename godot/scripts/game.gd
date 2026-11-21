@@ -1,5 +1,7 @@
-# Global game state for the slice: the region data exported from the three.js build, the player's stats and
-# inventory, quests, flags, and the dialogue trees (lines taken from the original game).
+# Global game state: the world data exported from the three.js build, the player's stats and inventory, flags, and
+# the quest system. Quests, dialogue, vendors, recipes and the world's quest objects are data (data/logic.json, made
+# by tools/logic.mjs from the original game) run by JsVM through the GApi game interface; data/world.json holds the
+# world's containers, terminals, benches, spawns and pickups.
 extends Node
 
 signal message(text: String)
@@ -17,6 +19,12 @@ var inv: Dictionary = {"vault_suit": 1, "pipe_pistol": 1, "ammo_9": 36, "stimpak
 var flags: Dictionary = {}
 var quests: Dictionary = {}   # id -> {"stage": int, "done": bool}
 var kills: Dictionary = {}    # enemy type -> count
+var killed: Dictionary = {}   # enemy id -> true (quests ask for named enemies: the Glow Brute, a camp's raiders)
+var shops: Dictionary = {}    # vendor id -> {day, caps, stock, back, deal}
+var upgrades: Dictionary = {} # weapon or armor id -> workbench upgrade level (0..3)
+var opened: Dictionary = {}   # container id -> remaining items ([] when emptied); unlocked locks
+var day := 1
+var player_name := "Wanderer"
 var hp := 100.0
 var caps := 25
 var xp := 0
@@ -38,6 +46,11 @@ var nav_ready := false
 var touch_move := Vector2.ZERO
 var paused := false
 var DB: Dictionary = {}       # items, enemies, loot, perks, stats, places, vendors, gun fits (data/game.json)
+var L: Dictionary = {}        # quests, dialogue, quest objects, vendors, recipes, endings (data/logic.json)
+var W: Dictionary = {}        # spawns, containers, pickups, terminals, benches, points (data/world.json)
+var vm: JsVM
+var G: GApi
+var _checking := false
 
 # the slice's own quest items, on top of the original game's 134
 const EXTRA_ITEMS := {
@@ -153,7 +166,7 @@ func save_game(slot: String) -> bool:
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
 		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points,
 		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "armor": armor, "magd": magd, "discovered": discovered,
-		"dead": dead, "looted": looted}
+		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
 	if f == null:
 		return false
@@ -178,6 +191,12 @@ func load_game(slot: String) -> bool:
 		return false
 	for k in ["inv", "flags", "quests", "kills", "stats", "perks", "magd", "discovered", "dead", "looted"]:
 		set(k, s[k])
+	for k in ["killed", "shops", "upgrades", "opened"]:
+		set(k, s.get(k, {}))
+	day = int(s.get("day", 1))
+	for q in quests:
+		quests[q].stage = int(quests[q].stage)
+	_vm_state()
 	for k in ["hp", "caps", "xp", "level", "points", "karma", "weapon", "nade", "armor"]:
 		set(k, s[k])
 	for k in ["caps", "xp", "level", "points", "karma"]:
@@ -190,8 +209,10 @@ var pending_pos = null
 
 func reset() -> void:
 	inv = {"vault_suit": 1, "pipe_pistol": 1, "ammo_9": 36, "stimpak": 2}
-	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted"]:
+	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted", "killed", "shops", "upgrades", "opened"]:
 		set(k, {})
+	day = 1
+	_vm_state()
 	stats = {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}
 	caps = 25
 	xp = 0
@@ -206,51 +227,13 @@ func reset() -> void:
 	nav_ready = false
 	paused = false
 
-const QUESTS := {
-	"bad_water": {"t": "Bad Water", "stages": [
-		"Draw a water sample from the well in Dustwell.",
-		"Draw a sample from any glowing pool out in the wastes.",
-		"Take both samples back to Sheriff Voss."], "xp": 160, "caps": 60},
-	"hounds": {"t": "The Hound Dens", "stages": [
-		"Kill the mutant hounds at the old Dens north of town.",
-		"Tell Cass at the saloon the hounds are dead."], "xp": 120, "caps": 40},
-}
-
-# Dialogue: node = {say, opts:[{t, go, act:[[op,...]], if:[[op,...]]}]}. A missing "go" ends the conversation.
-var DIALOGUE := {
-	"sheriff": {"name": "Sheriff Marla Voss", "entry": [["not_flag", "met_sheriff", "intro"], ["else", "hub"]], "nodes": {
-		"intro": {"say": "Another face from behind a sealed door. Didn't think Haven 12 was still breathing. Marla Voss. I keep the peace in Dustwell, what there is of it.",
-			"opts": [{"t": "What happened out here?", "go": "story"}, {"t": "My shelter's recycler is dead. I need a coolant regulator.", "go": "part"}]},
-		"part": {"say": "A regulator. Only place in this valley that ever had parts like that is the Meridian plant. And Meridian is what's killing us. Seems your trouble and mine are the same trouble.",
-			"opts": [{"t": "Killing you how?", "go": "story"}]},
-		"story": {"say": "The reactor woke up two winters back. Nobody knows how. Since then the wells run green and half the town is coughing. Doc Halloran swears he can prove where the poison comes from, if somebody brings him samples.",
-			"opts": [{"t": "I'll get him his samples.", "go": "accept", "act": [["flag", "met_sheriff"], ["start", "bad_water"]]}]},
-		"accept": {"say": "Draw a flask from our well, right there in the square. Then one from any of the glowing pools out in the waste. Don't wade in. Halloran comes through town on the supply cart, so bring both back to me. And take these, you'll want them.",
-			"opts": [{"t": "Thanks, Sheriff.", "act": [["give", "stimpak", 2], ["msg", "Received 2 Stim Shots"]]}]},
-		"hub": {"say": "Speak.", "opts": [
-			{"t": "I have both samples.", "if": [["stage", "bad_water", 2], ["has", "sample_well"], ["has", "sample_glow"]], "go": "proof",
-				"act": [["take", "sample_well", 1], ["take", "sample_glow", 1], ["complete", "bad_water"]]},
-			{"t": "Where should I go next?", "go": "dir"},
-			{"t": "Tell me about Dustwell.", "go": "town"},
-			{"t": "Goodbye."}]},
-		"proof": {"say": "Green as a bottle. I'll get these to Halloran on the next cart. If he's right about where this comes from, God help whoever is up at Meridian. You did good. Take this.",
-			"opts": [{"t": "Glad to help.", "go": "hub"}]},
-		"work": {"say": "Hounds. The dens north-east of town have been breeding all spring and they've started taking goats. Next it'll be a kid. Thin them out and I'll pay.",
-			"opts": [{"t": "Consider it done.", "act": [["start", "hounds"]]}, {"t": "Maybe later.", "go": "hub"}]},
-		"hounds_done": {"say": "Heard the shooting from here. Good. The goats thank you, and so do I.", "opts": [{"t": "Back.", "go": "hub"}]},
-		"dir": {"say": "Bunker Nine is south-east along the road. The Relay Tower is far west. Meridian is dead north and I wouldn't go without armor. Hound Dens are just north of town. Cass at the saloon knows the rest.",
-			"opts": [{"t": "Understood.", "go": "hub"}]},
-		"town": {"say": "Sixty-one people, nine goats, one well. We trade scrap for bullets and bullets for food. Before the reactor woke we were nearly comfortable. Now I bury somebody every month.",
-			"opts": [{"t": "Back.", "go": "hub"}]},
-	}},
-}
-
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	var gf := FileAccess.open("res://data/game.json", FileAccess.READ)
 	DB = JSON.parse_string(gf.get_as_text())
 	for k in EXTRA_ITEMS:
-		DB.items[k] = EXTRA_ITEMS[k]
+		if not DB.items.has(k):
+			DB.items[k] = EXTRA_ITEMS[k]
 	var f := FileAccess.open("res://data/region.json", FileAccess.READ)
 	region = JSON.parse_string(f.get_as_text())
 	var hf := FileAccess.open("res://data/height.f32", FileAccess.READ)
@@ -259,6 +242,11 @@ func _ready() -> void:
 	hd = int(region.heightSize[1])
 	x0 = float(region.region.x0)
 	z0 = float(region.region.z0)
+	L = _json("res://data/logic.json")
+	W = _json("res://data/world.json") if FileAccess.file_exists("res://data/world.json") else {}
+	vm = JsVM.new()
+	G = GApi.install(vm, L)
+	_merge_spawns()
 	_extra_dialogue()
 
 func height(x: float, z: float) -> float:
@@ -288,6 +276,19 @@ func take(item: String, n: int = 1) -> void:
 		inv.erase(item)
 	stats_changed.emit()
 
+func _json(path: String):
+	var f := FileAccess.open(path, FileAccess.READ)
+	return JSON.parse_string(f.get_as_text()) if f else {}
+
+# the interpreter holds references to the state dictionaries; point it at the current ones after a reset or a load
+func _vm_state() -> void:
+	if vm:
+		vm.define("flags", flags)
+		vm.define("killed", killed)
+
+func qdef(q) -> Dictionary:
+	return L.get("quests", {}).get(String(q), {})
+
 func known(q: String) -> bool:
 	return quests.has(q)
 
@@ -298,41 +299,143 @@ func is_done(q: String) -> bool:
 	return quests.has(q) and quests[q].done
 
 func start(q: String) -> void:
-	if quests.has(q):
+	var d := qdef(q)
+	if d.is_empty():
+		push_warning("no quest " + q)
 		return
+	if quests.has(q):
+		if not (quests[q].done and d.get("repeat", false)):
+			return
+		quests.erase(q)
 	quests[q] = {"stage": 0, "done": false}
-	msg("New quest: " + QUESTS[q].t)
+	msg("New quest: " + String(d.t))
 	Sfx.play("o_quest")
+	var tr = flags.get("track")
+	if tr == null or stage(String(tr)) < 0 or (d.get("main", false) and not qdef(tr).get("main", false)):
+		flags["track"] = q
+	if main:
+		main.refresh_spawns()
 	quest_changed.emit()
 	check_quests()
 
 func advance(q: String) -> void:
 	if stage(q) < 0:
 		return
-	quests[q].stage += 1
-	msg(QUESTS[q].t + ": " + QUESTS[q].stages[quests[q].stage])
+	quests[q].stage = int(quests[q].stage) + 1
+	msg("Quest updated: " + String(qdef(q).t))
 	Sfx.play("o_quest")
 	quest_changed.emit()
+	check_quests()
 
 func complete(q: String) -> void:
 	if not quests.has(q):
 		quests[q] = {"stage": 0, "done": false}
+	if quests[q].done:
+		return
 	quests[q].done = true
-	var d: Dictionary = QUESTS[q]
-	caps += int(d.caps)
-	msg("Quest complete: " + d.t + "  (+" + str(d.xp) + " XP, +" + str(d.caps) + " caps)")
-	add_xp(int(d.xp))
+	var d := qdef(q)
+	var r = vm.val(d.get("reward"), [G])
+	if not (r is Dictionary):
+		r = {}
+	banner("QUEST COMPLETE", String(d.get("t", q)))
 	Sfx.play("o_quest")
+	if r.get("caps"):
+		caps += int(r.caps)
+		msg("+" + str(int(r.caps)) + " chits")
+	for it in r.get("items", []):
+		give(String(it[0]), int(it[1]))
+		msg("Received " + iname(it[0]) + (" x" + str(int(it[1])) if int(it[1]) > 1 else ""))
+	if r.get("xp"):
+		add_xp(int(r.xp))
+	if d.get("rep"):
+		flags["rep"] = int(flags.get("rep", 0)) + int(d.rep)
+	if d.get("karma"):
+		add_karma(int(d.karma), "")
+	if d.get("radio"):
+		flags["radio"] = d.radio
+	if flags.get("track") == q:
+		flags["track"] = null
+		for k in quests:
+			if not quests[k].done:
+				flags["track"] = k
+				if qdef(k).get("main", false):
+					break
+	if d.get("then"):
+		start(String(d.then))
+	if main:
+		main.refresh_spawns()
 	quest_changed.emit()
+	stats_changed.emit()
 
-# stages that finish themselves when their condition becomes true
+# stages that finish themselves when their condition becomes true (the original's checkQuests)
 func check_quests() -> void:
-	if stage("bad_water") == 0 and has("sample_well"):
-		advance("bad_water")
-	if stage("bad_water") == 1 and has("sample_glow"):
-		advance("bad_water")
-	if stage("hounds") == 0 and main and main.hounds_left() == 0:
-		advance("hounds")
+	if vm == null or _checking:
+		return
+	_checking = true
+	var changed := false
+	for q in quests.keys():
+		var s: Dictionary = quests[q]
+		var d := qdef(q)
+		var stages: Array = d.get("stages", [])
+		var guard := 0
+		while not s.done and guard < 8:
+			guard += 1
+			var i := int(s.stage)
+			if i >= stages.size():
+				break
+			var st: Dictionary = stages[i]
+			if not st.has("done") or not vm.truthy(vm.call_value(st.done, [G])):
+				break
+			if st.get("auto", false):
+				_checking = false
+				complete(q)
+				_checking = true
+				changed = true
+				break
+			if i >= stages.size() - 1:
+				break
+			s.stage = i + 1
+			msg("Quest updated: " + String(d.t))
+			Sfx.play("o_quest")
+			changed = true
+	_checking = false
+	if changed:
+		quest_changed.emit()
+
+func stage_text(q: String) -> String:
+	var i := stage(q)
+	var stages: Array = qdef(q).get("stages", [])
+	if i < 0 or i >= stages.size():
+		return ""
+	return subst(vm.to_str(vm.val(stages[i].get("txt", ""), [G])))
+
+func current_objective() -> Dictionary:
+	var q = flags.get("track")
+	if q == null or stage(String(q)) < 0:
+		for k in quests:
+			if not quests[k].done:
+				q = k
+				break
+	if q == null or stage(String(q)) < 0:
+		return {}
+	return {"q": q, "title": String(qdef(q).t), "text": stage_text(String(q))}
+
+# where the tracked quest points: a stage's own spot (a function of the game) or the place it names
+func quest_target() -> Variant:
+	var o := current_objective()
+	if o.is_empty():
+		return null
+	var st: Dictionary = qdef(o.q).stages[stage(o.q)]
+	var p = null
+	if st.has("pos"):
+		p = vm.val(st.pos, [G])
+	elif st.has("at"):
+		p = DB.locs.get(String(st.at))
+	if p is Dictionary and p.has("x") and p.has("z"):
+		var x := float(p.x)
+		var z := float(p.z)
+		return Vector3(x, height(x, z), z)
+	return null
 
 func add_xp(n: int) -> void:
 	xp += n
@@ -342,66 +445,149 @@ func add_xp(n: int) -> void:
 		points += 1
 		hp = hp_max
 		msg("Level up! You are now level " + str(level) + ". A stat point is waiting in the Pip menu.")
+		banner("LEVEL " + str(level), "A stat point is waiting in the Pip menu")
 		Sfx.play("o_levelup")
 	stats_changed.emit()
 
-func current_objective() -> Dictionary:
-	for q in ["bad_water", "hounds"]:
-		if stage(q) >= 0:
-			return {"q": q, "title": QUESTS[q].t, "text": QUESTS[q].stages[stage(q)]}
-	return {}
-
-func on_kill(type: String) -> void:
+func on_kill(type: String, id = null) -> void:
 	kills[type] = int(kills.get(type, 0)) + 1
+	flags["k_" + type] = kills[type]
+	if id != null and String(id) != "":
+		killed[String(id)] = true
 	check_quests()
 
-# ---------------------------------------------------------------- dialogue conditions and actions
-func cond(list) -> bool:
-	if list == null:
-		return true
-	for c in list:
-		match c[0]:
-			"has": if not has(c[1]): return false
-			"flag": if not flags.has(c[1]): return false
-			"not_flag": if flags.has(c[1]): return false
-			"stage": if stage(c[1]) != int(c[2]): return false
-			"done": if not is_done(c[1]): return false
-			"unknown": if known(c[1]): return false
-			"known": if not known(c[1]): return false
+func karma_title(k: int) -> String:
+	for t in DB.get("karma_titles", []):
+		if k < int(t[0]):
+			return String(t[1])
+	return "Lamplight Saint"
+
+func add_karma(n: int, why: String) -> void:
+	if n == 0:
+		return
+	var before := karma_title(karma)
+	karma = clampi(karma + n, -100, 100)
+	msg(("Karma +" if n > 0 else "Karma ") + str(n) + (" — " + why if why != "" else ""))
+	Sfx.play("o_karmaup" if n > 0 else "o_karmadown", -4.0)
+	var after := karma_title(karma)
+	if after != before:
+		banner("KARMA", "You are now known as " + after)
+	stats_changed.emit()
+
+func banner(title: String, sub: String) -> void:
+	if main and main.hud and main.hud.screens:
+		main.hud.screens.banner(title, sub)
+
+func subst(t: String) -> String:
+	return t.replace("{name}", player_name)
+
+# the story's end: the ending's heading and paragraph, then every epilogue line whose condition holds
+func finish(k: String) -> void:
+	flags["ending"] = k
+	complete("meridian")
+	var e: Dictionary = L.get("endings", {}).get(k, {})
+	var text := String(e.get("t", ""))
+	for ep in L.get("epilogue", []):
+		if not ep.has("if") or vm.truthy(vm.call_value(ep["if"], [G])):
+			text += "\n\n" + vm.to_str(vm.val(ep.get("t", ""), [G]))
+	if main and main.hud and main.hud.screens:
+		main.hud.screens.open_term(String(e.get("h", "THE END")), text + "\n\n— Your story goes on. Keep exploring the valley. —")
+
+# ---------------------------------------------------------------- dialogue
+func dlg(id: String) -> Dictionary:
+	return DIALOGUE.get(id, {})
+
+func dlg_entry(id: String) -> String:
+	var D := dlg(id)
+	var nodes: Dictionary = D.get("nodes", {})
+	var e = vm.val(D.get("entry", "hub"), [G]) if D.has("entry") else "hub"
+	if e == null or not nodes.has(String(e)):
+		e = "hub" if nodes.has("hub") else (nodes.keys()[0] if nodes.size() else "")
+	return String(e)
+
+# the visible options at a node: [{t, o, off}] (off = a stat check you don't meet)
+func dlg_options(id: String, node: String) -> Array:
+	var out := []
+	var n: Dictionary = dlg(id).nodes.get(node, {})
+	for o in n.get("opts", []):
+		if o.has("if") and not vm.truthy(vm.call_value(o["if"], [G])):
+			continue
+		var t := subst(vm.to_str(vm.val(o.get("t", ""), [G])))
+		var off := false
+		if o.has("check"):
+			var st := String(o.check[0])
+			var need := int(o.check[1])
+			var have := int(stats.get(st, 5))
+			var nm := String(DB.statinfo.get(st, [st.to_upper()])[0])
+			t = "[" + nm + " " + str(need) + ("" if have >= need else " — you have " + str(have)) + "] " + t
+			off = have < need
+		out.append({"t": t, "o": o, "off": off})
+	return out
+
+func dlg_say(id: String, node: String) -> String:
+	return subst(vm.to_str(vm.val(dlg(id).nodes.get(node, {}).get("say", ""), [G])))
+
+# ---------------------------------------------------------------- vendors
+func vendor(id: String) -> Dictionary:
+	return L.get("vendors", {}).get(id, {})
+
+# stock and purse reset at sunrise; one item a day is 30% off
+func shop_state(id: String) -> Dictionary:
+	var v := vendor(id)
+	var st = shops.get(id)
+	if st == null or int(st.day) != day:
+		st = {"day": day, "caps": int(v.get("caps", 200)), "stock": {}, "back": []}
+		for s in v.get("stock", []):
+			st.stock[s[0]] = int(st.stock.get(s[0], 0)) + int(s[1])
+		for ex in v.get("extra", []):
+			if not ex.has("if") or vm.truthy(vm.call_value(ex["if"], [G])):
+				for s in ex.get("items", []):
+					st.stock[s[0]] = int(st.stock.get(s[0], 0)) + int(s[1])
+		var ks: Array = st.stock.keys().filter(func(k): return float(item(k).get("v", 0)) >= 10.0 and DB.items.has(k))
+		st["deal"] = ks[(day * 7 + id.length() * 3) % ks.size()] if ks.size() else null
+		for k in st.stock.keys():
+			if not DB.items.has(k):
+				st.stock.erase(k)
+		shops[id] = st
+	return st
+
+# ---------------------------------------------------------------- the world's spawns
+# enemies the export didn't place (a quest summons them, or they appear once a quest is done) join the region list;
+# main only spawns them when their quest allows it
+func _merge_spawns() -> void:
+	var have := {}
+	for e in region.enemies:
+		if e.get("id") != null:
+			have[String(e.id)] = true
+	for sp in W.get("spawns", []):
+		var id := String(sp.get("id", ""))
+		if id == "" or have.has(id):
+			if have.has(id):
+				for e in region.enemies:
+					if String(e.get("id", "")) == id:
+						for k in ["req", "onStart", "neutral", "group"]:
+							if sp.has(k):
+								e[k] = sp[k]
+			continue
+		if not (sp.has("req") or sp.has("onStart")):
+			continue
+		if not region.etypes.has(String(sp.type)):
+			continue
+		region.enemies.append({"type": sp.type, "x": sp.x, "z": sp.z, "y": sp.y, "hostile": not sp.get("neutral", false), "id": id,
+			"req": sp.get("req"), "onStart": sp.get("onStart")})
+
+func spawn_allowed(e: Dictionary) -> bool:
+	if e.get("req") != null and not is_done(String(e.req)):
+		return false
+	if e.get("onStart") != null and not known(String(e.onStart)):
+		return false
 	return true
 
-func act(list) -> void:
-	if list == null:
-		return
-	for a in list:
-		match a[0]:
-			"flag": flags[a[1]] = true
-			"start": start(a[1])
-			"complete": complete(a[1])
-			"give": give(a[1], int(a[2]))
-			"take": take(a[1], int(a[2]))
-			"msg": msg(a[1])
-			"caps": caps += int(a[1]); stats_changed.emit()
-			"heal": hp = hp_max; stats_changed.emit()
-	check_quests()
+var DIALOGUE: Dictionary = {}
 
-func entry_node(id: String) -> String:
-	var d: Dictionary = DIALOGUE[id]
-	for e in d.entry:
-		if e[0] == "else":
-			return e[1]
-		if e[0] == "not_flag" and not flags.has(e[1]):
-			return e[2]
-		if e[0] == "flag" and flags.has(e[1]):
-			return e[2]
-	return "hub"
-
-# townsfolk outside the sheriff speak their lines from the original game (converted by tools/dialogue.mjs)
+# everyone with a conversation in the original speaks it (data/logic.json)
 func _extra_dialogue() -> void:
-	var extra: Dictionary = region.get("dialogue", {})
-	for id in extra:
-		if not DIALOGUE.has(id):
-			DIALOGUE[id] = extra[id]
+	DIALOGUE = L.get("dialogue", {})
 	# everyone else (saloon patrons, card players, the lamplighter) gets a line of their own
 	var barks := ["Water's gone green again. Don't drink from the trough.", "You're from the Shelter? Huh. Thought you'd be taller.",
 		"If you're going north, go armed. The hounds have got bold.", "Cass waters the whiskey. Everybody knows. Nobody says.",
@@ -412,11 +598,20 @@ func _extra_dialogue() -> void:
 			var nm := String(n.name).capitalize()
 			if nm.begins_with("Patron") or nm.begins_with("Gambler") or nm.begins_with("Lamp"):
 				nm = {"P": "Saloon Regular", "G": "Card Player", "L": "Lamplighter"}[nm[0]]
-			DIALOGUE[n.id] = {"name": nm, "entry": [["else", "b"]], "nodes": {"b": {"say": barks[hash(n.id) % barks.size()], "opts": [{"t": "Take care."}]}}}
+			DIALOGUE[n.id] = {"name": nm, "entry": "b", "nodes": {"b": {"say": barks[hash(n.id) % barks.size()], "opts": [{"t": "Take care."}]}}}
+
+# armour soaks a share of every hit: DR / (DR + 40), as in the original
+func armor_dr() -> float:
+	var dr := 0.0
+	if armor != "":
+		dr = float(item(armor).get("dr", 0)) + 3.0 * int(upgrades.get(armor, 0))
+	return dr + (8.0 if perks.has("toughness") else 0.0)
 
 func hurt(d: float) -> void:
 	if hp <= 0:
 		return
+	var dr := armor_dr()
+	d *= 1.0 - dr / (dr + 40.0)
 	hp = maxf(0.0, hp - d)
 	stats_changed.emit()
 	if main:

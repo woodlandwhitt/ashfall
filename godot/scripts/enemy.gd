@@ -30,6 +30,9 @@ var ap: AnimationPlayer   # people use Quaternius bodies; creatures keep their o
 var act_t := 0.0          # a one-shot animation (shoot, hit, punch) is playing
 var near := true
 var idx := -1
+var eid := ""          # the spawn's id: quests ask whether a named enemy is dead
+var group := ""        # neutral groups (Kess's crew, the herd) turn on you together
+var loot = null          # what the body holds once searched
 
 # outfit, cloth tint, skin tint for the human hostiles
 const PEOPLE := {
@@ -53,6 +56,8 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 	speed = clampf(speed, 2.2, 6.5)
 	dmg = float(td.dmg) if td.get("dmg") != null else 8.0
 	hostile = bool(d.get("hostile", true))
+	eid = String(d.get("id", "")) if d.get("id") != null else ""
+	group = String(d.get("group", "")) if d.get("group") != null else ""
 	position = Vector3(d.x, Game.height(d.x, d.z), d.z)
 	home = position
 	face_yaw = randf() * TAU
@@ -111,6 +116,9 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 		die(dir)
 	else:
 		state = "chase"
+		if not hostile and eid != "" and Game.main:
+			hostile = true
+			Game.main.make_hostile(eid)
 		hostile = true
 		velocity += dir * 2.0
 
@@ -124,15 +132,15 @@ func die(dir: Vector3) -> void:
 	if ap:
 		ap.active = true
 		ap.play("Death01", 0.1)
-		Game.on_kill(type)
-		Game.add_xp(40)
+		Game.on_kill(type, eid)
+		Game.add_xp(int(def.get("xp", 40)) if def.get("xp") != null else 40)
 		return
 	var tw := create_tween()
 	var side := 1.0 if randf() < 0.5 else -1.0
 	tw.tween_property(model, "rotation:z", side * PI / 2.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.parallel().tween_property(model, "position:y", 0.25 if quad else 0.3, 0.45)
-	Game.on_kill(type)
-	Game.add_xp(25 if quad else 40)
+	Game.on_kill(type, eid)
+	Game.add_xp(int(def.get("xp", 25 if quad else 40)) if def.get("xp") != null else (25 if quad else 40))
 
 func hear(at: Vector3) -> void:
 	if not dead and hostile and global_position.distance_to(at) < 60.0:

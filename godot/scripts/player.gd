@@ -108,7 +108,7 @@ func reload_time() -> float:
 # damage as in the original: aim (or might for melee) and perks scale the weapon's base damage
 func weapon_damage() -> float:
 	var it := Game.item(Game.weapon)
-	var d := float(it.get("dmg", 8))
+	var d := float(it.get("dmg", 8)) * (1.0 + 0.12 * int(Game.upgrades.get(Game.weapon, 0)))
 	if String(it.get("kind", "")) == "melee":
 		d *= (1.0 + (int(Game.stats.might) - 5) * 0.07) * (1.35 if Game.perks.has("brawler") else 1.0)
 	else:
