@@ -10,6 +10,7 @@ var pending: Dictionary = {}     # "i_j" -> path (threaded load requested)
 var queue: Array = []            # keys waiting to be built, nearest first
 var ready_scenes: Dictionary = {}
 var load_r := 2
+var on_built: Callable    # called with each chunk's node once its models are in (interiors relight them)
 var small_range := 70.0
 var big_range := 320.0
 var grass_range := 38.0
@@ -207,6 +208,8 @@ func _build(k: String, ps: PackedScene) -> void:
 			root.add_child(gr)
 	if ps:
 		root.add_child(ps.instantiate())
+		if on_built.is_valid():
+			on_built.call(root)
 	add_child(root)
 	loaded[k] = root
 	coarse[k].visible = false

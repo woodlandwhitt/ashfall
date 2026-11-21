@@ -19,6 +19,7 @@ var events: RoadEvents
 var atmos: Atmos
 var buggy: Buggy
 var khole: KHole
+var vault_dress: VaultDress
 var party: Array = []        # companions travelling with you (one person and Biscuit)
 var dialog_opts: Array = []
 var pools: Array = []
@@ -43,6 +44,8 @@ func _ready() -> void:
 	var R: Dictionary = Game.region
 	_environment()
 	_terrain()
+	if vault_dress:
+		chunks.on_built = vault_dress.brighten
 	_colliders()
 	_pools()
 	_lamps()
@@ -126,17 +129,21 @@ func _opening() -> void:
 
 func leave_vault() -> void:
 	speak("Haven 12 door opening. Stand clear of the rails.", "core")
-	Sfx.play("o_bigdoor")
 	Game.flags["leftVault"] = 1
 	Game.discovered["vault"] = 1
 	Game.complete("exodus")
 	Game.start("daylight")
 	var L: Dictionary = Game.DB.locs.vault
+	if vault_dress:
+		await vault_dress.open_great_door()
 	await _fade(true)
 	Game.travel_area("world", float(L.x), float(L.z) - 7.0, 0.0)
 
 func vault_travel(inward: bool) -> void:
-	Sfx.play("o_bigdoor")
+	if not inward and vault_dress:
+		await vault_dress.open_great_door()
+	else:
+		Sfx.play("o_bigdoor")
 	await _fade(true)
 	if inward:
 		var sp: Array = Game.L.consts.VSPOT.door
@@ -601,7 +608,7 @@ func _test_hooks() -> void:
 		Game.pending_pos = [float(v[0]), Game.height(float(v[0]), float(v[1])), float(v[1]), float(v[2]) if v.size() > 2 else 0.0]
 		restart_keep()
 		return
-	if args.has("at") and not args.has("area"):
+	if args.has("at") and (not args.has("area") or Game.area == String(args.area)):
 		var v := String(args.at).split(",")
 		player.global_position = Vector3(float(v[0]), Game.height(float(v[0]), float(v[1])) + 0.1, float(v[1]))
 		player.yaw = float(v[2]) if v.size() > 2 else 0.0
@@ -1548,34 +1555,17 @@ func _environment() -> void:
 		env.fog_enabled = false
 		sun.visible = false
 		sun.shadow_enabled = false
-		var VO: Dictionary = Game.L.consts.VAULT_O
-		# a ceiling over the whole shelter (the original drew it black)
-		var ceil_mi := MeshInstance3D.new()
-		var cb := BoxMesh.new()
-		cb.size = Vector3(56.0, 0.2, 96.0)
-		ceil_mi.mesh = cb
-		var cm := StandardMaterial3D.new()
-		cm.albedo_color = Color(0.55, 0.57, 0.56)
-		cm.albedo_texture = load("res://tex/rock.webp")
-		cm.uv1_scale = Vector3(18, 30, 1)
-		cm.roughness = 0.9
-		ceil_mi.material_override = cm
-		ceil_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(ceil_mi)
-		ceil_mi.global_position = Vector3(float(VO.x), -56.3, float(VO.z) + 46.0)
-		var x := float(VO.x) - 24.0
-		while x <= float(VO.x) + 24.0:
-			var z := float(VO.z) + 3.0
-			while z <= float(VO.z) + 90.0:
-				var l := OmniLight3D.new()
-				l.light_color = Color(0.85, 0.93, 1.0)
-				l.light_energy = 1.8
-				l.omni_range = 11.0
-				l.omni_attenuation = 0.9
-				add_child(l)
-				l.global_position = Vector3(x, -60.0 + 2.6, z)
-				z += 8.0
-			x += 8.0
+		env.ambient_light_energy = 1.5
+		env.ambient_light_color = Color(0.78, 0.8, 0.82)
+		# metal reflects a soft grey room rather than black
+		env.background_color = Color(0.45, 0.47, 0.48)
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_BG
+		env.glow_intensity = 0.8
+		env.glow_bloom = 0.1
+		env.tonemap_exposure = 1.05
+		vault_dress = VaultDress.new()
+		add_child(vault_dress)
+		vault_dress.setup(self)
 
 # ---------------------------------------------------------------- terrain: streamed ground meshes, one physics heightfield
 func _terrain() -> void:
