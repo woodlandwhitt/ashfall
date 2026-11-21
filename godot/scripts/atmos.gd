@@ -145,6 +145,7 @@ func clock() -> String:
 func _process(dt: float) -> void:
 	if Game.paused or Game.player == null:
 		return
+	main.radio_tick(dt)
 	# the clock always runs (also indoors)
 	Game.time += dt / DAY_LEN
 	if Game.time >= 1.0:

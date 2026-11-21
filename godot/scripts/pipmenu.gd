@@ -51,7 +51,7 @@ func _ready() -> void:
 	tabs = HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 8)
 	v.add_child(tabs)
-	for t in ["STATS", "ITEMS", "QUESTS", "CRAFT", "MAP", "SYSTEM"]:
+	for t in ["STATS", "ITEMS", "QUESTS", "CRAFT", "MAP", "RADIO", "SYSTEM"]:
 		var b := Button.new()
 		b.text = t
 		b.custom_minimum_size = Vector2(0, 50)
@@ -83,6 +83,7 @@ func show_tab(t: String) -> void:
 		"ITEMS": _items()
 		"QUESTS": _quests()
 		"CRAFT": _craft()
+		"RADIO": _radio()
 		"MAP": _map()
 		"SYSTEM": _system()
 
@@ -274,6 +275,34 @@ func _quests() -> void:
 		_label(v, "None yet.", 18, DIM)
 	for q in done:
 		_label(v, String(Game.qdef(q).get("t", q)), 18, DIM)
+
+# ---------------------------------------------------------------- RADIO
+func _radio() -> void:
+	var v := _scroll()
+	var row := HBoxContainer.new()
+	v.add_child(row)
+	var l := _label(row, "MERIDIAN FREE RADIO   " + ("ON AIR" if Game.main.radio_on else "OFF"), 21, Color(1.0, 0.92, 0.6))
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var b := Button.new()
+	b.text = "TURN OFF" if Game.main.radio_on else "TUNE IN"
+	b.pressed.connect(func():
+		Game.main.set_radio(not Game.main.radio_on)
+		show_tab("RADIO"))
+	row.add_child(b)
+	_label(v, "News, weather and the valley's gossip, read out while you travel.", 17, DIM)
+	_label(v, "BROADCASTS RECEIVED", 21)
+	var heard: Array = Game.flags.get("heard", [])
+	if heard.is_empty():
+		_label(v, "Nothing yet. Broadcasts arrive as you change the valley.", 18, DIM)
+	for k in heard:
+		var r: Dictionary = Game.L.radio.get(k, {})
+		var bb := Button.new()
+		bb.text = String(r.get("h", k))
+		bb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		bb.pressed.connect(func():
+			Game.main.hud.toggle_pip()
+			Game.main.broadcast(k))
+		v.add_child(bb)
 
 # ---------------------------------------------------------------- CRAFT
 # a recipe's ingredients; the two upgrade recipes cost more each level (main.js recipeNeed)

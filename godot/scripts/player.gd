@@ -166,6 +166,9 @@ func _physics_process(d: float) -> void:
 		iv = Vector2.ZERO
 	if iv.length() > 1.0:
 		iv = iv.normalized()
+	if Game.main.buggy and Game.main.buggy.driving:
+		Game.main.buggy.drive(d, iv)
+		return
 	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 else WALK) * float(fxc.speed)
 	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
 	var right := Vector3(cos(yaw), 0, -sin(yaw))

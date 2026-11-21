@@ -17,6 +17,7 @@ var pending_trade := ""
 var objects: WorldObjects
 var events: RoadEvents
 var atmos: Atmos
+var buggy: Buggy
 var party: Array = []        # companions travelling with you (one person and Biscuit)
 var dialog_opts: Array = []
 var pools: Array = []
@@ -85,6 +86,10 @@ func _ready() -> void:
 	atmos = Atmos.new()
 	add_child(atmos)
 	atmos.setup(self)
+	if not Game.interior():
+		buggy = Buggy.new()
+		add_child(buggy)
+		buggy.setup(self)
 	if Game.pending_new:
 		Game.pending_new = false
 		_opening.call_deferred()
@@ -459,6 +464,18 @@ func _test_hooks() -> void:
 					show_node(sv[2])
 			"banner": Game.banner("QUEST COMPLETE", "Bad Water")
 			"title": hud.screens.open_title()
+			"drive":
+				Game.flags["buggy"] = {"fixed": true}
+				Game.give("buggy_key", 1)
+				buggy.queue_free()
+				buggy = Buggy.new()
+				add_child(buggy)
+				buggy.setup(self)
+				await _wait(3)
+				buggy.enter()
+				for i in 40:
+					buggy.drive(1.0 / 60.0, Vector2(0.3, -1.0))
+					await get_tree().physics_frame
 			"create":
 				hud.screens.open_title()
 				hud.screens._create()
@@ -922,6 +939,37 @@ func _selftest() -> void:
 			out.append("sheriff after lethal hit: dead %s hp %.0f hostile %s" % [se.dead, se.hp, se.hostile])
 			await get_tree().create_timer(4.5).timeout
 			out.append("sheriff back: visible %s hostile %s" % [sher.visible, sher.hostile])
+	# the Rust Runner: fixed, keyed, driven down the road, parked
+	if buggy:
+		Game.flags["buggy"] = {"fixed": true}
+		Game.give("buggy_key", 1)
+		player.global_position = buggy.global_position + Vector3(2.5, 0.5, 0)
+		await _wait(3)
+		var lab: String = buggy.label()
+		var b0: Vector3 = buggy.global_position
+		buggy.enter()
+		for i in 150:
+			buggy.drive(1.0 / 60.0, Vector2(0.15, -1.0))
+			await get_tree().physics_frame
+		out.append("buggy: '%s', drove %.1f m at %.1f m/s, driving %s" % [lab, buggy.global_position.distance_to(b0), absf(buggy.v), buggy.driving])
+		buggy.exit()
+		out.append("buggy exit: driving %s, player visible %s, saved %s" % [buggy.driving, player.visible, str(Game.flags.get("buggy")).substr(0, 60)])
+	# chems, radiation, radio
+	var sp0: float = Game.fx().speed
+	Game.give("jolt", 1)
+	Game.use_item("jolt")
+	Game.body_tick(5.0)
+	out.append("jolt: speed %.2f -> %.2f, agility %d, drugs %s" % [sp0, Game.fx().speed, Game.stats.agility, str(Game.drugs.keys())])
+	Game.add_rad(30.0, false)
+	out.append("rad %.0f, max hp %d" % [Game.rad, Game.hp_max])
+	Game.give("radaway", 1)
+	Game.use_item("radaway")
+	out.append("after Rad Flush: rad %.0f, max hp %d" % [Game.rad, Game.hp_max])
+	Game.flags["radio"] = "overseer"
+	radio_tick(0.1)
+	out.append("radio: screen %s heard %s" % [hud.screens.mode, str(Game.flags.get("heard"))])
+	hud.screens.close()
+	out.append("clock %s day %d weather %s" % [atmos.clock(), Game.day, atmos.kind])
 	# road events: a caravan under attack, a dead scavenger, a stranded traveller
 	Game.booted = true
 	player.global_position = Vector3(-40.0, Game.height(-40.0, 60.0) + 0.5, 60.0)
@@ -1308,6 +1356,7 @@ func _nav_done(nm: NavigationMesh) -> void:
 
 # a bake still running on a worker thread must finish before the scene goes (Load reloads it; quitting frees it)
 func _exit_tree() -> void:
+	set_radio(false)
 	var n := 0
 	while nav_baking != null and NavigationServer3D.is_baking_navigation_mesh(nav_baking) and n < 500:
 		OS.delay_msec(10)
@@ -1340,10 +1389,20 @@ func _best_target() -> Dictionary:
 	var ob := objects.best(pp, fwd, bd)
 	if not ob.is_empty():
 		best = ob
+		bd = float(ob.d)
+	if buggy and not buggy.driving:
+		var to := buggy.global_position - pp
+		to.y = 0
+		var d := to.length()
+		if d < 3.3 and d < bd + 0.5 and (d < 1.5 or fwd.dot(to / d) > 0.4):
+			best = {"k": "buggy", "o": buggy, "label": buggy.label()}
 	return best
 
 func interact() -> void:
 	if in_dialog() or Game.hp <= 0 or hud.screens.is_open():
+		return
+	if buggy and buggy.driving:
+		buggy.exit()
 		return
 	var t := _best_target()
 	if t.is_empty():
@@ -1357,6 +1416,7 @@ func interact() -> void:
 				e.loot = loot_for(e.type)
 			hud.screens.open_loot(String(e.def.get("name", e.type)), e.loot, func(empty): e.looted = empty)
 		"obj": objects.use(t.o)
+		"buggy": buggy.use()
 
 # what a dead enemy carries: caps, its own drops and rolls on the shared loot tables (data.js LOOT)
 func loot_for(type: String) -> Array:
@@ -1442,6 +1502,61 @@ func end_dialog() -> void:
 	DisplayServer.tts_stop()
 
 # the original speaks NPC lines with the device's voice; Godot can use the same text-to-speech
+# ---------------------------------------------------------------- the radio
+# a quest that ends with a broadcast (RADIO in the original) plays it on your wrist unit; the Pip RADIO tab keeps
+# every one you've heard and can tune into Meridian Free Radio
+const DJ := ["This is Meridian Free Radio, broadcasting from somewhere with a roof. Mostly a roof.",
+	"Weather for the valley: dust, then more dust, with a chance of something green after dark. Stay under cover.",
+	"A word to the caravans out of Saltreach: the Spur road is watched again. Travel in daylight. Travel in numbers.",
+	"Dustwell says the well water tastes better this week. Dustwell says that every week.",
+	"If you hear clicking and you aren't near a pool, that's your counter. Find Rad Flush. Find it soon.",
+	"To whoever keeps leaving canned meat at the relay tower: thank you. To whoever keeps eating it: I know who you are.",
+	"Reminder that the old reactor still hums. Do not go and listen to it. It is not singing to you.",
+	"Night coming on. Lights off, doors barred, and if something knocks twice, don't answer."]
+var radio_on := false
+var radio_t := 6.0
+var radio_loop: AudioStreamPlayer
+
+func broadcast(k: String) -> void:
+	var r: Dictionary = Game.L.get("radio", {}).get(k, {})
+	if r.is_empty():
+		return
+	if not (Game.flags.get("heard") is Array):
+		Game.flags["heard"] = []
+	if not Game.flags.heard.has(k):
+		Game.flags.heard.append(k)
+	Sfx.play("o_quest")
+	hud.screens.open_term(String(r.h), String(r.t))
+	speak(String(r.t), "overseer")
+
+func set_radio(on: bool) -> void:
+	radio_on = on
+	if on and radio_loop == null:
+		radio_loop = Sfx.loop("static", -22.0)
+		radio_t = 1.5
+	elif not on and radio_loop:
+		radio_loop.queue_free()
+		radio_loop = null
+		DisplayServer.tts_stop()
+
+func radio_tick(dt: float) -> void:
+	if Game.flags.has("radio") and not hud.screens.is_open() and not in_dialog():
+		var k := String(Game.flags.radio)
+		Game.flags.erase("radio")
+		broadcast(k)
+	if radio_on:
+		radio_t -= dt
+		if radio_t <= 0.0:
+			radio_t = randf_range(28.0, 45.0)
+			var lines: Array = DJ.duplicate()
+			for k in Game.flags.get("heard", []):
+				var r: Dictionary = Game.L.radio.get(k, {})
+				if r.has("t"):
+					lines.append(String(r.t).split("\n\n")[-1])
+			var line: String = lines[randi() % lines.size()]
+			Game.msg("RADIO: " + line)
+			speak(line, "radio")
+
 func speak(text: String, who: String) -> void:
 	if not ProjectSettings.get_setting("audio/general/text_to_speech", false):
 		return

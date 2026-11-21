@@ -329,7 +329,7 @@ func point_label(o: Dictionary) -> Variant:
 		"roulette": return "Play roulette"
 		"dice": return "Play dice"
 		"patsyPanel": return "Open Old Patsy's service panel" if G.qStage("patsy") == 0 else null
-		"buggy": return "Look at the wrecked buggy"
+		"buggy": return null
 		"haven":
 			if G.has("regulator") and Game.flags.get("coreChoice") == "scram":
 				return "Deliver the regulator to Haven 12"
