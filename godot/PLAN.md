@@ -98,7 +98,7 @@ Keep every existing quest and line, then deepen them:
   - **World:** 64 m chunk GLBs with small and big tagging. Then `share_textures.py` dedupes their textures.
   - **Terrain:** heightmap (`height.f32`) and ground mask.
   - **Data:** colliders, points, pools, lamps, NPC and enemy spawns, and their models.
-- `tools/dialogue.mjs` converts `data.js` dialogue and LOOKS. It must grow into a full converter for quests,
+- `tools/export/` holds the whole pipeline (see its README). `dialogue.mjs` converts `data.js` dialogue and LOOKS. It must grow into a full converter for quests,
   items, vendors, perks and recipes into JSON, so the Godot game is data-driven: logic in GDScript, content in
   JSON.
 - `tools/make_heads.py` cuts heads from the base bodies so they can be worn with outfits.
@@ -106,11 +106,14 @@ Keep every existing quest and line, then deepen them:
 ## Phases (each one ships a godot-N build)
 
 1. **godot-3:** performance pass, Quaternius people and first-person arms, graphics presets, the plan.
-   *Status: in progress.*
+   *Status: shipped.*
 2. **godot-4:** the whole map streamed (all 23 locations). Save/load, inventory, the Pip menu, every weapon,
-   stats and levels.
+   stats and levels. *Status: shipped (plus grenades).*
 3. **godot-5:** all quests and dialogue data-driven from JSON, vendors and barter, lockpicking, terminals and
-   lore, crafting.
+   lore, crafting. *Status: shipped. `tools/export/logic.mjs` stores the original's quest and dialogue functions
+   as syntax trees; `scripts/jsvm.gd` runs them against `scripts/gapi.gd` (the original G API). Locked doors open
+   by stepping through; interiors, casino, companions and the vehicle answer "in a later build" until their
+   phase.*
 4. **godot-6:** the vault opening and character creation, perks, karma, FOCUS targeting, companions, bounties,
    road events.
 5. **godot-7:** day/night, weather, radio, the vehicle, drugs, the K-hole, interiors for every important
