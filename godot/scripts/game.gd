@@ -25,11 +25,17 @@ var upgrades: Dictionary = {} # weapon or armor id -> workbench upgrade level (0
 var opened: Dictionary = {}   # container id -> remaining items ([] when emptied); unlocked locks
 var day := 1
 var player_name := "Wanderer"
+var area := "world"           # "world" = the valley, "vault" = Haven 12 (an interior with its own data folder)
+var pending_new := false      # a new game: main plays the opening in Haven 12
+var booted := false           # the title screen has been seen this session
+var test_log: Array = []      # --newgame test: results carried across scene reloads
 var hp := 100.0
 var caps := 25
 var xp := 0
 var level := 1
 var points := 0               # unspent stat points
+var perk_pts := 0             # unspent perks (one every second level)
+var ap := 100.0               # action points for FOCUS targeting
 var stats := {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}
 var perks: Dictionary = {}
 var karma := 0
@@ -62,6 +68,10 @@ var hp_max: float:
 	get:
 		return float(maxi(20, 60 + int(stats.endurance) * 8 + level * 6))
 
+var ap_max: float:
+	get:
+		return 60.0 + int(stats.agility) * 6.0 + (30.0 if perks.has("focus_training") else 0.0)
+
 var mag: int:
 	get:
 		return int(magd.get(weapon, 0))
@@ -84,8 +94,13 @@ var reserve: int:
 			else:
 				inv[a] = v
 
+# bare hands when nothing is equipped (a new resident leaves their quarters unarmed)
+const FISTS := {"n": "Fists", "t": "weapon", "kind": "melee", "dmg": 5, "range": 2.2, "rof": 0.5, "w": 0, "v": 0}
+
 func item(id) -> Dictionary:
-	return DB.items.get(id, {}) if id != null else {}
+	if id == null or String(id) == "":
+		return FISTS
+	return DB.items.get(id, {})
 
 func iname(id) -> String:
 	var up := int(upgrades.get(id, 0)) if id != null else 0
@@ -165,7 +180,7 @@ func save_game(slot: String) -> bool:
 	if player == null:
 		return false
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
-		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points,
+		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points, "perk_pts": perk_pts, "ap": ap, "name": player_name, "area": area,
 		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "armor": armor, "magd": magd, "discovered": discovered,
 		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
@@ -202,13 +217,47 @@ func load_game(slot: String) -> bool:
 		set(k, s[k])
 	for k in ["caps", "xp", "level", "points", "karma"]:
 		set(k, int(get(k)))
+	perk_pts = int(s.get("perk_pts", 0))
+	if String(s.get("area", "world")) != area:
+		load_area(String(s.get("area", "world")))
+	ap = float(s.get("ap", ap_max))
+	player_name = String(s.get("name", "Wanderer"))
 	pending_pos = s.pos
 	main.restart_keep()
 	return true
 
 var pending_pos = null
 
+# a new resident of Haven 12: the name and aptitudes from the registration screen, waking in their quarters
+func new_game(nm: String, st: Dictionary, pts: int) -> void:
+	reset()
+	player_name = nm if nm != "" else "Wanderer"
+	stats = st.duplicate()
+	points = pts
+	inv = {"vault_suit": 1}
+	weapon = ""
+	magd = {"pipe_pistol": 8}
+	hp = hp_max
+	ap = ap_max
+	load_area("vault")
+	var sp: Array = L.consts.VSPOT.start
+	var x := float(L.consts.VAULT_O.x) + float(sp[0])
+	var z := float(L.consts.VAULT_O.z) + float(sp[1])
+	pending_pos = [x, height(x, z), z, -PI / 2]
+	pending_new = true
+	main.restart_keep()
+
+# through Haven 12's great door, in either direction
+func travel_area(a: String, x: float, z: float, yaw: float) -> void:
+	save_game("auto")
+	load_area(a)
+	pending_pos = [x, height(x, z), z, yaw]
+	main.restart_keep()
+
 func reset() -> void:
+	if area != "world":
+		load_area("world")
+	player_name = "Wanderer"
 	inv = {"vault_suit": 1, "pipe_pistol": 1, "ammo_9": 36, "stimpak": 2}
 	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted", "killed", "shops", "upgrades", "opened"]:
 		set(k, {})
@@ -219,12 +268,14 @@ func reset() -> void:
 	xp = 0
 	level = 1
 	points = 0
+	perk_pts = 0
 	karma = 0
 	weapon = "pipe_pistol"
 	nade = ""
 	armor = "vault_suit"
 	magd = {"pipe_pistol": 8}
 	hp = hp_max
+	ap = ap_max
 	nav_ready = false
 	paused = false
 
@@ -235,20 +286,11 @@ func _ready() -> void:
 	for k in EXTRA_ITEMS:
 		if not DB.items.has(k):
 			DB.items[k] = EXTRA_ITEMS[k]
-	var f := FileAccess.open("res://data/region.json", FileAccess.READ)
-	region = JSON.parse_string(f.get_as_text())
-	var hf := FileAccess.open("res://data/height.f32", FileAccess.READ)
-	hm = hf.get_buffer(hf.get_length()).to_float32_array()
-	hw = int(region.heightSize[0])
-	hd = int(region.heightSize[1])
-	x0 = float(region.region.x0)
-	z0 = float(region.region.z0)
 	L = _json("res://data/logic.json")
-	W = _json("res://data/world.json") if FileAccess.file_exists("res://data/world.json") else {}
 	vm = JsVM.new()
 	G = GApi.install(vm, L)
-	_merge_spawns()
-	_extra_dialogue()
+	DIALOGUE = L.get("dialogue", {})
+	load_area("world")
 
 func height(x: float, z: float) -> float:
 	var fx := clampf(x - x0, 0.0, hw - 1.001)
@@ -276,6 +318,32 @@ func take(item: String, n: int = 1) -> void:
 	if inv[item] == 0:
 		inv.erase(item)
 	stats_changed.emit()
+
+func dir() -> String:
+	return "res://data/" if area == "world" else "res://data/" + area + "/"
+
+func interior() -> bool:
+	return area != "world"
+
+# the region, heightmap and world objects of an area (the valley or an interior); main rebuilds the scene after
+func load_area(a: String) -> void:
+	area = a
+	region = _json(dir() + "region.json")
+	var hf := FileAccess.open(dir() + "height.f32", FileAccess.READ)
+	hm = hf.get_buffer(hf.get_length()).to_float32_array()
+	hw = int(region.heightSize[0])
+	hd = int(region.heightSize[1])
+	x0 = float(region.region.x0)
+	z0 = float(region.region.z0)
+	W = _json(dir() + "world.json") if FileAccess.file_exists(dir() + "world.json") else {}
+	if not interior():
+		_merge_spawns()
+	_extra_dialogue()
+
+# a character model from this area's folder, or the valley's
+func char_path(file: String) -> String:
+	var p := dir() + "chars/" + file
+	return p if ResourceLoader.exists(p) else "res://data/chars/" + file
 
 func _json(path: String):
 	var f := FileAccess.open(path, FileAccess.READ)
@@ -444,9 +512,12 @@ func add_xp(n: int) -> void:
 		xp -= xp_need()
 		level += 1
 		points += 1
+		if level % 2 == 0:
+			perk_pts += 1
 		hp = hp_max
-		msg("Level up! You are now level " + str(level) + ". A stat point is waiting in the Pip menu.")
-		banner("LEVEL " + str(level), "A stat point is waiting in the Pip menu")
+		var what := "A new perk and a stat point are" if level % 2 == 0 else "A stat point is"
+		msg("Level up! You are now level " + str(level) + ". " + what + " waiting in the Pip menu.")
+		banner("LEVEL " + str(level), what + " waiting in the Pip menu")
 		Sfx.play("o_levelup")
 	stats_changed.emit()
 
@@ -593,9 +664,9 @@ var DIALOGUE: Dictionary = {}
 
 # everyone with a conversation in the original speaks it (data/logic.json)
 func _extra_dialogue() -> void:
-	DIALOGUE = L.get("dialogue", {})
 	# everyone else (saloon patrons, card players, the lamplighter) gets a line of their own
-	var barks := ["Water's gone green again. Don't drink from the trough.", "You're from the Shelter? Huh. Thought you'd be taller.",
+	var barks := ["Nine days of water. Nine. I counted the tanks myself.", "The Overseer hasn't slept. You can tell by the coffee.",
+		"Pell says the regulator's done for. Pell says that about everything.", "They say the surface is just ash. I'd still like to see it."] if interior() else ["Water's gone green again. Don't drink from the trough.", "You're from the Shelter? Huh. Thought you'd be taller.",
 		"If you're going north, go armed. The hounds have got bold.", "Cass waters the whiskey. Everybody knows. Nobody says.",
 		"Two winters since the reactor woke up. Feels like twenty.", "Got nothing to sell you, friend. Got nothing at all.",
 		"Sheriff's fair. Hard, but fair. That's rare out here.", "Heard a caravan got hit on the spur road. Raiders again."]

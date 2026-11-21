@@ -127,12 +127,26 @@ func _stats() -> void:
 				Game.stats_changed.emit()
 				show_tab("STATS"))
 			row.add_child(b)
-	_label(v, "PERKS", 21)
-	if Game.perks.is_empty():
-		_label(v, "None yet. (Perks arrive with levelling in a later build.)", 18, DIM)
-	for p in Game.perks:
-		var d: Dictionary = Game.DB.perks.get(p, {})
-		_label(v, String(d.get("n", p)) + ": " + String(d.get("d", "")), 18)
+	_label(v, "PERKS" + ("   (%d to choose)" % Game.perk_pts if Game.perk_pts > 0 else "   (a new one every second level)"), 21)
+	var perks: Dictionary = Game.L.get("consts", {}).get("PERKS", Game.DB.get("perks", {}))
+	for p in perks:
+		var d: Dictionary = perks[p]
+		var row := HBoxContainer.new()
+		v.add_child(row)
+		var has: bool = Game.perks.has(p)
+		var l := _label(row, ("■ " if has else "□ ") + String(d.get("n", p)) + ": " + String(d.get("d", "")), 18, Color(0.85, 1.0, 0.85) if has else DIM)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		if not has and Game.perk_pts > 0:
+			var b := Button.new()
+			b.text = "TAKE"
+			b.pressed.connect(func():
+				Game.perk_pts -= 1
+				Game.perks[p] = 1
+				Sfx.play("o_levelup", -6.0)
+				Game.stats_changed.emit()
+				show_tab("STATS"))
+			row.add_child(b)
 
 # ---------------------------------------------------------------- ITEMS
 const CATS := [["weapon", "WEAPONS"], ["armor", "APPAREL"], ["aid", "AID"], ["ammo", "AMMO"], ["junk", "JUNK"], ["quest", "QUEST"]]

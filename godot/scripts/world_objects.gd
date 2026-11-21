@@ -27,7 +27,7 @@ func setup(m) -> void:
 	for d in W.get("doors", []):
 		_add("ldoor", d)
 	for p in W.get("points", []):
-		if String(p.get("id", "")) in ["cellin", "cellout", "vaultExit", "recycler"]:
+		if String(p.get("id", "")) in ["cellin", "cellout"]:
 			continue
 		_add("point", p)
 	if W.get("door") != null:
@@ -301,6 +301,10 @@ func point_label(o: Dictionary) -> Variant:
 	var id := String(o.id)
 	var G := Game.G
 	match id:
+		"vaultExit":
+			return "Go up to the surface" if Game.flags.get("leftVault") else "Open the great door"
+		"recycler":
+			return "Inspect the water recycler"
 		"well":
 			return "Draw a water sample" if not G.questDone("bad_water") and not G.has("sample_well") else "Drink from the well"
 		"pool":
@@ -320,7 +324,7 @@ func point_label(o: Dictionary) -> Variant:
 		"haven":
 			if G.has("regulator") and Game.flags.get("coreChoice") == "scram":
 				return "Deliver the regulator to Haven 12"
-			return null
+			return "Enter Haven 12" if Game.flags.get("leftVault") and not Game.flags.get("ending") else null
 	if id.begins_with("slots"):
 		return "Play Old Patsy" if id == "slots0" else "Play the slots"
 	return null
@@ -337,6 +341,22 @@ func point_use(o: Dictionary) -> void:
 	var id := String(o.id)
 	var G := Game.G
 	match id:
+		"recycler":
+			Game.msg("The regulator housing is split end to end. Pell has wrapped it in tape nine times.")
+			Sfx.play("k_click", -8.0)
+			return
+		"vaultExit":
+			if Game.flags.get("leftVault"):
+				main.vault_travel(false)
+			elif not Game.flags.get("metOverseer"):
+				Game.msg("The Overseer wants to see you first. Her office is down the corridor.")
+				Sfx.play("k_metal_click", -6.0)
+			elif not Game.has("pipe_pistol"):
+				Game.msg("Draw your gear from the Security locker before you go.")
+				Sfx.play("k_metal_click", -6.0)
+			else:
+				main.leave_vault()
+			return
 		"well":
 			if point_label(o) == "Drink from the well":
 				Game.hp = minf(Game.hp_max, Game.hp + 6.0)
@@ -364,6 +384,8 @@ func point_use(o: Dictionary) -> void:
 				Game.take("regulator", 1)
 				Sfx.play("o_bigdoor")
 				Game.finish("sealed")
+			else:
+				main.vault_travel(true)
 			return
 	var qp := _qp(o)
 	if qp.has("label") and qp.has("use") and Game.vm.truthy(Game.vm.call_value(qp.label, [_pt(o)])):

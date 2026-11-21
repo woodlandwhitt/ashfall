@@ -77,3 +77,6 @@ func loop(name: String, vol_db: float) -> AudioStreamPlayer:
 	add_child(p)
 	p.play()
 	return p
+
+func has(name: String) -> bool:
+	return ResourceLoader.exists("res://sfx/" + name + ".mp3") or ResourceLoader.exists("res://sfx/" + name + ".ogg")

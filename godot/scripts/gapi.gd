@@ -137,15 +137,20 @@ func sleep(cost = 0) -> void:
 	Sfx.play("o_levelup", -10.0, 0.8)
 	Game.stats_changed.emit()
 
-# companions arrive with godot-6; until then the logic sees them as not travelling with you
+# companions (main.gd keeps the party)
 func recruit(id = "") -> void:
-	Game.flags["recruited_" + _s(id)] = true
-	var c = vm.get_member(vm.globals.vars.COMPANIONS, _s(id))
-	Game.msg((str(c.get("n", _s(id))) if c is Dictionary else _s(id)) + " will travel with you in a later build. They'll remember you offered.")
-func dismiss(id = "") -> void: Game.flags.erase("recruited_" + _s(id))
-func inParty(id = "") -> bool: return false
-func partyState(id = ""): return null
-func partyCmd(id = "", st = "") -> void: pass
+	if Game.main:
+		Game.main.recruit(_s(id))
+func dismiss(id = "") -> void:
+	if Game.main:
+		Game.main.dismiss(_s(id))
+func inParty(id = "") -> bool:
+	return Game.main != null and Game.main.party_state(_s(id)) != null
+func partyState(id = ""):
+	return Game.main.party_state(_s(id)) if Game.main else null
+func partyCmd(id = "", st = "") -> void:
+	if Game.main:
+		Game.main.party_cmd(_s(id), _s(st))
 
 
 class PProxy:

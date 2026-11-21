@@ -22,6 +22,8 @@ var touch: Control
 var touch_on := false
 var pip
 var screens: Screens
+var focus: Focus
+var ap_bar: ProgressBar
 var weapon_l: Label
 var font: Font
 var fps_acc := 0.0
@@ -108,6 +110,15 @@ func _ready() -> void:
 	hp_bar.add_theme_stylebox_override("fill", fill)
 	hp_bar.add_theme_stylebox_override("background", bg)
 	root.add_child(hp_bar)
+	ap_bar = ProgressBar.new()
+	ap_bar.show_percentage = false
+	_place(ap_bar, Control.PRESET_BOTTOM_LEFT, 20, -20, 260, 8)
+	var afill := StyleBoxFlat.new()
+	afill.bg_color = Color(0.45, 0.9, 0.55)
+	afill.set_corner_radius_all(3)
+	ap_bar.add_theme_stylebox_override("fill", afill)
+	ap_bar.add_theme_stylebox_override("background", bg)
+	root.add_child(ap_bar)
 	stat_l = _label(Vector2(20, -70), 17)
 	_place(stat_l, Control.PRESET_BOTTOM_LEFT, 20, -70, 520, 26)
 
@@ -142,6 +153,8 @@ func _ready() -> void:
 	root.add_child(pip_b)
 	pip = preload("res://scripts/pipmenu.gd").new()
 	root.add_child(pip)
+	focus = Focus.new()
+	root.add_child(focus)
 	screens = Screens.new()
 	root.add_child(screens)
 	_build_dialogue()
@@ -258,6 +271,8 @@ func add_msg(t: String) -> void:
 func refresh() -> void:
 	hp_bar.max_value = Game.hp_max
 	hp_bar.value = Game.hp
+	ap_bar.max_value = Game.ap_max
+	ap_bar.value = Game.ap
 	var it := Game.item(Game.weapon)
 	ammo_l.text = (str(Game.mag) + " / " + str(Game.reserve)) if it.has("mag") else ""
 	weapon_l.text = Game.iname(Game.weapon)
@@ -353,6 +368,8 @@ func _notification(what: int) -> void:
 
 func _process(d: float) -> void:
 	hurt_rect.color.a = maxf(0.0, hurt_rect.color.a - d * 0.8)
+	ap_bar.max_value = Game.ap_max
+	ap_bar.value = Game.ap
 	fps_acc += d
 	fps_n += 1
 	fps_min = minf(fps_min, 1.0 / maxf(d, 0.0001))
@@ -415,6 +432,7 @@ class TouchPad extends Control:
 			"run": [Vector2(250, s.y - 90), 38.0, "RUN"],
 			"swap": [Vector2(s.x - 360, s.y - 70), 36.0, "SWAP"],
 			"nade": [Vector2(s.x - 255, s.y - 360), 34.0, "NADE"],
+			"focus": [Vector2(s.x - 370, s.y - 200), 38.0, "FOCUS"],
 		}
 
 	func _input(e: InputEvent) -> void:
@@ -476,6 +494,7 @@ class TouchPad extends Control:
 			"reload": if on: p.reload()
 			"swap": if on: Game.main.hud.swap_weapon()
 			"nade": if on: p.throw_nade()
+			"focus": if on: Game.main.hud.focus.enter()
 			"run":
 				if on:
 					running = not running

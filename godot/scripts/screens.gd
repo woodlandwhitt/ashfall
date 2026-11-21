@@ -129,6 +129,8 @@ func close() -> void:
 	if not panel.visible:
 		return
 	var m := mode
+	if m in ["title", "intro", "create"]:
+		Game.booted = true
 	panel.visible = false
 	mode = ""
 	lp = {}
@@ -184,6 +186,8 @@ func _scroll() -> VBoxContainer:
 
 func _unhandled_key_input(e: InputEvent) -> void:
 	if not panel.visible or not e.pressed:
+		return
+	if mode in ["title", "intro", "create"]:
 		return
 	if e.keycode == KEY_ESCAPE or (e.keycode == KEY_TAB and mode != "lockpick"):
 		close()
@@ -479,10 +483,10 @@ func _process(d: float) -> void:
 	if mode == "lockpick" and not lp.is_empty() and not lp.finished:
 		_lp_step(minf(d, 0.05))
 		lp_dial.queue_redraw()
-	elif mode == "term" and term_i < term_text.length():
-		term_i = mini(term_text.length(), term_i + 5)
+	elif (mode == "term" or mode == "intro") and term_i < term_text.length():
+		term_i = mini(term_text.length(), term_i + (5 if mode == "term" else 1))
 		term_l.text = term_text.substr(0, term_i) + ("█" if term_i < term_text.length() else "")
-		if term_i % 20 < 5:
+		if term_i % 20 < 5 and mode == "term":
 			Sfx.play("x_computer" + str(randi() % 3), -20.0)
 
 func _lp_step(dt: float) -> void:
@@ -581,3 +585,122 @@ func _mono() -> Font:
 	var f := SystemFont.new()
 	f.font_names = PackedStringArray(["Droid Sans Mono", "DejaVu Sans Mono", "monospace"])
 	return f
+
+# ================================================================ TITLE, OPENING, REGISTRATION
+const SLIDES := [
+	"The bombs fell on a Tuesday. Nobody alive remembers which one. The cities burned, the rivers turned, and for a hundred years the sky was the colour of rust.",
+	"Beneath a hill in the Meridian valley, four hundred people sealed a steel door and waited. They grew mushrooms. They raised children. They told each other the surface was gone.",
+	"That was two hundred years ago. This is Haven 12. And last night, for the first time in living memory, the water stopped running.",
+	"You were born here. You have never seen the sky. In the morning, the Overseer is going to change that."]
+var slide_i := 0
+var slide_l: Label
+var cre := {}
+var cre_name: LineEdit
+
+func latest_save() -> String:
+	var best := ""
+	var bt := ""
+	for slot in ["auto", "1", "2", "3"]:
+		var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.READ)
+		if f == null:
+			continue
+		var d = JSON.parse_string(f.get_as_text())
+		if d is Dictionary and String(d.get("time", "")) > bt:
+			bt = String(d.time)
+			best = slot
+	return best
+
+func open_title() -> void:
+	_open("title")
+	_clear()
+	var sp := Control.new()
+	sp.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(sp)
+	var t := _label(body, "ASHFALL: MERIDIAN", 54, Color(1.0, 0.85, 0.5))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var st := _label(body, "Haven 12 is running dry. Someone has to go up.", 20, DIM)
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(420, 0)
+	box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_theme_constant_override("separation", 12)
+	body.add_child(box)
+	var last := latest_save()
+	if last != "":
+		_button(box, "CONTINUE  (" + Game.save_info(last) + ")", func():
+			Game.booted = true
+			close()
+			Game.load_game(last))
+	_button(box, "NEW GAME", func(): Game.booted = true; _intro(0))
+	_button(box, "JUMP INTO THE VALLEY", func():
+		Game.booted = true
+		close())
+	var sp2 := Control.new()
+	sp2.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(sp2)
+
+func _intro(i: int) -> void:
+	slide_i = i
+	mode = "intro"
+	_clear()
+	var sp := Control.new()
+	sp.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(sp)
+	slide_l = _label(body, "", 26, Color(0.9, 0.95, 0.85))
+	slide_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	term_text = SLIDES[i]
+	term_i = 0
+	term_l = slide_l
+	if Game.main:
+		Game.main.speak(SLIDES[i], "narrator")
+	var dots := _label(body, " ".join(range(SLIDES.size()).map(func(j): return "●" if j == i else "○")), 20, DIM)
+	dots.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sp2 := Control.new()
+	sp2.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_child(sp2)
+	var row := _row()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_button(row, "SKIP", _create, 160)
+	_button(row, "NEXT" if i < SLIDES.size() - 1 else "CONTINUE", func():
+		if term_i < term_text.length():
+			term_i = term_text.length() - 1
+			return
+		if slide_i < SLIDES.size() - 1:
+			_intro(slide_i + 1)
+		else:
+			_create(), 220)
+
+func _create() -> void:
+	mode = "create"
+	if cre.is_empty():
+		cre = {"stats": {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}, "points": 3}
+	_clear()
+	_label(body, "HAVEN 12 RESIDENT REGISTRATION", 26, Color(1.0, 0.85, 0.5))
+	var nr := _row()
+	_label(nr, "Name", 20)
+	if cre_name == null or not is_instance_valid(cre_name):
+		cre_name = LineEdit.new()
+		cre_name.placeholder_text = "Wanderer"
+		cre_name.max_length = 18
+	cre_name.custom_minimum_size = Vector2(320, 48)
+	cre_name.add_theme_font_size_override("font_size", 22)
+	if cre_name.get_parent():
+		cre_name.get_parent().remove_child(cre_name)
+	nr.add_child(cre_name)
+	_label(nr, "   %d point%s left" % [cre.points, "" if cre.points == 1 else "s"], 20, Color(1.0, 0.9, 0.5))
+	var list := _scroll()
+	for k in cre.stats:
+		var info: Array = Game.DB.statinfo.get(k, [k.to_upper(), ""])
+		var row := HBoxContainer.new()
+		list.add_child(row)
+		var l := _label(row, "%s  %d   —  %s" % [info[0], cre.stats[k], info[1]], 19)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD
+		_button(row, " − ", func(): cre.stats[k] -= 1; cre.points += 1; _create(), 60, cre.stats[k] > 2)
+		_button(row, " + ", func(): cre.stats[k] += 1; cre.points -= 1; _create(), 60, cre.points > 0 and cre.stats[k] < 9)
+	var go := _row()
+	go.alignment = BoxContainer.ALIGNMENT_END
+	_button(go, "CONFIRM AND WAKE UP", func():
+		var nm := cre_name.text.strip_edges().substr(0, 18)
+		close()
+		Game.new_game(nm, cre.stats, int(cre.points)), 320)

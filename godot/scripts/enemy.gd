@@ -33,6 +33,8 @@ var idx := -1
 var eid := ""          # the spawn's id: quests ask whether a named enemy is dead
 var group := ""        # neutral groups (Kess's crew, the herd) turn on you together
 var loot = null          # what the body holds once searched
+var foe = null           # the companion it is fighting, or null for you
+var crip := {}           # FOCUS hits: crippled legs slow it, crippled arms spoil its aim
 
 # outfit, cloth tint, skin tint for the human hostiles
 const PEOPLE := {
@@ -90,7 +92,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		ap.play("Pistol_Idle" if ranged else "Idle")
 		ap.seek(randf() * 2.0, true)
 	else:
-		var ps: PackedScene = load("res://data/chars/enemy_" + type + ".glb")
+		var ps: PackedScene = load(Game.char_path("enemy_" + type + ".glb"))
 		model = ps.instantiate()
 		add_child(model)
 		rig = Rig.new(model, quad)
@@ -159,6 +161,16 @@ func _physics_process(d: float) -> void:
 	var P := Game.player
 	var pp := P.global_position
 	var dist := global_position.distance_to(pp)
+	# a companion closer than you draws the fight
+	foe = null
+	if state == "chase" and hostile:
+		for c in Game.main.party:
+			if c.down <= 0.0:
+				var cd: float = global_position.distance_to(c.global_position)
+				if cd < dist * 0.8 and cd < 30.0:
+					foe = c
+					pp = c.global_position
+					dist = cd
 	var is_near := dist < 55.0
 	if ap and is_near != near:
 		near = is_near
@@ -192,7 +204,7 @@ func _physics_process(d: float) -> void:
 			var reach := 1.7 if quad else (18.0 if ranged else 1.8)
 			var sees := dist < reach + 4.0 and can_see(pp)
 			if dist > reach or not sees:
-				spd = _move_to(pp, speed, d)
+				spd = _move_to(pp, speed * (0.55 if crip.has("legs") else 1.0), d)
 			else:
 				_face(pp, d)
 			if ranged and dist < 26.0 and sees:
@@ -259,11 +271,18 @@ func _attack(dist: float) -> void:
 		_one_shot(["Punch_Jab", "Punch_Cross"][randi() % 2], 0.55)
 	if quad or not ranged:
 		Sfx.play_at("o_bark2" if quad else "x_flesh1", global_position + Vector3.UP, 0.0, randf_range(0.9, 1.1))
-		Game.hurt(dmg * randf_range(0.7, 1.2))
+		if foe:
+			foe.hurt(dmg * randf_range(0.7, 1.2))
+		else:
+			Game.hurt(dmg * randf_range(0.7, 1.2))
 		return
 	_one_shot("Pistol_Shoot", 0.35)
 	Sfx.play_at("pistol_far" if dist > 14.0 else "pistol", global_position + Vector3.UP * 1.4, -2.0, randf_range(0.9, 1.05))
-	Game.main.tracer(global_position + Vector3.UP * 1.4 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5, Game.player.global_position + Vector3.UP * 1.3 + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 1.5)
-	var chance := clampf(0.75 - dist * 0.022, 0.2, 0.75)
+	var tp: Vector3 = (foe.global_position if foe else Game.player.global_position) + Vector3.UP * 1.3
+	Game.main.tracer(global_position + Vector3.UP * 1.4 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5, tp + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 1.5)
+	var chance := clampf(0.75 - dist * 0.022, 0.2, 0.75) * (0.6 if crip.has("arms") else 1.0)
 	if randf() < chance:
-		Game.hurt(dmg * randf_range(0.7, 1.1))
+		if foe:
+			foe.hurt(dmg * randf_range(0.7, 1.1))
+		else:
+			Game.hurt(dmg * randf_range(0.7, 1.1))

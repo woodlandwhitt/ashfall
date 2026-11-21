@@ -138,6 +138,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_E: Game.main.interact()
 			KEY_R: reload()
 			KEY_G: throw_nade()
+			KEY_V: Game.main.hud.focus.enter()
 			KEY_SHIFT: running = not running
 			KEY_ESCAPE: Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -145,7 +146,10 @@ func _physics_process(d: float) -> void:
 	if Game.hp <= 0 or Game.paused:
 		velocity = Vector3.ZERO
 		return
-	var talking: bool = Game.main.in_dialog()
+	var talking: bool = Game.main.in_dialog() or Game.main.hud.focus.exec >= 0
+	# action points come back over time, slower while something is hunting you
+	if Game.ap < Game.ap_max:
+		Game.ap = minf(Game.ap_max, Game.ap + d * (5.0 if Game.main.in_combat() else 9.0))
 	var iv := Game.touch_move
 	if not talking:
 		if Input.is_key_pressed(KEY_W): iv.y -= 1
@@ -243,13 +247,7 @@ func fire() -> void:
 	Game.mag -= 1
 	Game.stats_changed.emit()
 	fire_cd = cd
-	recoil = clampf(float(it.get("dmg", 15)) / 25.0, 0.6, 2.0)
-	vm.shoot()
-	flash.light_energy = 6.0
-	flash_q.visible = true
-	flash_q.rotation.z = randf() * TAU
-	var snd: String = it.get("snd", SND.get(kind, "pistol"))
-	Sfx.play(snd, -3.0, randf_range(0.95, 1.05) * (1.4 if kind == "energy" else 1.0))
+	shot_fx(kind)
 	var pel := int(it.get("pellets", 1))
 	var dmg := weapon_damage() * (0.75 if pel > 1 else 1.0)
 	var moving := 1.5 if Vector2(velocity.x, velocity.z).length() > 1.0 else 1.0
@@ -257,6 +255,20 @@ func fire() -> void:
 		_ray(dmg, float(it.get("range", 100)), float(it.get("spread", 0.02)) * moving, kind == "energy")
 	if Game.mag == 0:
 		reload()
+
+# the look and sound of one shot (FOCUS plays its queued shots through this too)
+func shot_fx(kind: String) -> void:
+	var it := Game.item(Game.weapon)
+	vm.shoot()
+	if kind == "melee":
+		Sfx.play("k_slice", -2.0, randf_range(0.9, 1.1))
+		return
+	recoil = clampf(float(it.get("dmg", 15)) / 25.0, 0.6, 2.0)
+	flash.light_energy = 6.0
+	flash_q.visible = true
+	flash_q.rotation.z = randf() * TAU
+	var snd: String = it.get("snd", SND.get(kind, "pistol"))
+	Sfx.play(snd, -3.0, randf_range(0.95, 1.05) * (1.4 if kind == "energy" else 1.0))
 
 func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 	var sp := Vector2(randf() - 0.5, randf() - 0.5) * spread * 2.0

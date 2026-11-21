@@ -125,6 +125,10 @@ for (const e of 'bcde') QP['echo' + e] = QP.echoa;
     o.act = Function('return G=>{G.take(\'opened_parcel\',1);(' + orig.opts[k].act.toString() + ')(G)}')();
   });
 }
+// enemy hit volumes (entities.js imports three.js, so read the table from its source)
+const entSrc = fs.readFileSync(SRC + 'entities.js', 'utf8');
+const hbStart = entSrc.indexOf('export const HITBOX=') + 'export const HITBOX='.length;
+const HITBOX = Function('return ' + entSrc.slice(hbStart, entSrc.indexOf('};', hbStart) + 1))();
 const out = {
   quests: enc(D.QUESTS, 'QUESTS'),
   dialogue: enc(D.DIALOGUE, 'DIALOGUE'),
@@ -140,7 +144,7 @@ const out = {
   voices: D.VOICES || {},
   settler_lines: D.SETTLER_LINES || [],
   helpers: {},
-  consts: {VAULT_O: D.VAULT_O, VSPOT: D.VSPOT, LOCS: D.LOCS, CAMPS: D.CAMPS, BOUNTIES: D.BOUNTIES, VOICES: D.VOICES, CUR: D.CUR, KARMA_TITLES: D.KARMA_TITLES},
+  consts: {HITBOX, PERKS: D.PERKS, AP_COST: D.AP_COST, EVENTS: D.EVENTS, VAULT_O: D.VAULT_O, VSPOT: D.VSPOT, LOCS: D.LOCS, CAMPS: D.CAMPS, BOUNTIES: D.BOUNTIES, VOICES: D.VOICES, CUR: D.CUR, KARMA_TITLES: D.KARMA_TITLES},
 };
 // resolve free identifiers that are data.js helpers
 for (let pass = 0; pass < 3; pass++) {

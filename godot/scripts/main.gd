@@ -15,6 +15,7 @@ var dialog_id := ""
 var dialog_node := ""
 var pending_trade := ""
 var objects: WorldObjects
+var party: Array = []        # companions travelling with you (one person and Biscuit)
 var dialog_opts: Array = []
 var pools: Array = []
 var start_pos := Vector3.ZERO
@@ -75,10 +76,58 @@ func _ready() -> void:
 	add_child(hud)
 	set_quality(Quality.load_level())
 	chunks.load_now(start_pos)
-	Sfx.loop("o_wind", -14.0)
-	if not Game.flags.has("met_sheriff"):
+	_restore_party()
+	if not Game.interior():
+		Sfx.loop("o_wind", -14.0)
+	if Game.pending_new:
+		Game.pending_new = false
+		_opening.call_deferred()
+	elif not Game.flags.has("met_sheriff") and not Game.interior() and Game.booted:
 		Game.msg("Dustwell. Find Sheriff Voss in the square.")
+	if not Game.booted and OS.get_cmdline_user_args().is_empty():
+		hud.screens.open_title.call_deferred()
 	_test_hooks.call_deferred()
+
+# ---------------------------------------------------------------- Haven 12
+func _opening() -> void:
+	Game.banner("HAVEN 12", "Day 1 of 9")
+	Game.start("exodus")
+	Game.msg("Follow the diamond on the compass.")
+	await get_tree().create_timer(2.0).timeout
+	speak("Attention, Haven 12. Water rationing is now in effect. " + Game.player_name + ", report to the Overseer's office immediately.", "overseer")
+	await get_tree().create_timer(5.0).timeout
+	Game.msg("Tap USE to talk to people and open things.")
+
+func leave_vault() -> void:
+	speak("Haven 12 door opening. Stand clear of the rails.", "core")
+	Sfx.play("o_bigdoor")
+	Game.flags["leftVault"] = 1
+	Game.discovered["vault"] = 1
+	Game.complete("exodus")
+	Game.start("daylight")
+	var L: Dictionary = Game.DB.locs.vault
+	await _fade(true)
+	Game.travel_area("world", float(L.x), float(L.z) - 7.0, 0.0)
+
+func vault_travel(inward: bool) -> void:
+	Sfx.play("o_bigdoor")
+	await _fade(true)
+	if inward:
+		var sp: Array = Game.L.consts.VSPOT.door
+		Game.travel_area("vault", float(Game.L.consts.VAULT_O.x) + float(sp[0]) - 4.5, float(Game.L.consts.VAULT_O.z) + float(sp[1]) - 6.0, 0.0)
+	else:
+		var L: Dictionary = Game.DB.locs.vault
+		Game.travel_area("world", float(L.x), float(L.z) - 7.0, 0.0)
+
+func _fade(out: bool) -> void:
+	var r := ColorRect.new()
+	r.color = Color(0, 0, 0, 0.0 if out else 1.0)
+	r.set_anchors_preset(Control.PRESET_FULL_RECT)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.root.add_child(r)
+	var tw := r.create_tween()
+	tw.tween_property(r, "color:a", 1.0 if out else 0.0, 1.2)
+	await tw.finished
 
 # people belonging to a chunk come and go with it; the dead stay dead
 func _spawn_chunk(k: String) -> void:
@@ -99,7 +148,7 @@ func _spawn_chunk(k: String) -> void:
 			var d: Dictionary = Game.region.enemies[i]
 			if live_enemy.has(i) or Game.dead.has(str(i)) or Game.killed.has(String(d.get("id", "-"))) or not Game.spawn_allowed(d):
 				continue
-			if not ResourceLoader.exists("res://data/chars/enemy_" + d.type + ".glb") or not Game.region.etypes.has(d.type):
+			if not ResourceLoader.exists(Game.char_path("enemy_" + d.type + ".glb")) or not Game.region.etypes.has(d.type):
 				continue
 			var e = preload("res://scripts/enemy.gd").new()
 			add_child(e)
@@ -114,7 +163,7 @@ func _despawn_chunk(k: String) -> void:
 		var i: int = it[1]
 		if it[0] == "n" and live_npc.has(i):
 			var n = live_npc[i]
-			if n == dialog_npc:
+			if n == dialog_npc or n.follow:
 				continue
 			npcs.erase(n)
 			live_npc.erase(i)
@@ -126,6 +175,81 @@ func _despawn_chunk(k: String) -> void:
 			enemies.erase(e)
 			live_enemy.erase(i)
 			e.queue_free()
+
+# ---------------------------------------------------------------- companions
+func _npc_index(id: String) -> int:
+	for i in Game.region.npcs.size():
+		if String(Game.region.npcs[i].id) == id:
+			return i
+	return -1
+
+func recruit(id: String, silent := false) -> void:
+	var c: Dictionary = Game.L.get("companions", {}).get(id, {})
+	var i := _npc_index(id)
+	if c.is_empty() or i < 0:
+		return
+	for p in party:
+		if p.id == id:
+			return
+	if not c.get("dog", false):
+		for p in party.duplicate():
+			if not p.comp.get("dog", false):
+				dismiss(p.id, true)
+				Game.msg(String(p.comp.n) + " heads home. You can only bring one person along.")
+	var n = live_npc.get(i)
+	if n == null:
+		n = preload("res://scripts/npc.gd").new()
+		add_child(n)
+		n.setup(Game.region.npcs[i])
+		n.set_meta("idx", i)
+		npcs.append(n)
+		live_npc[i] = n
+		var a: Vector3 = player.global_position + Vector3(1.5, 0.3, 1.5)
+		n.global_position = Vector3(a.x, Game.height(a.x, a.z) + 0.2, a.z)
+	if not Game.flags.has("party") or not (Game.flags.party is Dictionary):
+		Game.flags["party"] = {}
+	var st: String = Game.flags.party.get(id, {}).get("state", "follow")
+	n.join(c, st)
+	party.append(n)
+	Game.flags.party[id] = {"state": st}
+	if id == "biscuit":
+		Game.flags["biscuit"] = 1
+		if not Game.known("good_boy"):
+			Game.start("good_boy")
+	if not silent:
+		Game.banner("COMPANION", String(c.n) + " joins you")
+		Sfx.play("o_quest")
+	Game.check_quests()
+
+func dismiss(id: String, quiet := false) -> void:
+	for p in party:
+		if p.id == id:
+			party.erase(p)
+			p.leave()
+			if Game.flags.get("party") is Dictionary:
+				Game.flags.party.erase(id)
+			if not quiet:
+				Game.msg(String(Game.L.companions[id].n) + " heads home.")
+			return
+
+func party_state(id: String):
+	for p in party:
+		if p.id == id:
+			return p.cstate
+	return null
+
+func party_cmd(id: String, st: String) -> void:
+	for p in party:
+		if p.id == id:
+			p.cstate = st
+			Game.flags.party[id] = {"state": st}
+
+# companions saved in the game come back with you
+func _restore_party() -> void:
+	var pd = Game.flags.get("party")
+	if pd is Dictionary:
+		for id in pd.keys():
+			recruit(String(id), true)
 
 # a quest started or finished: anyone it summons appears if their chunk is already loaded
 func refresh_spawns() -> void:
@@ -176,13 +300,22 @@ func _test_hooks() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else ""
-	if args.has("at"):
+	if args.has("area") and Game.area != String(args.area):
+		Game.booted = true
+		var v := String(args.get("at", "-19,554,-1.57")).split(",")
+		Game.load_area(String(args.area))
+		Game.pending_pos = [float(v[0]), Game.height(float(v[0]), float(v[1])), float(v[1]), float(v[2]) if v.size() > 2 else 0.0]
+		restart_keep()
+		return
+	if args.has("at") and not args.has("area"):
 		var v := String(args.at).split(",")
 		player.global_position = Vector3(float(v[0]), Game.height(float(v[0]), float(v[1])) + 0.1, float(v[1]))
 		player.yaw = float(v[2]) if v.size() > 2 else 0.0
 		player.pitch = float(v[3]) if v.size() > 3 else 0.0
 	if args.has("selftest"):
 		await _selftest()
+	if args.has("newgame"):
+		await _newgame_test()
 	if args.has("perf"):
 		await _perf_report()
 	if args.has("pip"):
@@ -286,6 +419,48 @@ func _goto(p: Vector3, face: Vector3) -> void:
 	var to := face - p
 	player.yaw = atan2(-to.x, -to.z)
 	await _wait(4)
+
+# a new game from registration to the surface: wake in Haven 12, see the Overseer, draw your gear, open the great door
+func _newgame_test() -> void:
+	var out: Array = Game.test_log
+	if Game.area == "world" and not Game.flags.get("leftVault"):
+		Game.booted = true
+		hud.screens.open_title()
+		out.append("title mode " + hud.screens.mode)
+		hud.screens._intro(0)
+		hud.screens._create()
+		hud.screens.cre.stats.agility = 7
+		hud.screens.cre.points = 1
+		hud.screens.cre_name.text = "Tess"
+		out.append("create mode %s stats %s" % [hud.screens.mode, str(hud.screens.cre.stats)])
+		hud.screens.close()
+		Game.new_game("Tess", hud.screens.cre.stats, 1)
+		return
+	if Game.area == "vault":
+		await _wait(20)
+		out.append("in vault: area %s at %s name %s weapon '%s' (%s) quests %s objective %s" % [Game.area, str(player.global_position.snapped(Vector3.ONE * 0.1)), Game.player_name, Game.weapon, Game.iname(Game.weapon), str(Game.quests), str(Game.current_objective())])
+		out.append("vault people %s, chunks %d" % [str(npcs.map(func(n): return n.id)), chunks.loaded.size()])
+		out.append("door says: " + str(objects.point_label(_obj_point("vaultExit"))))
+		out.append(await _talk("overseer", ["What happened", "So what", "I'll go", "Understood"]))
+		out.append("exodus stage %d metOverseer %s target %s" % [Game.stage("exodus"), str(Game.flags.get("metOverseer")), str(quest_target())])
+		var lk = _obj_near("chest")
+		await _goto(_obj_pos(lk) + Vector3(0, 0, -1.3), _obj_pos(lk))
+		out.append("at locker: " + str(_best_target().get("label", "nothing")))
+		interact()
+		if hud.screens.mode == "loot":
+			hud.screens._take_all()
+		Game.equip("pipe_pistol")
+		out.append("gear: pistol %s knife %s stage %d weapon %s" % [Game.has("pipe_pistol"), Game.has("combat_knife"), Game.stage("exodus"), Game.weapon])
+		var door = _obj_point("vaultExit")
+		await _goto(_obj_pos(door) + Vector3(0, 0, -1.5), _obj_pos(door))
+		out.append("at door: " + str(_best_target().get("label", "nothing")))
+		interact()
+		return
+	await _wait(20)
+	out.append("outside: area %s at %s leftVault %s exodus done %s daylight %s, objective %s" % [Game.area, str(player.global_position.snapped(Vector3.ONE * 0.1)), str(Game.flags.get("leftVault")), Game.is_done("exodus"), str(Game.quests.get("daylight")), str(Game.current_objective())])
+	for l in out:
+		print("TEST ", l)
+	get_tree().quit()
 
 func _talk(id: String, picks: Array) -> String:
 	var n = null
@@ -545,6 +720,59 @@ func _selftest() -> void:
 			for i in 120:
 				await get_tree().physics_frame
 			out.append("molotov: hp %.0f -> %.0f" % [h2, t2.hp])
+	# FOCUS: queue torso shots at the nearest live enemy in front, play them out
+	var fe = null
+	for e in enemies:
+		if not e.dead and (fe == null or e.global_position.distance_to(player.global_position) < fe.global_position.distance_to(player.global_position)):
+			fe = e
+	if fe:
+		var to: Vector3 = fe.global_position - player.global_position
+		player.yaw = atan2(-to.x, -to.z)
+		player.pitch = 0.0
+		if to.length() > 25.0:
+			player.global_position = fe.global_position - to.normalized() * 10.0 + Vector3.UP * 0.5
+			player.yaw = atan2(-to.x, -to.z)
+		await _wait(3)
+		Game.ap = Game.ap_max
+		Game.mag = Game.mag_size
+		var hp0: float = fe.hp
+		hud.focus.enter()
+		out.append("focus open %s targets %d first %s, parts %s" % [hud.focus.visible, hud.focus.list.size(), fe.type if hud.focus.list.is_empty() else hud.focus.list[0].type, str(hud.focus.parts(hud.focus.list[0]).map(func(p): return [p.n, roundi(hud.focus.chance(hud.focus.list[0], p) * 100.0)])) if hud.focus.visible else ""])
+		if hud.focus.visible:
+			var ft = hud.focus.list[0]
+			hp0 = ft.hp
+			var torso: Dictionary = hud.focus.parts(ft)[1 if hud.focus.parts(ft).size() > 2 else 0]
+			for i in 3:
+				hud.focus.queue.append({"e": ft, "part": torso, "c": hud.focus.chance(ft, torso)})
+			var ap0 := Game.ap
+			hud.focus.execute()
+			for i in 300:
+				await get_tree().physics_frame
+				if hud.focus.exec < 0:
+					break
+			out.append("focus executed: AP %d -> %d, %s hp %.0f -> %.0f dead %s, time scale %.2f" % [ap0, Game.ap, ft.type, hp0, ft.hp, ft.dead, Engine.time_scale])
+	# companions: Jory joins, follows, fights; Biscuit too; commands; dismiss
+	Game.G.recruit("jory")
+	Game.G.recruit("biscuit")
+	out.append("party %s, jory state %s, in party %s" % [str(party.map(func(p): return p.id)), str(Game.G.partyState("jory")), Game.G.inParty("jory")])
+	var cfoe = null
+	for e in enemies:
+		if not e.dead and e.hostile:
+			cfoe = e
+			break
+	if cfoe and party.size() > 0:
+		var jory = party[0]
+		cfoe.state = "chase"
+		var hp1: float = cfoe.hp
+		player.global_position = cfoe.global_position + Vector3(12, 0.5, 0)
+		jory.global_position = cfoe.global_position + Vector3(14, 0.5, 2)
+		for i in 240:
+			await get_tree().physics_frame
+		out.append("jory vs %s: hp %.0f -> %.0f (dead %s), jory hp %.0f down %.1f, target %s" % [cfoe.type, hp1, cfoe.hp, cfoe.dead, jory.hp, jory.down, str(jory.tgt != null)])
+	Game.G.partyCmd("jory", "wait")
+	out.append("after wait: %s; flags.party %s" % [str(Game.G.partyState("jory")), str(Game.flags.get("party"))])
+	Game.G.dismiss("jory")
+	out.append("after dismiss: party %s" % [str(party.map(func(p): return p.id))])
 	# discovery, map and travel
 	Game.discover("dustwell")
 	var far_k := ""
@@ -661,6 +889,45 @@ func _environment() -> void:
 	sun.directional_shadow_max_distance = 80.0
 	sun.shadow_blur = 1.2
 	add_child(sun)
+	if Game.interior():
+		# underground: no sky, no sun, cool strip lights along the corridors
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.02, 0.025, 0.03)
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color(0.7, 0.74, 0.78)
+		env.ambient_light_energy = 1.0
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+		env.fog_enabled = false
+		sun.visible = false
+		sun.shadow_enabled = false
+		var VO: Dictionary = Game.L.consts.VAULT_O
+		# a ceiling over the whole shelter (the original drew it black)
+		var ceil_mi := MeshInstance3D.new()
+		var cb := BoxMesh.new()
+		cb.size = Vector3(56.0, 0.2, 96.0)
+		ceil_mi.mesh = cb
+		var cm := StandardMaterial3D.new()
+		cm.albedo_color = Color(0.55, 0.57, 0.56)
+		cm.albedo_texture = load("res://tex/rock.webp")
+		cm.uv1_scale = Vector3(18, 30, 1)
+		cm.roughness = 0.9
+		ceil_mi.material_override = cm
+		ceil_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(ceil_mi)
+		ceil_mi.global_position = Vector3(float(VO.x), -56.3, float(VO.z) + 46.0)
+		var x := float(VO.x) - 24.0
+		while x <= float(VO.x) + 24.0:
+			var z := float(VO.z) + 3.0
+			while z <= float(VO.z) + 90.0:
+				var l := OmniLight3D.new()
+				l.light_color = Color(0.85, 0.93, 1.0)
+				l.light_energy = 1.8
+				l.omni_range = 11.0
+				l.omni_attenuation = 0.9
+				add_child(l)
+				l.global_position = Vector3(x, -60.0 + 2.6, z)
+				z += 8.0
+			x += 8.0
 
 # ---------------------------------------------------------------- terrain: streamed ground meshes, one physics heightfield
 func _terrain() -> void:
@@ -1157,6 +1424,29 @@ func impact(pos: Vector3, normal: Vector3) -> void:
 func blood(pos: Vector3, dir: Vector3) -> void:
 	_puff(pos, -dir, Color(0.45, 0.02, 0.02, 0.95), 12, 2.5)
 	Sfx.play_at(["x_flesh0", "x_flesh1"][randi() % 2], pos, -4.0)
+
+# something is hunting you (action points come back slower)
+func in_combat() -> bool:
+	for e in enemies:
+		if not e.dead and e.hostile and e.state == "chase":
+			return true
+	return false
+
+# a word that floats up from a spot and fades (FOCUS misses)
+func float_text(at: Vector3, t: String) -> void:
+	var l := Label3D.new()
+	l.text = t
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.font_size = 48
+	l.modulate = Color(1.0, 0.9, 0.6)
+	l.outline_size = 8
+	add_child(l)
+	l.global_position = at
+	var tw := l.create_tween()
+	tw.tween_property(l, "global_position", at + Vector3.UP * 0.8, 0.8)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.8)
+	tw.tween_callback(l.queue_free)
 
 func tracer(a: Vector3, b: Vector3, col: Color = Color(1.0, 0.85, 0.5, 0.8)) -> void:
 	var mi := MeshInstance3D.new()

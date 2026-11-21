@@ -29,16 +29,21 @@ func setup(mat: Material, mask: Image, grass: Mesh) -> void:
 	grass_mesh = grass
 	nx = int(ceil((Game.hw - 1) / SIZE))
 	nz = int(ceil((Game.hd - 1) / SIZE))
-	var dir := DirAccess.open("res://data/world")
+	var dir := DirAccess.open(Game.dir() + "world")
 	if dir:
 		for f in dir.get_files():
 			f = f.trim_suffix(".import").trim_suffix(".remap")
 			if f.ends_with(".glb") and f.begins_with("c_"):
-				files[f.trim_prefix("c_").trim_suffix(".glb")] = "res://data/world/" + f
+				files[f.trim_prefix("c_").trim_suffix(".glb")] = Game.dir() + "world/" + f
 	for j in nz:
 		for i in nx:
 			var k := str(i) + "_" + str(j)
 			var mi := MeshInstance3D.new()
+			if Game.interior():
+				mi.visible = false
+				add_child(mi)
+				coarse[k] = mi
+				continue
 			mi.mesh = _ground(i, j, 8)
 			mi.material_override = mat
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -189,13 +194,14 @@ func _build(k: String, ps: PackedScene) -> void:
 	var j := int(ij[1])
 	var root := Node3D.new()
 	root.name = "C" + k
-	var g := MeshInstance3D.new()
-	g.name = "Ground"
-	g.mesh = _ground(i, j, 2)
-	g.material_override = terrain_mat
-	g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(g)
-	if grass_range > 0.0:
+	if not Game.interior():
+		var g := MeshInstance3D.new()
+		g.name = "Ground"
+		g.mesh = _ground(i, j, 2)
+		g.material_override = terrain_mat
+		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(g)
+	if grass_range > 0.0 and not Game.interior():
 		var gr := _grass(i, j)
 		if gr:
 			root.add_child(gr)
