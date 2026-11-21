@@ -49,16 +49,66 @@ func _place() -> void:
 	rotation = TILT
 	state = "aim"
 
+# turn and move the whole rig (arms and gun together) so the gun points straight at the crosshair and sits where the
+# WebView build put it: centred 0.2 m right of the eye, its top at 'sight' over and its back at 'rear' behind the
+# hip-fire spot (0.2, -0.17, -0.5) in camera space (entities.js makeGun / GUNFIT). The hands keep their grip.
+func _align(fit: Basis, bb: AABB, gf: Dictionary) -> void:
+	skel.force_update_all_bone_transforms()
+	var hb := skel.get_bone_global_pose(skel.find_bone("hand_r"))
+	var sk := Transform3D.IDENTITY
+	var n: Node = skel
+	while n != rig and n is Node3D:
+		sk = (n as Node3D).transform * sk
+		n = n.get_parent()
+	var g_vm: Transform3D = rig.transform * sk * hb * gun.transform
+	var inv := fit.orthonormalized().inverse()
+	var fwd_m := (inv * Vector3(0, 0, -1)).normalized()
+	var up_m := (inv * Vector3.UP).normalized()
+	var f := (g_vm.basis * fwd_m).normalized()
+	var u := (g_vm.basis * up_m).normalized()
+	u = (u - f * u.dot(f)).normalized()
+	var zc := -f
+	var xc := u.cross(zc).normalized()
+	var R := Basis(xc, u, zc).transposed()
+	rig.transform = Transform3D(R, Vector3.ZERO) * rig.transform
+	g_vm = Transform3D(R, Vector3.ZERO) * g_vm
+	var c := bb.get_center()
+	var half_len := absf(fwd_m.dot(bb.size)) * 0.5
+	var half_h := absf(up_m.dot(bb.size)) * 0.5
+	var rear_top: Vector3 = g_vm * (c - fwd_m * half_len + up_m * half_h)
+	var centre: Vector3 = g_vm * c
+	var long: bool = not gf.get("pistol", false)
+	# long guns come back to the shoulder (our arms are shorter than the WebView build's floating ones)
+	var want := Vector3(0.17 if long else 0.2, -0.17 + float(gf.get("sight", 0.07)) + (0.03 if long else 0.0), -0.5 + float(gf.get("rear", 0.07)) + (0.24 if long else 0.0))
+	rig.position += Vector3(want.x - centre.x, want.y - rear_top.y, want.z - rear_top.z)
+	base_pos = rig.position
+	rotation = Vector3.ZERO
+	# long guns: the left hand goes out to the handguard (IK on the left arm, run after the animation each frame)
+	if not gf.get("pistol", false) and skel.find_bone("upperarm_l") >= 0:
+		var tgt := Node3D.new()
+		gun.add_child(tgt)
+		var sc := fit.get_scale().x
+		tgt.position = Humanoid.guard_fit(bb, fit, gf)
+		var ik := ArmIK.new()
+		skel.add_child(ik)
+		ik.setup(skel, "l", tgt)
+		if OS.get_cmdline_user_args().has("--ikdbg"):
+			var names := []
+			for i in [skel.find_bone("upperarm_l"), skel.find_bone("lowerarm_l"), skel.find_bone("hand_l")]:
+				names.append(skel.get_bone_name(skel.get_bone_parent(i)))
+			print("IKDBG parents ", names)
+		ik_tgt = tgt
+
 func _no_shadow(n: Node) -> void:
 	for c in n.find_children("*", "GeometryInstance3D", true, false):
 		(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 # a gun: fit turns the model so its muzzle points down -Z at real size (from the WebView build's GUNFIT table)
-func setup(gun_scene: PackedScene, fit: Basis) -> void:
+func setup(gun_scene: PackedScene, fit: Basis, gf: Dictionary = {}) -> void:
 	_make_rig()
 	ap.play("Pistol_Aim_Neutral")
 	ap.seek(0.0, true)
-	gun = Humanoid.hold_gun(rig, gun_scene, fit)
+	gun = Humanoid.hold_gun(rig, gun_scene, fit, gf)
 	_no_shadow(gun)
 	# the muzzle is the front of the model's bounds along its own forward axis, near the top
 	var bb := AABB()
@@ -88,6 +138,7 @@ func setup(gun_scene: PackedScene, fit: Basis) -> void:
 	idle_anim = "Pistol_Aim_Neutral"
 	attack_anim = "Pistol_Shoot"
 	_place()
+	_align(fit, bb, gf)
 
 # melee: a blade or club (or bare fists) in the right hand
 func setup_melee(armed: bool, id: String) -> void:
@@ -137,7 +188,14 @@ func reload(dur: float) -> void:
 	ap.play("Pistol_Reload", 0.1, a.length / dur)
 	state = "reload"
 
+var dbg_t := 0
+var ik_tgt: Node3D
 func _process(_d: float) -> void:
+	dbg_t += 1
+	if dbg_t == 15 and ik_tgt and OS.get_cmdline_user_args().has("--ikdbg"):
+		var hl := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("hand_l"))
+		var ua := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("upperarm_l"))
+		print("IKDBG tgt ", to_local(ik_tgt.global_position), " hand_l ", to_local(hl.origin), " upperarm_l ", to_local(ua.origin), " reach ", ua.origin.distance_to(ik_tgt.global_position))
 	if state != "aim" and not ap.is_playing():
 		ap.play(idle_anim, 0.15)
 		state = "aim"

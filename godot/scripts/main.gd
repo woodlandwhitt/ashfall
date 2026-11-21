@@ -610,6 +610,11 @@ func _test_hooks() -> void:
 		await _selftest()
 	if args.has("newgame"):
 		await _newgame_test()
+	if args.has("gungrid"):
+		await _gun_grid()
+		return
+	if args.has("aitest"):
+		await _ai_test()
 	if args.has("khtest"):
 		await _khole_test()
 	if args.has("celltest"):
@@ -638,7 +643,8 @@ func _test_hooks() -> void:
 			await _wait(3)
 			var sk: Skeleton3D = player.vm.skel
 			var gp: Vector3 = sk.global_transform * sk.get_bone_global_pose(sk.find_bone("hand_r")).origin
-			sc.global_position = gp + player.cam.global_basis.x * 0.45 + player.cam.global_basis.y * 0.05
+			var sd := -1.0 if String(args.sidecam) == "left" else 1.0
+			sc.global_position = gp + player.cam.global_basis.x * 0.9 * sd + player.cam.global_basis.y * 0.15
 			sc.look_at(gp, Vector3.UP)
 			sc.fov = 40.0
 			sc.near = 0.01
@@ -898,6 +904,95 @@ func _cell_test(i: int) -> void:
 	for l in out:
 		print("TEST ", l)
 	get_tree().quit()
+
+# a fight on open ground: do the hostiles see you, hurt you, spread out, take cover, run?
+func _ai_test() -> void:
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	await _wait(30)
+	var pp: Vector3 = player.global_position
+	var foes: Array = []
+	for sp in [["raider", 15.0, 0.0], ["raider", 13.0, 1.2], ["hound", 11.0, -1.0], ["hound", 12.0, 2.4]]:
+		var a: float = sp[2]
+		var e = events._enemy(String(sp[0]), pp.x + sin(a) * float(sp[1]), pp.z + cos(a) * float(sp[1]), true)
+		foes.append(e)
+	var hp0 := Game.hp
+	Game.hp = 9999.0
+	var tacs := {}
+	var min_gap := 99.0
+	for i in 60 * 12:
+		await get_tree().physics_frame
+		for e in foes:
+			if is_instance_valid(e) and not e.dead:
+				tacs[e.type + ":" + e.tac] = 1
+		var hs: Array = foes.filter(func(e): return e.type == "hound" and is_instance_valid(e))
+		if hs.size() == 2:
+			min_gap = minf(min_gap, hs[0].global_position.distance_to(hs[1].global_position))
+		if i == 60 * 6:
+			# hurt the first raider badly: it should look for cover or run
+			foes[0].hit(foes[0].hp_max * 0.6, foes[0].global_position + Vector3.UP, Vector3.FORWARD)
+	var lost := 9999.0 - Game.hp
+	Game.hp = hp0
+	var out: Array = []
+	out.append("AI: damage taken %.0f in 12 s, states %s, hound spacing %.1f m" % [lost, str(tacs.keys()), min_gap])
+	for e in foes:
+		out.append("  %s %s hp %.0f/%.0f at %.1f m, sees %s" % [e.type, e.state, e.hp, e.hp_max, e.global_position.distance_to(player.global_position), str(e.can_see(player.global_position))])
+	for l in out:
+		print("TEST ", l)
+	get_tree().quit()
+
+# every gun model side by side, with the grip (red) and the support hand (blue) marked
+func _gun_grid() -> void:
+	var models := {}
+	for k in Game.DB.items:
+		var it: Dictionary = Game.DB.items[k]
+		if it.get("glb") and not models.has(it.glb):
+			models[it.glb] = k
+	var root := Node3D.new()
+	add_child(root)
+	var base: Vector3 = player.global_position + Vector3(0, 40, 0)
+	root.global_position = base
+	var i := 0
+	var names := models.keys()
+	names.sort()
+	for glb in names:
+		var mdl: Array = player.model_for(String(models[glb]))
+		var holder := Node3D.new()
+		root.add_child(holder)
+		holder.position = Vector3((i % 4) * 1.25, -(i / 4) * 0.55, 0)
+		var g: Node3D = (load(mdl[0]) as PackedScene).instantiate()
+		holder.add_child(g)
+		var fit: Basis = mdl[1]
+		# muzzle to the right (+X), up +Y
+		g.transform = Transform3D(Basis(Vector3.UP, -PI / 2) * fit, Vector3.ZERO)
+		var bb := Humanoid.gun_bounds(g)
+		var grip := Humanoid.grip_fit(bb, fit, mdl[2])
+		var hg := Humanoid.guard_fit(bb, fit, mdl[2])
+		for pc in [[grip, Color.RED], [hg, Color.BLUE]]:
+			var m := MeshInstance3D.new()
+			var sm := SphereMesh.new()
+			sm.radius = 0.025 / fit.get_scale().x
+			sm.height = sm.radius * 2
+			m.mesh = sm
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = pc[1]
+			mat.no_depth_test = true
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.material_override = mat
+			g.add_child(m)
+			m.position = pc[0]
+		var l := Label3D.new()
+		l.text = String(glb)
+		l.pixel_size = 0.0015
+		l.position = Vector3(0, 0.2, 0)
+		holder.add_child(l)
+		i += 1
+	var cam := Camera3D.new()
+	add_child(cam)
+	cam.global_position = base + Vector3(1.9, -0.9, 3.2)
+	cam.fov = 55.0
+	cam.current = true
+	sun.rotation = Vector3(-0.6, 0.0, 0)
 
 func _talk(id: String, picks: Array) -> String:
 	var n = null

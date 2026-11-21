@@ -37,6 +37,16 @@ var npc = null           # a townsperson you provoked
 var essential := false   # they yield instead of dying
 var foe = null           # the companion it is fighting, or null for you
 var crip := {}           # FOCUS hits: crippled legs slow it, crippled arms spoil its aim
+# tactics: what it is doing inside a fight
+var tac := "advance"     # advance, strafe, cover, peek, flee, circle
+var tac_t := 0.0
+var strafe := 1.0
+var cover := Vector3.ZERO
+var burst := 0           # shots left in this burst
+var windup := 0.0        # a melee blow on its way (you can step out of it)
+var slot := 0.0          # the side it comes at you from, so a pack spreads out instead of stacking
+var fled := false
+var seen_t := 0.0        # how long you've been in its sight
 
 # outfit, cloth tint, skin tint for the human hostiles
 const PEOPLE := {
@@ -136,6 +146,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		rig = Rig.new(model, quad)
 	for mi in model.find_children("*", "GeometryInstance3D", true, false):
 		(mi as GeometryInstance3D).visibility_range_end = 150.0
+	slot = float(absi(hash(eid + str(d.x) + str(d.z))) % 6283) / 1000.0
 	agent = NavigationAgent3D.new()
 	agent.path_desired_distance = 1.0
 	agent.target_desired_distance = 1.2
@@ -160,6 +171,8 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 	if hp <= 0.0:
 		die(dir)
 	else:
+		if state != "chase":
+			alert()
 		state = "chase"
 		if not hostile and eid != "" and Game.main:
 			hostile = true
@@ -193,9 +206,19 @@ func hear(at: Vector3) -> void:
 	if not dead and hostile and global_position.distance_to(at) < 60.0:
 		state = "chase"
 
-func can_see(p: Vector3) -> bool:
-	var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 1.2, p + Vector3.UP * 1.3, 1)
+# line of sight through the world (not through you or itself: both sit on the world's collision layer)
+func can_see(p: Vector3, from := Vector3.INF) -> bool:
+	var a := (global_position if from == Vector3.INF else from) + Vector3.UP * 1.2
+	var q := PhysicsRayQueryParameters3D.create(a, p + Vector3.UP * 1.3, 1)
+	q.exclude = [get_rid(), Game.player.get_rid()]
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+# a shout brings the rest of its group (or anything hostile close by) into the fight
+func alert() -> void:
+	for e in Game.main.enemies:
+		if e != self and is_instance_valid(e) and not e.dead and e.hostile and e.state != "chase" and e.global_position.distance_to(global_position) < 22.0:
+			e.state = "chase"
+			e.tac = "advance"
 
 func _physics_process(d: float) -> void:
 	t += d
@@ -240,23 +263,17 @@ func _physics_process(d: float) -> void:
 				spd = _move_to(target, speed * 0.35, d)
 			if hostile and Game.hp > 0.0 and dist < (24.0 if quad else 30.0) and int(t * 4.0) % 2 == 0 and can_see(pp):
 				state = "chase"
+				tac = "advance"
+				alert()
 				if bark_cd <= 0.0:
 					bark_cd = 4.0
 					Sfx.play_at("o_bark1" if quad else "o_creature1", global_position + Vector3.UP, -2.0)
 		"chase":
 			if dist > 70.0:
 				state = "idle"
-			var reach := 1.7 if quad else (18.0 if ranged else 1.8)
-			var sees := dist < reach + 4.0 and can_see(pp)
-			if dist > reach or not sees:
-				spd = _move_to(pp, speed * (0.55 if crip.has("legs") else 1.0), d)
-			else:
-				_face(pp, d)
-			if ranged and dist < 26.0 and sees:
-				aim = true
-			if atk_cd <= 0.0 and dist <= reach and sees:
-				atk_cd = 1.1 if quad else (1.3 if ranged else 1.0)
-				_attack(dist)
+			var r := _tactics(d, pp, dist)
+			spd = r[0]
+			aim = r[1]
 	if spd == 0.0:
 		velocity.x = lerpf(velocity.x, 0.0, 1.0 - exp(-8.0 * d))
 		velocity.z = lerpf(velocity.z, 0.0, 1.0 - exp(-8.0 * d))
@@ -280,6 +297,169 @@ func _physics_process(d: float) -> void:
 				Humanoid.play(ap, a, clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0)
 		else:
 			rig.animate(d, spd, t, aim)
+
+# ---------------------------------------------------------------- fighting
+# Animals and brawlers come at you from different sides, circle out of reach between bites and wind up each blow
+# (step back and it misses). Gunmen keep a working distance, strafe while they shoot in bursts, back off when you
+# close in, duck behind cover to recover when hurt, and break and run when nearly dead.
+func _tactics(d: float, pp: Vector3, dist: float) -> Array:
+	var spd := 0.0
+	var aim := false
+	tac_t -= d
+	var sees := can_see(pp)
+	seen_t = seen_t + d if sees else 0.0
+	var leg := 0.55 if crip.has("legs") else 1.0
+	var to := pp - global_position
+	to.y = 0.0
+	var dirv := to.normalized() if to.length() > 0.01 else Vector3.FORWARD
+	var side := Vector3(-dirv.z, 0, dirv.x)
+	var hurt := hp / hp_max
+	# nearly dead: run (bosses and the essential never do)
+	if not fled and hurt < 0.22 and not def.get("boss", false) and not essential and randf() < 0.6:
+		fled = true
+		tac = "flee"
+		tac_t = randf_range(4.0, 7.0)
+	if tac == "flee":
+		if tac_t <= 0.0:
+			tac = "advance"
+		else:
+			return [_move_to(global_position - dirv * 8.0 + side * strafe * 3.0, speed * leg, d), false]
+	if windup > 0.0:
+		windup -= d
+		_face(pp, d)
+		if windup <= 0.0:
+			var reach := (1.9 if quad else 2.0) + 0.4
+			if dist <= reach:
+				_deal(dmg * randf_range(0.7, 1.2))
+			atk_cd = 1.0 if quad else 1.1
+			if quad or randf() < 0.5:
+				tac = "circle"
+				tac_t = randf_range(0.8, 1.6)
+				strafe = 1.0 if randf() < 0.5 else -1.0
+		return [0.0, false]
+	if not ranged:
+		var reach := 1.9 if quad else 2.0
+		if tac == "circle" and tac_t > 0.0:
+			# back off a little and circle, then come again
+			var ring := pp - dirv * 3.2 + side * strafe * 2.5
+			return [_move_to(ring, speed * 0.8 * leg, d), false]
+		tac = "advance"
+		if dist > reach:
+			# from far away, straight in; close up, come round to its own side of you
+			var goal := pp
+			if dist < 7.0:
+				var off := Vector3(cos(slot), 0, sin(slot))
+				goal = pp + off * reach * 0.8
+				if goal.distance_to(global_position) < 0.6:
+					goal = pp
+			# zig-zag when you're pointing a gun at it
+			var aimed := (-Game.player.global_transform.basis.z).dot(-dirv) > 0.96
+			if aimed and dist > 4.0:
+				goal += side * sin(t * 3.0 + slot) * 2.5
+			spd = _move_to(goal, speed * leg * (1.15 if dist < 6.0 else 1.0), d)
+		else:
+			_face(pp, d)
+		if atk_cd <= 0.0 and dist <= reach and sees:
+			windup = 0.32 if quad else 0.4
+			if not quad:
+				_one_shot(["Punch_Jab", "Punch_Cross"][randi() % 2], 0.6)
+			Sfx.play_at("o_bark1" if quad else "k_cloth1", global_position + Vector3.UP, -3.0, randf_range(0.9, 1.1))
+		return [spd, false]
+	# ---- gunmen
+	var want_lo := 7.0
+	var want_hi := 20.0
+	if hurt < 0.5 and tac != "cover" and tac != "peek" and tac_t <= 0.0 and randf() < 0.5:
+		var c = _find_cover(pp)
+		if c != null:
+			cover = c
+			tac = "cover"
+			tac_t = randf_range(5.0, 8.0)
+	match tac:
+		"cover":
+			if global_position.distance_to(cover) > 0.8:
+				spd = _move_to(cover, speed * 1.1 * leg, d)
+				# shoot back on the way if it can
+				aim = sees and dist < 26.0
+			else:
+				_face(pp, d)
+				hp = minf(hp_max, hp + hp_max * 0.03 * d)   # catching its breath behind the wall
+				if tac_t <= 2.5 or (tac_t <= 4.0 and randf() < d):
+					tac = "peek"
+					tac_t = randf_range(2.0, 3.5)
+					burst = 3
+			if tac_t <= 0.0:
+				tac = "strafe"
+		"peek":
+			# step out sideways until it can see you, empty a burst, then back
+			if not sees:
+				spd = _move_to(cover + side * strafe * 2.0, speed * leg, d)
+			else:
+				_face(pp, d)
+				aim = true
+			if tac_t <= 0.0 or burst <= 0:
+				tac = "cover" if hurt < 0.5 else "strafe"
+				tac_t = randf_range(2.5, 4.0)
+		_:
+			if not sees or dist > want_hi:
+				tac = "advance"
+				spd = _move_to(pp, speed * leg, d)
+				aim = sees and dist < 26.0
+			elif dist < want_lo:
+				# too close for comfort: give ground while shooting
+				spd = _move_to(global_position - dirv * 3.0 + side * strafe, speed * 0.85 * leg, d)
+				aim = true
+			else:
+				if tac != "strafe" or tac_t <= 0.0:
+					tac = "strafe"
+					tac_t = randf_range(1.2, 2.8)
+					strafe = -strafe if randf() < 0.7 else strafe
+				var sgoal := global_position + side * strafe * 2.0
+				if can_see(pp, sgoal):
+					spd = _move_to(sgoal, speed * 0.55 * leg, d)
+				else:
+					strafe = -strafe
+				aim = true
+			if spd < 0.5:
+				_face(pp, d)
+	if aim and sees and dist < 28.0:
+		face_yaw = lerp_angle(face_yaw, atan2(to.x, to.z), 1.0 - exp(-10.0 * d))
+		# it takes a moment to find you, then fires in bursts
+		if atk_cd <= 0.0 and seen_t > 0.35:
+			if burst <= 0:
+				burst = 2 + randi() % 2
+			burst -= 1
+			atk_cd = 0.35 if burst > 0 else randf_range(1.5, 2.3)
+			_attack(dist, spd)
+	return [spd, aim]
+
+# somewhere 4-12 m away that a wall or a rock hides from you
+func _find_cover(pp: Vector3) -> Variant:
+	var best = null
+	var bd := 1e9
+	for i in 10:
+		var a := randf() * TAU
+		var r := randf_range(4.0, 12.0)
+		var c := global_position + Vector3(cos(a), 0, sin(a)) * r
+		c.y = Game.height(c.x, c.z)
+		if c.distance_to(pp) < 6.0 or absf(c.y - global_position.y) > 2.0:
+			continue
+		var q := PhysicsRayQueryParameters3D.create(pp + Vector3.UP * 1.5, c + Vector3.UP * 1.0, 1)
+		q.exclude = [get_rid(), Game.player.get_rid()]
+		if get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+			continue
+		var sc := c.distance_to(global_position) - c.distance_to(pp) * 0.3
+		if sc < bd:
+			bd = sc
+			best = c
+	return best
+
+func _deal(amount: float) -> void:
+	if foe and is_instance_valid(foe):
+		foe.hurt(amount)
+	else:
+		Game.hurt(amount)
+	if not ranged:
+		Sfx.play_at("o_bark2" if quad else "x_flesh1", global_position + Vector3.UP, 0.0, randf_range(0.9, 1.1))
 
 func _one_shot(anim: String, dur: float) -> void:
 	if ap == null:
@@ -306,28 +486,29 @@ func _move_to(p: Vector3, spd: float, d: float) -> float:
 	if to.length() < 0.05:
 		return 0.0
 	var v := to.normalized() * spd
+	# keep a little room between pack members
+	for e in Game.main.enemies:
+		if e != self and is_instance_valid(e) and not e.dead:
+			var aw: Vector3 = global_position - e.global_position
+			aw.y = 0.0
+			var l := aw.length()
+			if l < 1.3 and l > 0.01:
+				v += aw / l * (1.3 - l) * spd * 1.2
 	velocity.x = lerpf(velocity.x, v.x, 1.0 - exp(-8.0 * d))
 	velocity.z = lerpf(velocity.z, v.z, 1.0 - exp(-8.0 * d))
 	face_yaw = lerp_angle(face_yaw, atan2(v.x, v.z), 1.0 - exp(-8.0 * d))
 	return Vector2(velocity.x, velocity.z).length()
 
-func _attack(dist: float) -> void:
-	if not quad and not ranged:
-		_one_shot(["Punch_Jab", "Punch_Cross"][randi() % 2], 0.55)
-	if quad or not ranged:
-		Sfx.play_at("o_bark2" if quad else "x_flesh1", global_position + Vector3.UP, 0.0, randf_range(0.9, 1.1))
-		if foe:
-			foe.hurt(dmg * randf_range(0.7, 1.2))
-		else:
-			Game.hurt(dmg * randf_range(0.7, 1.2))
-		return
-	_one_shot("Pistol_Shoot", 0.35)
+func _attack(dist: float, moving := 0.0) -> void:
+	_one_shot("Pistol_Shoot", 0.3)
 	Sfx.play_at("pistol_far" if dist > 14.0 else "pistol", global_position + Vector3.UP * 1.4, -2.0, randf_range(0.9, 1.05))
 	var tp: Vector3 = (foe.global_position if foe else Game.player.global_position) + Vector3.UP * 1.3
-	Game.main.tracer(global_position + Vector3.UP * 1.4 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5, tp + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 1.5)
-	var chance := clampf(0.75 - dist * 0.022, 0.2, 0.75) * (0.6 if crip.has("arms") else 1.0)
-	if randf() < chance:
-		if foe:
-			foe.hurt(dmg * randf_range(0.7, 1.1))
-		else:
-			Game.hurt(dmg * randf_range(0.7, 1.1))
+	var miss := 1.5
+	# harder to hit you when you're moving fast, and it shoots worse on the move
+	var pv: Vector3 = Game.player.velocity if not foe else Vector3.ZERO
+	var you_move := clampf(Vector2(pv.x, pv.z).length() / 6.0, 0.0, 1.0)
+	var chance := clampf(0.78 - dist * 0.02, 0.22, 0.78) * (0.6 if crip.has("arms") else 1.0) * (1.0 - you_move * 0.35) * (0.8 if moving > 0.5 else 1.0)
+	var hit_it := randf() < chance
+	Game.main.tracer(global_position + Vector3.UP * 1.4 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5, tp + (Vector3.ZERO if hit_it else Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * miss * 2.0))
+	if hit_it:
+		_deal(dmg * randf_range(0.7, 1.1))

@@ -80,7 +80,9 @@ static func model_for(id: String) -> Array:
 		fit = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(Vector3.ONE * float(f.k))
 	# first-person guns are drawn a little larger than life, as in the original
 	fit = fit.scaled(Vector3.ONE * float(f.get("s", 1.0)))
-	return ["res://guns/" + glb + ".glb", fit]
+	var gf := f.duplicate()
+	gf["glb"] = glb
+	return ["res://guns/" + glb + ".glb", fit, gf]
 
 func weapon_changed() -> void:
 	if vm:
@@ -97,7 +99,7 @@ func weapon_changed() -> void:
 	if mdl.is_empty():
 		vm.setup_melee(String(it.get("kind", "")) == "melee", Game.weapon)
 	else:
-		vm.setup(load(mdl[0]), mdl[1])
+		vm.setup(load(mdl[0]), mdl[1], mdl[2])
 	vm.muzzle.add_child(flash)
 	vm.muzzle.add_child(flash_q)
 	if it.get("energy") or String(it.get("kind", "")) == "energy":
