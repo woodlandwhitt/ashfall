@@ -108,7 +108,10 @@ func _label(parent: Node, t: String, size := 19, col := GREEN) -> Label:
 # ---------------------------------------------------------------- STATS
 func _stats() -> void:
 	var v := _scroll()
-	_label(v, "LEVEL %d     XP %d / %d     HP %d / %d     CAPS %d     KARMA %d" % [Game.level, Game.xp, Game.xp_need(), Game.hp, Game.hp_max, Game.caps, Game.karma], 21)
+	_label(v, "%s     LEVEL %d     XP %d / %d     HP %d / %d     AP %d / %d" % [Game.player_name.to_upper(), Game.level, Game.xp, Game.xp_need(), Game.hp, Game.hp_max, Game.ap, Game.ap_max], 21)
+	_label(v, "CHITS %d     KARMA %d — %s     DAY %d" % [Game.caps, Game.karma, Game.karma_title(Game.karma), Game.day], 19, Color(1.0, 0.9, 0.6))
+	if not Game.main.party.is_empty():
+		_label(v, "With you: " + ", ".join(Game.main.party.map(func(p): return String(p.comp.n) + ("" if p.down <= 0.0 else " (down)") + (" (waiting)" if p.cstate == "wait" else ""))), 18)
 	_label(v, "Carrying %.0f / %.0f lbs" % [Game.carry_now(), Game.carry_max()], 18, DIM)
 	if Game.points > 0:
 		_label(v, "You have %d stat point%s to spend." % [Game.points, "s" if Game.points > 1 else ""], 20, Color(1, 0.9, 0.5))
@@ -372,6 +375,13 @@ func _map_image() -> ImageTexture:
 	return map_tex
 
 func _map() -> void:
+	if Game.interior():
+		_label(body, "HAVEN 12 — LEVEL ONE", 22, Color(1.0, 0.9, 0.6))
+		_label(body, "No signal underground. The map and fast travel work once you're on the surface.", 19, DIM)
+		var o := Game.current_objective()
+		if not o.is_empty():
+			_label(body, "\n" + String(o.title).to_upper() + "\n" + String(o.text), 19)
+		return
 	var h := HBoxContainer.new()
 	body.add_child(h)
 	var map := MapView.new()

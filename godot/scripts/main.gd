@@ -15,6 +15,7 @@ var dialog_id := ""
 var dialog_node := ""
 var pending_trade := ""
 var objects: WorldObjects
+var events: RoadEvents
 var party: Array = []        # companions travelling with you (one person and Biscuit)
 var dialog_opts: Array = []
 var pools: Array = []
@@ -65,6 +66,9 @@ func _ready() -> void:
 	objects = WorldObjects.new()
 	add_child(objects)
 	objects.setup(self)
+	events = RoadEvents.new()
+	add_child(events)
+	events.setup(self)
 	chunks.on_enter = _spawn_chunk
 	chunks.on_leave = _despawn_chunk
 	player = preload("res://scripts/player.gd").new()
@@ -353,6 +357,18 @@ func _test_hooks() -> void:
 				if sv.size() > 2:
 					show_node(sv[2])
 			"banner": Game.banner("QUEST COMPLETE", "Bad Water")
+			"title": hud.screens.open_title()
+			"create":
+				hud.screens.open_title()
+				hud.screens._create()
+			"focus":
+				await _wait(10)
+				hud.focus.enter()
+			"caravan":
+				Game.booted = true
+				events.start("caravan", Vector2(player.global_position.x + 14.0, player.global_position.z - 14.0))
+				Game.G.recruit("jory")
+				await _wait(30)
 	if args.has("shot"):
 		for i in int(args.get("frames", "40")):
 			await get_tree().process_frame
@@ -773,6 +789,34 @@ func _selftest() -> void:
 	out.append("after wait: %s; flags.party %s" % [str(Game.G.partyState("jory")), str(Game.flags.get("party"))])
 	Game.G.dismiss("jory")
 	out.append("after dismiss: party %s" % [str(party.map(func(p): return p.id))])
+	# road events: a caravan under attack, a dead scavenger, a stranded traveller
+	Game.booted = true
+	player.global_position = Vector3(-40.0, Game.height(-40.0, 60.0) + 0.5, 60.0)
+	await _wait(5)
+	var ok := events.start("caravan")
+	out.append("caravan started %s at %s foes %d npcs %d" % [ok, str(Vector2(events.cur.get("x", 0), events.cur.get("z", 0)).snapped(Vector2.ONE)), events.cur.get("foes", []).size(), events.cur.get("npcs", []).size()])
+	if ok:
+		player.global_position = Vector3(float(events.cur.x) + 20.0, Game.height(float(events.cur.x) + 20.0, float(events.cur.z)) + 0.5, float(events.cur.z))
+		for i in 30:
+			await get_tree().physics_frame
+		out.append("caravan seen %s, quest stage %d tracked %s" % [events.cur.seen, Game.stage("caravan_rescue"), str(Game.flags.get("track"))])
+		for e in events.cur.foes:
+			e.hit(9999.0, e.global_position + Vector3.UP, Vector3.FORWARD)
+		for i in 10:
+			await get_tree().physics_frame
+		out.append("caravan saved: evClear %s, quest done %s" % [str(Game.flags.get("evClear")), Game.is_done("caravan_rescue")])
+	ok = events.start("scav")
+	if ok:
+		var ch: Dictionary = events.cur.chests[0]
+		out.append("scav body: %s label %s, foes %s" % [ch.id, str(objects.label_of(ch)), str(events.cur.foes.map(func(e): return e.type))])
+	ok = events.start("stranger")
+	if ok:
+		player.global_position = Vector3(float(events.cur.x) + 2.0, Game.height(float(events.cur.x) + 2.0, float(events.cur.z)) + 0.5, float(events.cur.z))
+		await _wait(3)
+		Game.give("stimpak", 1)
+		out.append(await _talk("stranger", ["Here, a stimpak"]))
+		out.append("stranger helped %s karma %d" % [str(Game.flags.get("evHelped")), Game.karma])
+	events.clear()
 	# discovery, map and travel
 	Game.discover("dustwell")
 	var far_k := ""

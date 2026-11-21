@@ -33,6 +33,15 @@ func setup(m) -> void:
 	if W.get("door") != null:
 		_add("door", W.door)
 
+# objects that come and go (a road event's dead scavenger)
+func add_dynamic(o: Dictionary) -> void:
+	_add(String(o._k), o)
+
+func remove_dynamic(o: Dictionary) -> void:
+	var key := key_of(float(o.x), float(o.z))
+	if grid.has(key):
+		grid[key].erase(o)
+
 func key_of(x: float, z: float) -> String:
 	return str(floori((x - Game.x0) / CH)) + "_" + str(floori((z - Game.z0) / CH))
 

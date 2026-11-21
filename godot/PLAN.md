@@ -115,7 +115,9 @@ Keep every existing quest and line, then deepen them:
    by stepping through; interiors, casino, companions and the vehicle answer "in a later build" until their
    phase.*
 4. **godot-6:** the vault opening and character creation, perks, karma, FOCUS targeting, companions, bounties,
-   road events.
+   road events. *Status: shipped. Haven 12 is the first interior area (`data/vault/`, its own chunks, heightmap,
+   people and objects; `Game.load_area`), which godot-7's building interiors will reuse. Radstorms wait for the
+   weather system.*
 5. **godot-7:** day/night, weather, radio, the vehicle, drugs, the K-hole, interiors for every important
    building.
 6. **godot-8:** the story overhaul (new beats, factions, companion quests), all endings and epilogues, polish.

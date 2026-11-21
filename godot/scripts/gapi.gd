@@ -128,7 +128,13 @@ func openTrade(id = "") -> void:
 	if Game.main:
 		Game.main.queue_trade(_s(id))
 func casino(g = "", m = null) -> void: Game.msg("The tables at the Spur open in a later build.")
-func event(k = "") -> void: Game.flags["ev_" + _s(k)] = true
+func event(k = "") -> void:
+	Game.flags["ev_" + _s(k)] = true
+	if _s(k) == "helped":
+		var r: Array = [["stimpak", 1], ["spur_chip", 2], ["ammo_44", 12], ["medal", 1], ["fuel_can", 1]][randi() % 5]
+		if Game.DB.items.has(r[0]):
+			Game.give(r[0], r[1])
+			Game.msg("Received " + Game.iname(r[0]) + (" x" + str(r[1]) if r[1] > 1 else ""))
 func sleep(cost = 0) -> void:
 	Game.caps -= int(vm.num(cost))
 	Game.day += 1

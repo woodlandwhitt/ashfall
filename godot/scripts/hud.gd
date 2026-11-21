@@ -159,7 +159,7 @@ func _ready() -> void:
 	root.add_child(screens)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
-	pause_panel = _center_panel("Paused\n\nAshfall: Meridian, Godot test build\nDustwell slice", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Restart", func(): toggle_pause(); Game.main.restart()]])
+	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Main menu", func(): toggle_pause(); screens.open_title()]])
 	_gfx_label()
 
 	Game.message.connect(add_msg)
