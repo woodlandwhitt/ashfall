@@ -391,6 +391,12 @@ func _npc_index(id: String) -> int:
 	for i in Game.region.npcs.size():
 		if String(Game.region.npcs[i].id) == id:
 			return i
+	# companions follow you indoors: borrow them from the valley's people
+	if Game.area == "cells" and Game.L.get("companions", {}).has(id):
+		for d in Game._json("res://data/region.json").get("npcs", []):
+			if String(d.id) == id:
+				Game.region.npcs.append(d)
+				return Game.region.npcs.size() - 1
 	return -1
 
 func recruit(id: String, silent := false) -> void:

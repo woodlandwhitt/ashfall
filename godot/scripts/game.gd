@@ -673,8 +673,26 @@ func quest_target() -> Variant:
 	if p is Dictionary and p.has("x") and p.has("z"):
 		var x := float(p.x)
 		var z := float(p.z)
+		# a target inside a building: on the street, point at its front door; inside, at the way out
+		var ci := cell_at(x, z)
+		if area == "world" and ci >= 0 and CELLS[ci].get("out"):
+			x = float(CELLS[ci].out.x)
+			z = float(CELLS[ci].out.z)
+		elif area == "cells" and player:
+			var mine := cell_at(player.global_position.x, player.global_position.z)
+			if mine >= 0 and ci != mine:
+				x = float(CELLS[mine].ox)
+				z = float(CELLS[mine].oz) + float(CELLS[mine].D2) / 2.0 - 1.3
 		return Vector3(x, height(x, z), z)
 	return null
+
+func cell_at(x: float, z: float) -> int:
+	if x < 1900.0:
+		return -1
+	for C in CELLS:
+		if absf(x - float(C.ox)) < float(C.W2) / 2.0 + 1.0 and absf(z - float(C.oz)) < float(C.D2) / 2.0 + 1.0:
+			return int(C.i)
+	return -1
 
 func add_xp(n: int) -> void:
 	xp += n
