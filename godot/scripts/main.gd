@@ -1424,8 +1424,8 @@ func _environment() -> void:
 		env.background_mode = Environment.BG_COLOR
 		env.background_color = Color(0.02, 0.018, 0.015)
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = Color(0.95, 0.85, 0.7)
-		env.ambient_light_energy = 0.75
+		env.ambient_light_color = Color(0.95, 0.87, 0.75)
+		env.ambient_light_energy = 0.95
 		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 		env.fog_enabled = false
 		sun.visible = false
@@ -1435,8 +1435,8 @@ func _environment() -> void:
 			var n := 1 if float(C.D2) < 16.0 else 2
 			for k in n:
 				var l := OmniLight3D.new()
-				l.light_color = Color(1.0, 0.82, 0.6)
-				l.light_energy = 1.7
+				l.light_color = Color(1.0, 0.84, 0.64)
+				l.light_energy = 2.3
 				l.omni_range = maxf(float(C.W2), float(C.D2) / n) * 0.8
 				l.omni_attenuation = 0.8
 				l.shadow_enabled = false
