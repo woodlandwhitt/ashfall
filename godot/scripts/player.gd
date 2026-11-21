@@ -14,6 +14,7 @@ var cam: Camera3D
 var gun: Node3D
 var flash: OmniLight3D
 var vm: Viewmodel
+var fxc: Dictionary = {"speed": 1.0, "spread": 1.0, "ap": 1.0, "fov": 1.0, "warp": 0.0}
 var flash_q: MeshInstance3D
 var running := false
 var step_d := 0.0
@@ -105,14 +106,14 @@ func weapon_changed() -> void:
 		flash.light_color = Color(1.0, 0.75, 0.4)
 
 func reload_time() -> float:
-	return (1.5 - (int(Game.stats.agility) - 5) * 0.07) * (0.6 if Game.perks.has("quick_hands") else 1.0)
+	return (1.5 - (int(Game.stats.agility) - 5) * 0.07) * (0.6 if Game.perks.has("quick_hands") else 1.0) * float(Game.fx().reload)
 
 # damage as in the original: aim (or might for melee) and perks scale the weapon's base damage
 func weapon_damage() -> float:
 	var it := Game.item(Game.weapon)
 	var d := float(it.get("dmg", 8)) * (1.0 + 0.12 * int(Game.upgrades.get(Game.weapon, 0)))
 	if String(it.get("kind", "")) == "melee":
-		d *= (1.0 + (int(Game.stats.might) - 5) * 0.07) * (1.35 if Game.perks.has("brawler") else 1.0)
+		d *= (1.0 + (int(Game.stats.might) - 5) * 0.07) * (1.35 if Game.perks.has("brawler") else 1.0) * float(Game.fx().melee)
 	else:
 		d *= (1.0 + (int(Game.stats.aim) - 5) * 0.05) * (1.15 if Game.perks.has("gunner") else 1.0)
 	return d
@@ -149,9 +150,12 @@ func _physics_process(d: float) -> void:
 		velocity = Vector3.ZERO
 		return
 	var talking: bool = Game.main.in_dialog() or Game.main.hud.focus.exec >= 0
-	# action points come back over time, slower while something is hunting you
+	# chems, buffs and radiation; action points come back over time, slower while something is hunting you
+	Game.body_tick(d)
+	fxc = Game.fx()
+	cam.fov = lerpf(cam.fov, 75.0 * float(fxc.fov) + sin(Time.get_ticks_msec() * 0.0011) * 4.0 * float(fxc.warp), minf(1.0, d * 3.0))
 	if Game.ap < Game.ap_max:
-		Game.ap = minf(Game.ap_max, Game.ap + d * (5.0 if Game.main.in_combat() else 9.0))
+		Game.ap = minf(Game.ap_max, Game.ap + d * (5.0 if Game.main.in_combat() else 9.0) * float(fxc.ap))
 	var iv := Game.touch_move
 	if not talking:
 		if Input.is_key_pressed(KEY_W): iv.y -= 1
@@ -162,7 +166,7 @@ func _physics_process(d: float) -> void:
 		iv = Vector2.ZERO
 	if iv.length() > 1.0:
 		iv = iv.normalized()
-	var spd := RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 else WALK
+	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 else WALK) * float(fxc.speed)
 	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
 	var want := (right * iv.x - fwd * iv.y) * spd
@@ -254,7 +258,7 @@ func fire() -> void:
 	var dmg := weapon_damage() * (0.75 if pel > 1 else 1.0)
 	var moving := 1.5 if Vector2(velocity.x, velocity.z).length() > 1.0 else 1.0
 	for i in pel:
-		_ray(dmg, float(it.get("range", 100)), float(it.get("spread", 0.02)) * moving, kind == "energy")
+		_ray(dmg, float(it.get("range", 100)), float(it.get("spread", 0.02)) * moving * float(fxc.spread), kind == "energy")
 	if Game.mag == 0:
 		reload()
 

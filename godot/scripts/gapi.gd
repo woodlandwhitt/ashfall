@@ -137,7 +137,9 @@ func event(k = "") -> void:
 			Game.msg("Received " + Game.iname(r[0]) + (" x" + str(r[1]) if r[1] > 1 else ""))
 func sleep(cost = 0) -> void:
 	Game.caps -= int(vm.num(cost))
-	Game.day += 1
+	if Game.time > 0.25:
+		Game.day += 1
+	Game.time = 0.27
 	Game.hp = Game.hp_max
 	Game.msg("You slept until morning. Health restored.")
 	Sfx.play("o_levelup", -10.0, 0.8)

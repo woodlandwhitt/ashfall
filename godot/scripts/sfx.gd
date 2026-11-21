@@ -17,7 +17,7 @@ func stream(name: String) -> AudioStream:
 	if cache.has(name):
 		return cache[name]
 	var s: AudioStream = null
-	for ext in [".mp3", ".ogg"]:
+	for ext in [".mp3", ".ogg", ".wav"]:
 		var path: String = "res://sfx/" + name + ext
 		if ResourceLoader.exists(path):
 			s = load(path)
@@ -71,6 +71,10 @@ func loop(name: String, vol_db: float) -> AudioStreamPlayer:
 		(s as AudioStreamOggVorbis).loop = true
 	elif s is AudioStreamMP3:
 		(s as AudioStreamMP3).loop = true
+	elif s is AudioStreamWAV:
+		var w := s as AudioStreamWAV
+		w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		w.loop_end = w.data.size() / 2
 	var p := AudioStreamPlayer.new()
 	p.stream = s
 	p.volume_db = vol_db
@@ -79,4 +83,4 @@ func loop(name: String, vol_db: float) -> AudioStreamPlayer:
 	return p
 
 func has(name: String) -> bool:
-	return ResourceLoader.exists("res://sfx/" + name + ".mp3") or ResourceLoader.exists("res://sfx/" + name + ".ogg")
+	return stream(name) != null

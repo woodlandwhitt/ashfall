@@ -25,6 +25,11 @@ var upgrades: Dictionary = {} # weapon or armor id -> workbench upgrade level (0
 var opened: Dictionary = {}   # container id -> remaining items ([] when emptied); unlocked locks
 var day := 1
 var player_name := "Wanderer"
+var rad := 0.0               # radiation 0..100: eats into max health; at 100 it eats health
+var time := 0.32              # time of day, 0 = midnight, 0.5 = noon (a day is 1000 s)
+var buffs: Dictionary = {}    # id -> {amt, t}: Lead Tabs, Numb, Rotgut, Lucky Sour, Prickly Pop
+var drugs: Dictionary = {}    # chem -> {age, crash, applied}
+var addict: Dictionary = {}   # chems you're hooked on
 var area := "world"           # "world" = the valley, "vault" = Haven 12 (an interior with its own data folder)
 var pending_new := false      # a new game: main plays the opening in Haven 12
 var booted := false           # the title screen has been seen this session
@@ -66,7 +71,7 @@ const EXTRA_ITEMS := {
 
 var hp_max: float:
 	get:
-		return float(maxi(20, 60 + int(stats.endurance) * 8 + level * 6))
+		return float(maxi(20, 60 + int(stats.endurance) * 8 + level * 6 - floori(rad * 0.4)))
 
 var ap_max: float:
 	get:
@@ -159,13 +164,154 @@ func use_item(id: String) -> void:
 				msg(iname(id) + " readied. Tap NADE (or G) to throw.")
 				Sfx.play("k_click", -6.0)
 				return
+			if id == "clean_slate":
+				take(id)
+				addict.clear()
+				msg("Clean Slate. The cravings let go of you.")
+				Sfx.play("o_coin", -12.0, 1.6)
+				stats_changed.emit()
+				return
+			if it.get("drug"):
+				take(id)
+				take_drug(String(it.drug))
+				stats_changed.emit()
+				return
 			take(id)
 			var heal := float(it.get("heal", 0))
 			if heal > 0:
 				hp = minf(hp_max, hp + heal * (1.25 if perks.has("iron_gut") else 1.0))
+			if it.get("rad") and not perks.has("iron_gut"):
+				add_rad(float(it.rad) * (1.0 - (int(stats.endurance) - 5) * 0.04), false)
+			if it.get("radx"):
+				rad = maxf(0.0, rad - float(it.radx))
+				msg("Radiation flushed (" + str(int(rad)) + " left)")
+			if it.get("buff"):
+				buffs[String(it.buff.k)] = {"amt": float(it.buff.amt), "t": float(it.buff.t)}
 			msg("Used " + iname(id) + (" (+" + str(int(heal)) + " HP)" if heal > 0 else ""))
 			Sfx.play("o_coin", -12.0, 1.6)
 	stats_changed.emit()
+
+# ---------------------------------------------------------------- radiation, buffs, chems (drugs.js)
+func rad_mul() -> float:
+	var m := (1.0 - (int(stats.endurance) - 5) * 0.05) * (0.5 if perks.has("rad_shield") else 1.0)
+	if buffs.has("rad"):
+		m *= float(buffs.rad.amt)
+	var a := item(armor) if armor != "" else {}
+	if a.get("rr"):
+		m *= 1.0 - float(a.rr)
+	return maxf(0.05, m)
+
+func add_rad(n: float, scaled := true) -> void:
+	var before := int(rad / 25.0)
+	rad = minf(100.0, rad + n * (rad_mul() if scaled else 1.0))
+	if int(rad / 25.0) > before:
+		msg(["", "Radiation sickness: mild. Max health reduced.", "Radiation sickness: severe. Find Rad Flush.", "Radiation sickness: critical!", "Lethal radiation!"][int(rad / 25.0)])
+	if hp > hp_max:
+		hp = hp_max
+
+func buff(k: String, def := 1.0) -> float:
+	return float(buffs[k].amt) if buffs.has(k) else def
+
+func take_drug(k: String) -> void:
+	var D: Dictionary = L.consts.DRUGS.get(k, {})
+	if D.is_empty():
+		return
+	# a second dose of ketarad while the first still runs drops you through the floor of the world
+	if k == "ketarad" and drugs.has("ketarad") and not drugs.ketarad.get("crash", false) and main and main.has_method("khole_start"):
+		main.khole_start()
+	if drugs.has(k):
+		drugs[k].age = minf(float(drugs[k].age), float(D.onset))
+	else:
+		drugs[k] = {"age": 0.0, "crash": false, "applied": {}}
+		for st in D.get("stats", {}):
+			var b := int(stats.get(st, 5))
+			stats[st] = clampi(b + int(D.stats[st]), 1, 14)
+			drugs[k].applied[st] = int(stats[st]) - b
+	msg("You take the " + String(D.n) + ". " + String(D.lines[randi() % D.lines.size()]))
+	if randf() < float(D.get("addict", 0.0)) and not addict.has(k):
+		addict[k] = 1
+		msg("You're hooked on " + String(D.n) + ".")
+	stats_changed.emit()
+
+func _end_drug(k: String) -> void:
+	var d: Dictionary = drugs[k]
+	for st in d.get("applied", {}):
+		stats[st] = int(stats[st]) - int(d.applied[st])
+	drugs.erase(k)
+
+# the combined effect of everything in the bloodstream: speed, ap, reload, dr, regen, rad, spread, melee, the look
+func fx() -> Dictionary:
+	var f := {"speed": 1.0, "ap": 1.0, "reload": 1.0, "dr": 0.0, "regen": 0.0, "rad": 0.0, "spread": 1.0, "melee": 1.0, "fov": 1.0,
+		"sat": 1.0, "con": 1.0, "exposure": 0.0, "tr": 1.0, "tg": 1.0, "tb": 1.0, "warp": 0.0, "heart": 0.0, "night": 0.0}
+	const MUL := ["speed", "ap", "reload", "spread", "melee", "fov", "sat", "con", "tr", "tg", "tb"]
+	for k in drugs:
+		var d: Dictionary = drugs[k]
+		var D: Dictionary = L.consts.DRUGS.get(k, {})
+		if D.is_empty():
+			continue
+		var src: Dictionary = D.crash.fx if d.crash else D.fx
+		var a := 0.0
+		var age := float(d.age)
+		if d.crash:
+			a = minf(1.0, minf(age / 4.0, (float(D.crash.dur) - age) / 6.0))
+		elif age < float(D.onset):
+			a = age / float(D.onset)
+		elif age > float(D.dur) - float(D.fade):
+			a = maxf(0.0, (float(D.dur) - age) / float(D.fade))
+		else:
+			a = 1.0
+		if a <= 0.0:
+			continue
+		for p in src:
+			if not f.has(p):
+				continue
+			var v := float(src[p])
+			if p in MUL:
+				f[p] *= 1.0 + (v - 1.0) * a
+			else:
+				f[p] += v * a
+	for k in addict:
+		if not drugs.has(k):
+			f.speed *= 0.94
+			f.spread *= 1.15
+			f.sat *= 0.92
+			f.ap *= 0.85
+	if buffs.has("dr"):
+		f.dr += float(buffs.dr.amt)
+	if buffs.has("melee"):
+		f.melee *= float(buffs.melee.amt)
+	if buffs.has("ap"):
+		f.ap *= 1.0 + float(buffs.ap.amt)
+	return f
+
+# time passing for the body: chems rise and fade, buffs run out, radiation bites, slow healing
+func body_tick(dt: float) -> void:
+	for k in buffs.keys():
+		buffs[k].t = float(buffs[k].t) - dt
+		if float(buffs[k].t) <= 0.0:
+			buffs.erase(k)
+			msg({"dr": "Numb", "rad": "Lead Tabs", "melee": "Rotgut", "luck": "Lucky Sour", "ap": "Prickly Pop"}.get(k, k) + " wore off.")
+	for k in drugs.keys():
+		var d: Dictionary = drugs[k]
+		var D: Dictionary = L.consts.DRUGS.get(k, {})
+		d.age = float(d.age) + dt
+		if d.crash:
+			if float(d.age) >= float(D.crash.dur):
+				drugs.erase(k)
+				msg("The " + String(D.n) + " crash passes.")
+		elif float(d.age) >= float(D.dur):
+			_end_drug(k)
+			msg(String(D.n) + " wore off.")
+			if D.has("crash"):
+				drugs[k] = {"age": 0.0, "crash": true, "applied": {}}
+				msg("You crash.")
+	var f := fx()
+	if f.regen > 0.0 and hp > 0.0:
+		hp = minf(hp_max, hp + f.regen * dt)
+	if f.rad > 0.0:
+		add_rad(f.rad * dt)
+	if rad >= 100.0:
+		hurt(7.5 * dt)
 
 func discover(k: String) -> void:
 	if discovered.has(k):
@@ -180,7 +326,7 @@ func save_game(slot: String) -> bool:
 	if player == null:
 		return false
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
-		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points, "perk_pts": perk_pts, "ap": ap, "name": player_name, "area": area,
+		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points, "perk_pts": perk_pts, "ap": ap, "name": player_name, "area": area, "rad": rad, "tod": time, "buffs": buffs, "drugs": drugs, "addict": addict,
 		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "armor": armor, "magd": magd, "discovered": discovered,
 		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
@@ -218,6 +364,11 @@ func load_game(slot: String) -> bool:
 	for k in ["caps", "xp", "level", "points", "karma"]:
 		set(k, int(get(k)))
 	perk_pts = int(s.get("perk_pts", 0))
+	rad = float(s.get("rad", 0.0))
+	time = float(s.get("tod", 0.32))
+	buffs = s.get("buffs", {})
+	drugs = s.get("drugs", {})
+	addict = s.get("addict", {})
 	if String(s.get("area", "world")) != area:
 		load_area(String(s.get("area", "world")))
 	ap = float(s.get("ap", ap_max))
@@ -269,6 +420,11 @@ func reset() -> void:
 	level = 1
 	points = 0
 	perk_pts = 0
+	rad = 0.0
+	time = 0.32
+	buffs = {}
+	drugs = {}
+	addict = {}
 	karma = 0
 	weapon = "pipe_pistol"
 	nade = ""
@@ -687,7 +843,7 @@ func armor_dr() -> float:
 func hurt(d: float) -> void:
 	if hp <= 0:
 		return
-	var dr := armor_dr()
+	var dr := armor_dr() + float(fx().dr)
 	d *= 1.0 - dr / (dr + 40.0)
 	hp = maxf(0.0, hp - d)
 	stats_changed.emit()

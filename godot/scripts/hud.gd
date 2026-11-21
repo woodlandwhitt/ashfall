@@ -24,6 +24,7 @@ var pip
 var screens: Screens
 var focus: Focus
 var ap_bar: ProgressBar
+var clock_t := 0.0
 var weapon_l: Label
 var font: Font
 var fps_acc := 0.0
@@ -277,7 +278,7 @@ func refresh() -> void:
 	ammo_l.text = (str(Game.mag) + " / " + str(Game.reserve)) if it.has("mag") else ""
 	weapon_l.text = Game.iname(Game.weapon)
 	var stims := int(Game.inv.get("stimpak", 0))
-	stat_l.text = "LVL " + str(Game.level) + "   XP " + str(Game.xp) + "   CAPS " + str(Game.caps) + ("   STIMS " + str(stims) if stims > 0 else "")
+	stat_l.text = "LVL " + str(Game.level) + "   XP " + str(Game.xp) + "   CAPS " + str(Game.caps) + ("   STIMS " + str(stims) if stims > 0 else "") + ("   RAD " + str(int(Game.rad)) if Game.rad >= 1.0 else "")
 	var o := Game.current_objective()
 	quest_l.text = (String(o.title).to_upper() + "\n" + String(o.text)) if not o.is_empty() else ""
 
@@ -370,11 +371,15 @@ func _process(d: float) -> void:
 	hurt_rect.color.a = maxf(0.0, hurt_rect.color.a - d * 0.8)
 	ap_bar.max_value = Game.ap_max
 	ap_bar.value = Game.ap
+	clock_t -= d
+	if clock_t <= 0.0:
+		clock_t = 1.0
+		refresh()
 	fps_acc += d
 	fps_n += 1
 	fps_min = minf(fps_min, 1.0 / maxf(d, 0.0001))
 	if fps_acc >= 0.5:
-		fps_l.text = "%d FPS  (low %d)" % [roundi(fps_n / fps_acc), roundi(fps_min)]
+		fps_l.text = ("%s   " % Game.main.atmos.clock() if Game.main.atmos else "") + "%d FPS  (low %d)" % [roundi(fps_n / fps_acc), roundi(fps_min)]
 		fps_acc = 0.0
 		fps_n = 0
 		fps_min = 999.0

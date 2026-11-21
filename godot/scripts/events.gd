@@ -5,7 +5,7 @@
 class_name RoadEvents
 extends Node
 
-const KINDS := ["caravan", "trader", "stranger", "scav", "caravan", "stranger", "scav"]
+const KINDS := ["caravan", "trader", "stranger", "scav", "radstorm", "caravan", "stranger", "scav"]
 var main
 var t := 150.0
 var cur: Dictionary = {}
@@ -41,6 +41,13 @@ func _physics_process(dt: float) -> void:
 				Game.flags["evClear"] = true
 				Game.check_quests()
 				main.speak("You saved our wagons. Here, take this, and our thanks.", "trader")
+		if cur.kind == "radstorm":
+			if cur.t > cur.dur:
+				main.atmos.set_weather("cloudy")
+				Game.msg("The green light fades. The radstorm has passed.")
+				clear()
+				t = randf_range(150.0, 280.0)
+			return
 		if d > 190.0 or (cur.t > 600.0 and d > 70.0):
 			clear()
 			t = randf_range(120.0, 240.0)
@@ -88,10 +95,19 @@ func start(kind: String, at = null) -> bool:
 	var sp = at if at != null else spot()
 	if sp == null:
 		return false
-	cur = {"kind": kind, "x": sp.x, "z": sp.y, "npcs": [], "props": [], "foes": [], "chests": [], "t": 0.0, "seen": false}
+	cur = {"kind": kind, "x": sp.x, "z": sp.y, "npcs": [], "props": [], "foes": [], "chests": [], "t": 0.0, "seen": false, "dur": 0.0}
 	var x: float = sp.x
 	var z: float = sp.y
 	match kind:
+		"radstorm":
+			if main.atmos == null:
+				return false
+			main.atmos.set_weather("radstorm", true)
+			cur.seen = true
+			cur.dur = randf_range(80.0, 130.0)
+			Game.msg("Radstorm! The sky is turning green. Get under a roof.")
+			Game.banner("RADSTORM", "Find shelter")
+			Sfx.play("o_drone", -4.0)
 		"caravan":
 			cur.props.append(_wagon(x, z, false))
 			cur.npcs.append(_npc("trader", x + 2.2, z + 1.2))

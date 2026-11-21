@@ -9,6 +9,7 @@ const acorn = createRequire(import.meta.url)('acorn');
 const OUT = process.argv[2] || '/home/claude/ashfall/godot/data/logic.json';
 const SRC = '/home/claude/wasteland/src/';
 const D = await import(SRC + 'data.js');
+const DR = await import(SRC + 'drugs.js');
 const dataSrc = fs.readFileSync(SRC + 'data.js', 'utf8');
 const mainSrc = fs.readFileSync(SRC + 'main.js', 'utf8');
 
@@ -144,7 +145,7 @@ const out = {
   voices: D.VOICES || {},
   settler_lines: D.SETTLER_LINES || [],
   helpers: {},
-  consts: {HITBOX, PERKS: D.PERKS, AP_COST: D.AP_COST, EVENTS: D.EVENTS, VAULT_O: D.VAULT_O, VSPOT: D.VSPOT, LOCS: D.LOCS, CAMPS: D.CAMPS, BOUNTIES: D.BOUNTIES, VOICES: D.VOICES, CUR: D.CUR, KARMA_TITLES: D.KARMA_TITLES},
+  consts: {HITBOX, DRUGS: DR.DRUGS, KHOLE: D.KHOLE, CELLS: D.CELLS, PERKS: D.PERKS, AP_COST: D.AP_COST, EVENTS: D.EVENTS, VAULT_O: D.VAULT_O, VSPOT: D.VSPOT, LOCS: D.LOCS, CAMPS: D.CAMPS, BOUNTIES: D.BOUNTIES, VOICES: D.VOICES, CUR: D.CUR, KARMA_TITLES: D.KARMA_TITLES},
 };
 // resolve free identifiers that are data.js helpers
 for (let pass = 0; pass < 3; pass++) {

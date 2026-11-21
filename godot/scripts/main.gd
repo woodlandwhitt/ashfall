@@ -16,6 +16,7 @@ var dialog_node := ""
 var pending_trade := ""
 var objects: WorldObjects
 var events: RoadEvents
+var atmos: Atmos
 var party: Array = []        # companions travelling with you (one person and Biscuit)
 var dialog_opts: Array = []
 var pools: Array = []
@@ -81,8 +82,9 @@ func _ready() -> void:
 	set_quality(Quality.load_level())
 	chunks.load_now(start_pos)
 	_restore_party()
-	if not Game.interior():
-		Sfx.loop("o_wind", -14.0)
+	atmos = Atmos.new()
+	add_child(atmos)
+	atmos.setup(self)
 	if Game.pending_new:
 		Game.pending_new = false
 		_opening.call_deferred()
@@ -406,6 +408,11 @@ func _test_hooks() -> void:
 		Game.give("combat_knife", 1)
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
+	if args.has("tod"):
+		Game.time = float(args.tod)
+	if args.has("wx") and atmos:
+		atmos.set_weather(String(args.wx), true)
+		atmos.cur = Atmos.WX[String(args.wx)].duplicate()
 	if args.has("weapon"):
 		Game.give(String(args.weapon), 1)
 		Game.weapon = String(args.weapon)
