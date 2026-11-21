@@ -218,7 +218,8 @@ func take_drug(k: String) -> void:
 		return
 	# a second dose of ketarad while the first still runs drops you through the floor of the world
 	if k == "ketarad" and drugs.has("ketarad") and not drugs.ketarad.get("crash", false) and main and main.has_method("khole_start"):
-		main.khole_start()
+		if main.khole_start():
+			return
 	if drugs.has(k):
 		drugs[k].age = minf(float(drugs[k].age), float(D.onset))
 	else:

@@ -15,7 +15,7 @@ static func install(v: JsVM, logic: Dictionary) -> GApi:
 	v.define("sfx", SfxProxy.new())
 	v.define("Math", MathObj.new())
 	v.define("Object", ObjectObj.new())
-	v.define("KHM", Nop.new())
+	v.define("KHM", KhmProxy.new())
 	v.define("dev", {"god": false, "fastText": false})
 	v.define("msg", func(a = "", b = "", c = ""): Game.msg(v.to_str(a) + ("" if b == null or str(b) == "" else " " + v.to_str(b))))
 	v.define("checkQuests", func(): Game.check_quests())
@@ -236,6 +236,14 @@ class ObjectObj:
 				for i in range(1, a.size()):
 					if a[i] is Dictionary: o.merge(a[i], true)
 				return o
+		return null
+
+class KhmProxy:
+	func js_get(_k: String):
+		return null
+	func js_call(name: String, _a: Array):
+		if name == "pulse" and Game.main and Game.main.khole:
+			Game.main.khole.pulse()
 		return null
 
 class Nop:

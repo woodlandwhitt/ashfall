@@ -18,6 +18,7 @@ var objects: WorldObjects
 var events: RoadEvents
 var atmos: Atmos
 var buggy: Buggy
+var khole: KHole
 var party: Array = []        # companions travelling with you (one person and Biscuit)
 var dialog_opts: Array = []
 var pools: Array = []
@@ -82,7 +83,8 @@ func _ready() -> void:
 	add_child(hud)
 	set_quality(Quality.load_level())
 	chunks.load_now(start_pos)
-	_restore_party()
+	if Game.area != "khole":
+		_restore_party()
 	atmos = Atmos.new()
 	add_child(atmos)
 	atmos.setup(self)
@@ -90,6 +92,13 @@ func _ready() -> void:
 		buggy = Buggy.new()
 		add_child(buggy)
 		buggy.setup(self)
+	if Game.area == "khole":
+		khole = KHole.new()
+		add_child(khole)
+		khole.setup(self)
+		_khole_arrive.call_deferred()
+	elif Game.flags.has("khBack"):
+		_khole_back.call_deferred()
 	if Game.pending_new:
 		Game.pending_new = false
 		_opening.call_deferred()
@@ -130,15 +139,162 @@ func vault_travel(inward: bool) -> void:
 		var L: Dictionary = Game.DB.locs.vault
 		Game.travel_area("world", float(L.x), float(L.z) - 7.0, 0.0)
 
-func _fade(out: bool) -> void:
+func _fade(out: bool, col := Color.BLACK, secs := 1.2) -> ColorRect:
 	var r := ColorRect.new()
-	r.color = Color(0, 0, 0, 0.0 if out else 1.0)
+	r.color = Color(col.r, col.g, col.b, 0.0 if out else 1.0)
 	r.set_anchors_preset(Control.PRESET_FULL_RECT)
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.root.add_child(r)
 	var tw := r.create_tween()
-	tw.tween_property(r, "color:a", 1.0 if out else 0.0, 1.2)
+	tw.tween_property(r, "color:a", 1.0 if out else 0.0, secs)
 	await tw.finished
+	if not out:
+		r.queue_free()
+	return r
+
+# ---------------------------------------------------------------- the K-hole (main.js kholeStart / kholeEnd)
+# A second dose of ketarad while the first still runs drops you through the floor of the world. Either you black out for
+# thirty seconds and come to somewhere random in the wastes, or you fall into the Hole, which lasts two minutes (three
+# with the Lattice Key). When it ends you surface where you fell, or (without the key) sometimes somewhere else entirely.
+const KH_LINES := ["...the floor is a lid...", "ollom vesh. ollom vesh.", "somebody is counting your teeth from the inside", "you are a hallway",
+	"the television is still on. it is watching the chairs.", "krr tikka voon", "you remember being a door", "kilo. kilo. the word kilo.",
+	"there is a goose here and it is the sky", "you have been here for a very long minute", "zhaa ne por uul", "the ground says your name wrong, on purpose"]
+var kh_busy := false
+
+func khole_start(force := "") -> bool:
+	if kh_busy or Game.interior() or not Game.flags.get("leftVault") or (buggy and buggy.driving):
+		return false
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--khole=") and force == "":
+			force = a.trim_prefix("--khole=")
+	var kind := force if force != "" else ("black" if randf() < (0.15 if Game.flags.get("latticeKey") else 0.4) else "hole")
+	kh_busy = true
+	Game.flags["kholes"] = int(Game.flags.get("kholes", 0)) + 1
+	if party.size():
+		Game.msg("Your companions can't follow you where you're going.")
+	_khole_go(kind)
+	return true
+
+func _khole_go(kind: String) -> void:
+	var fast := OS.get_cmdline_user_args().has("--khfast")
+	if kind == "black":
+		Game.msg("The floor tilts. Then the floor leaves.")
+		Sfx.play("heart")
+		var r: ColorRect = await _fade(true, Color.BLACK, 2.5)
+		var lines := VBoxContainer.new()
+		lines.set_anchors_preset(Control.PRESET_FULL_RECT)
+		lines.alignment = BoxContainer.ALIGNMENT_CENTER
+		lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hud.root.add_child(lines)
+		var t := 0.0
+		var total := 1.2 if fast else 30.0
+		while t < total:
+			var l := Label.new()
+			l.text = KH_LINES[randi() % KH_LINES.size()]
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			l.add_theme_font_size_override("font_size", 20)
+			l.add_theme_color_override("font_color", Color(0.72, 0.63, 0.85))
+			l.modulate.a = 0.0
+			lines.add_child(l)
+			var tw := l.create_tween()
+			tw.tween_property(l, "modulate:a", 0.85, 2.0)
+			tw.tween_interval(3.0)
+			tw.tween_property(l, "modulate:a", 0.0, 2.5)
+			tw.tween_callback(l.queue_free)
+			var wait := minf(2.6, total - t)
+			await get_tree().create_timer(wait, false).timeout
+			t += wait
+		lines.queue_free()
+		var s := wake_spot()
+		player.global_position = Vector3(s.x, Game.height(s.x, s.y) + 0.3, s.y)
+		player.velocity = Vector3.ZERO
+		player.yaw = randf() * TAU
+		chunks.load_now(player.global_position)
+		var tw2 := r.create_tween()
+		tw2.tween_property(r, "color:a", 0.0, 4.0)
+		tw2.tween_callback(r.queue_free)
+		Game.banner("...WHERE?", "You come to somewhere else")
+		Game.msg("You come to with grit in your mouth and no memory of the walk. Thirty seconds, or a day?")
+		Game.save_game("auto")
+		kh_busy = false
+		return
+	Game.msg("The floor is thin. You go through it.")
+	await _fade(true, Color.WHITE, 1.8)
+	Game.flags["khRet"] = {"x": player.global_position.x, "z": player.global_position.z, "yaw": player.yaw}
+	Game.flags["khT"] = 8.0 if fast else (180.0 if Game.flags.get("latticeKey") else 120.0)
+	Game.travel_area("khole", KHole.X + 4.0, KHole.Z + 24.0, 0.0)
+
+func _khole_arrive() -> void:
+	_fade(false, Color.WHITE, 2.6)
+	khole.pulse()
+	Game.banner("THE HOLE", "Under the floor of the world. It will not last.")
+	speak("Ollom vesh. Ollom vesh. A visitor. A visitor with a clock.", "ferryman")
+	await get_tree().create_timer(3.5, false).timeout
+	Game.msg("Talk to things. Collect what glows. When the clock runs out, so do you.")
+
+func khole_end() -> void:
+	if dialog_npc != null or dialog_id != "":
+		end_dialog()
+	Game.msg("The Hole is closing. It was never open.")
+	await _fade(true, Color.WHITE, 2.0)
+	var away: bool = not Game.flags.get("latticeKey") and randf() < 0.3
+	if OS.get_cmdline_user_args().has("--khaway"):
+		away = true
+	var ret: Dictionary = Game.flags.get("khRet", {})
+	if ret.is_empty():
+		var D: Dictionary = Game.DB.locs.dustwell
+		ret = {"x": float(D.x) + 6.0, "z": float(D.z) + 6.0, "yaw": 0.0}
+	Game.flags.erase("khT")
+	Game.flags.erase("khRet")
+	Game.flags["khBack"] = "away" if away else "back"
+	Game.travel_area("world", float(ret.x), float(ret.z), float(ret.get("yaw", 0.0)))
+
+func _khole_back() -> void:
+	var away := String(Game.flags.get("khBack")) == "away"
+	Game.flags.erase("khBack")
+	if away:
+		var s := wake_spot()
+		player.global_position = Vector3(s.x, Game.height(s.x, s.y) + 0.3, s.y)
+		chunks.load_now(player.global_position)
+	_fade(false, Color.WHITE, 3.0)
+	Game.banner("ELSEWHERE" if away else "BACK", "You surface somewhere you have never been" if away else "You surface where you fell")
+	Game.msg("The Hole spits you out miles from where you went in." if away else "Nobody noticed you were gone. Your mouth tastes of pennies.")
+	Game.check_quests()
+	Game.save_game("auto")
+
+# somewhere flat and open in the wastes, away from water and walls (main.js wakeSpot)
+func wake_spot() -> Vector2:
+	var space := get_world_3d().direct_space_state
+	for i in 80:
+		var x := randf_range(-440.0, 440.0)
+		var z := randf_range(-440.0, 440.0)
+		var wet := false
+		for p in Game.region.pools:
+			if Vector2(float(p.x) - x, float(p.z) - z).length() < float(p.r) + 3.0:
+				wet = true
+		if wet:
+			continue
+		var h := Game.height(x, z)
+		if absf(Game.height(x + 2, z) - h) > 0.9 or absf(Game.height(x, z + 2) - h) > 0.9:
+			continue
+		var q := PhysicsShapeQueryParameters3D.new()
+		var sh := SphereShape3D.new()
+		sh.radius = 1.4
+		q.shape = sh
+		q.transform = Transform3D(Basis(), Vector3(x, h + 1.6, z))
+		q.collision_mask = 1
+		if not space.intersect_shape(q, 1).is_empty():
+			continue
+		var roofed := false
+		for s in Game.region.solids:
+			if x > float(s[0]) - 1.0 and x < float(s[1]) + 1.0 and z > float(s[2]) - 1.0 and z < float(s[3]) + 1.0 and float(s[5]) > h + 0.4:
+				roofed = true
+				break
+		if roofed:
+			continue
+		return Vector2(x, z)
+	var D: Dictionary = Game.DB.locs.dustwell
+	return Vector2(float(D.x) + 6.0, float(D.z) + 6.0)
 
 # people belonging to a chunk come and go with it; the dead stay dead
 func _spawn_chunk(k: String) -> void:
@@ -405,6 +561,8 @@ func _test_hooks() -> void:
 		await _selftest()
 	if args.has("newgame"):
 		await _newgame_test()
+	if args.has("khtest"):
+		await _khole_test()
 	if args.has("perf"):
 		await _perf_report()
 	if args.has("pip"):
@@ -592,6 +750,50 @@ func _newgame_test() -> void:
 		return
 	await _wait(20)
 	out.append("outside: area %s at %s leftVault %s exodus done %s daylight %s, objective %s" % [Game.area, str(player.global_position.snapped(Vector3.ONE * 0.1)), str(Game.flags.get("leftVault")), Game.is_done("exodus"), str(Game.quests.get("daylight")), str(Game.current_objective())])
+	for l in out:
+		print("TEST ", l)
+	get_tree().quit()
+
+# the K-hole both ways: a blackout (via a second dose), then the Hole (shards, a talk, the clock running out, the way back)
+func _khole_test() -> void:
+	var out: Array = Game.test_log
+	if Game.area == "world" and out.is_empty():
+		Game.booted = true
+		Game.flags["leftVault"] = 1
+		await _wait(10)
+		var p0: Vector3 = player.global_position
+		Game.give("ketarad", 2)
+		Game.use_item("ketarad")
+		Game.use_item("ketarad")
+		out.append("double dose: busy %s kholes %s drug %s" % [kh_busy, str(Game.flags.get("kholes")), str(Game.drugs.keys())])
+		while kh_busy:
+			await get_tree().process_frame
+		out.append("blackout: moved %.0f m to %s" % [p0.distance_to(player.global_position), str(player.global_position.snapped(Vector3.ONE))])
+		Game.flags["khRetTest"] = {"x": player.global_position.x, "z": player.global_position.z}
+		out.append("hole start: " + str(khole_start("hole")))
+		return
+	if Game.area == "khole":
+		await _wait(20)
+		out.append("in the hole at %s, timer %.1f, people %s, shards %d, label %s" % [str(player.global_position.snapped(Vector3.ONE)), float(Game.flags.get("khT", -1)),
+			str(npcs.map(func(n): return n.id)), khole.shards.size(), khole.timer_lbl.text])
+		var sh = _obj_point("echoa")
+		if sh:
+			await _goto(_obj_pos(sh) + Vector3(0, 0, -1.2), _obj_pos(sh))
+			out.append("at shard: " + str(_best_target().get("label", "nothing")))
+			objects.point_use(sh)
+		out.append("echo_0 %s shards held %d" % [str(Game.flags.get("echo_0")), int(Game.inv.get("echo_shard", 0))])
+		for n in npcs:
+			if n.id == "ferryman":
+				out.append("ferryman scale %.2f" % n.model.scale.y)
+			if n.id == "gnorl":
+				out.append("gnorl flipped %s" % str(absf(n.model.rotation.z - PI) < 0.01))
+		out.append(await _talk("ferryman", []))
+		out.append("waiting for the clock (%.1f s)" % float(Game.flags.get("khT", 0)))
+		return
+	await _wait(20)
+	var r: Dictionary = Game.flags.get("khRetTest", {})
+	out.append("back: area %s at %s, %.0f m from where we fell, khT %s, kholes %s" % [Game.area, str(player.global_position.snapped(Vector3.ONE)),
+		Vector2(float(r.get("x", 0)) - player.global_position.x, float(r.get("z", 0)) - player.global_position.z).length(), str(Game.flags.get("khT")), str(Game.flags.get("kholes"))])
 	for l in out:
 		print("TEST ", l)
 	get_tree().quit()
@@ -1114,7 +1316,9 @@ func _environment() -> void:
 	sun.directional_shadow_max_distance = 80.0
 	sun.shadow_blur = 1.2
 	add_child(sun)
-	if Game.interior():
+	if Game.area == "khole":
+		KHole.environment(env, sun)
+	elif Game.area == "vault":
 		# underground: no sky, no sun, cool strip lights along the corridors
 		env.background_mode = Environment.BG_COLOR
 		env.background_color = Color(0.02, 0.025, 0.03)
