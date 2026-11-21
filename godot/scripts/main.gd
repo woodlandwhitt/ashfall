@@ -211,9 +211,14 @@ func _test_hooks() -> void:
 				Game.give("duct_tape", 3)
 				hud.open_craft(true)
 			"dialog":
+				var who := sv[1] if sv.size() > 1 else "cass"
+				var found = null
 				for n in npcs:
-					if n.id == (sv[1] if sv.size() > 1 else "cass"):
-						start_dialog(n, n.id)
+					if n.id == who:
+						found = n
+				start_dialog(found, who)
+				if sv.size() > 2:
+					show_node(sv[2])
 			"banner": Game.banner("QUEST COMPLETE", "Bad Water")
 	if args.has("shot"):
 		for i in int(args.get("frames", "40")):

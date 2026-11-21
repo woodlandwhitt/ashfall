@@ -569,12 +569,17 @@ func _merge_spawns() -> void:
 						for k in ["req", "onStart", "neutral", "group"]:
 							if sp.has(k):
 								e[k] = sp[k]
+						if sp.get("neutral", false):
+							e["hostile"] = false
 			continue
 		if not (sp.has("req") or sp.has("onStart")):
 			continue
-		if not region.etypes.has(String(sp.type)):
-			continue
-		region.enemies.append({"type": sp.type, "x": sp.x, "z": sp.z, "y": sp.y, "hostile": not sp.get("neutral", false), "id": id,
+		var t := String(sp.type)
+		if not region.etypes.has(t):
+			t = "raider"
+			if not region.etypes.has(t):
+				continue
+		region.enemies.append({"type": t, "x": sp.x, "z": sp.z, "y": sp.y, "hostile": not sp.get("neutral", false), "id": id,
 			"req": sp.get("req"), "onStart": sp.get("onStart")})
 
 func spawn_allowed(e: Dictionary) -> bool:

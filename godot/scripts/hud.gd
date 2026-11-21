@@ -230,6 +230,10 @@ func show_dialogue(who: String, text: String, opts: Array, cb: Callable) -> void
 		b.disabled = opts[i].get("off", false)
 		b.pressed.connect(cb.bind(i))
 		dlg_opts.add_child(b)
+	# grow upward to fit long lines and many options
+	var vh := get_viewport().get_visible_rect().size.y
+	var lines := ceilf(text.length() / 95.0)
+	dlg.offset_top = -clampf(150.0 + lines * 30.0 + opts.size() * 56.0, 330.0, vh - 24.0)
 	touch.visible = false
 	prompt_l.text = ""
 
