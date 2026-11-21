@@ -390,6 +390,7 @@ class TouchPad extends Control:
 			"reload": [Vector2(s.x - 240, s.y - 250), 40.0, "RLD"],
 			"run": [Vector2(250, s.y - 90), 38.0, "RUN"],
 			"swap": [Vector2(s.x - 360, s.y - 70), 36.0, "SWAP"],
+			"nade": [Vector2(s.x - 255, s.y - 360), 34.0, "NADE"],
 		}
 
 	func _input(e: InputEvent) -> void:
@@ -450,6 +451,7 @@ class TouchPad extends Control:
 			"jump": if on: p.jump()
 			"reload": if on: p.reload()
 			"swap": if on: Game.main.hud.swap_weapon()
+			"nade": if on: p.throw_nade()
 			"run":
 				if on:
 					running = not running

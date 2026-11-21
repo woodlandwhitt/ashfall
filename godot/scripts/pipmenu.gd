@@ -204,7 +204,7 @@ func _items() -> void:
 	var t := String(it.get("t", ""))
 	if t in ["weapon", "armor", "aid"] and not (selected == Game.weapon or selected == Game.armor):
 		var u := Button.new()
-		u.text = "EQUIP" if t != "aid" else "USE"
+		u.text = "EQUIP" if t != "aid" else ("READIED" if Game.nade == selected else "READY") if it.get("throw", false) else "USE"
 		u.custom_minimum_size = Vector2(140, 52)
 		u.pressed.connect(func():
 			Game.use_item(selected)

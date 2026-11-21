@@ -137,6 +137,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		match e.keycode:
 			KEY_E: Game.main.interact()
 			KEY_R: reload()
+			KEY_G: throw_nade()
 			KEY_SHIFT: running = not running
 			KEY_ESCAPE: Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -277,3 +278,13 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 
 func hurt_fx(d: float) -> void:
 	hurt_shake = minf(1.0, hurt_shake + d * 0.05)
+
+func throw_nade() -> void:
+	var k := Game.nade_kind()
+	if k == "":
+		Game.msg("Nothing to throw")
+		return
+	Game.take(k)
+	var dir := -cam.global_basis.z
+	Nade.throw_from(cam.global_position + dir * 0.6 - Vector3.UP * 0.1, dir, k)
+	Game.stats_changed.emit()

@@ -332,6 +332,29 @@ func _selftest() -> void:
 	var st0 := Game.count("stimpak")
 	Game.use_item("stimpak")
 	out.append("stimpak: hp %.0f, stims %d -> %d" % [Game.hp, st0, Game.count("stimpak")])
+	# grenades: a frag dropped next to a living enemy, a molotov on another
+	var live := enemies.filter(func(e): return not e.dead)
+	if live.size() > 0:
+		Game.give("frag", 1)
+		Game.use_item("frag")
+		var nt: Node3D = live[0]
+		var hp0: float = nt.hp
+		var n := Nade.throw_from(nt.global_position + Vector3(1.0, 1.5, 0), Vector3.ZERO, Game.nade_kind())
+		Game.take("frag")
+		n.vel = Vector3.ZERO
+		n.fuse = 0.2   # creatures wander off during a real fuse
+		for i in 30:
+			await get_tree().physics_frame
+		out.append("frag: hp %.0f -> %.0f dead %s" % [hp0, nt.hp, nt.dead])
+		if live.size() > 1:
+			var t2: Node3D = live[1]
+			var h2: float = t2.hp
+			Game.give("molotov", 1)
+			var m := Nade.throw_from(t2.global_position + Vector3(0, 1.0, 0), Vector3.ZERO, "molotov")
+			m.vel = Vector3.ZERO
+			for i in 120:
+				await get_tree().physics_frame
+			out.append("molotov: hp %.0f -> %.0f" % [h2, t2.hp])
 	# discovery, map and travel
 	Game.discover("dustwell")
 	var far_k := ""
@@ -548,6 +571,8 @@ func _grass_mesh() -> Mesh:
 # ---------------------------------------------------------------- navigation: a 180 m square around the player, rebaked
 # on a worker thread when the player has moved 60 m. The source is built directly from the heightfield and the
 # collider boxes inside the square, so baking never walks the scene tree.
+var nav_baking: NavigationMesh = null
+
 func _bake_nav() -> void:
 	if nav_busy or player == null:
 		return
@@ -589,10 +614,23 @@ func _bake_nav() -> void:
 			continue
 		var sz := Vector3(maxf(0.05, s[1] - s[0]), maxf(0.05, s[5] - s[4]), maxf(0.05, s[3] - s[2]))
 		src.add_mesh(box, Transform3D(Basis.from_scale(sz), Vector3((s[0] + s[1]) * 0.5, (s[4] + s[5]) * 0.5, (s[2] + s[3]) * 0.5)))
-	NavigationServer3D.bake_from_source_geometry_data_async(nm, src, func():
-		nav_region.navigation_mesh = nm
-		Game.nav_ready = true
-		nav_busy = false)
+	nav_baking = nm
+	NavigationServer3D.bake_from_source_geometry_data_async(nm, src, _nav_done.bind(nm))
+
+func _nav_done(nm: NavigationMesh) -> void:
+	nav_baking = null
+	if not is_inside_tree():
+		return
+	nav_region.navigation_mesh = nm
+	Game.nav_ready = true
+	nav_busy = false
+
+# a bake still running on a worker thread must finish before the scene goes (Load reloads it; quitting frees it)
+func _exit_tree() -> void:
+	var n := 0
+	while nav_baking != null and NavigationServer3D.is_baking_navigation_mesh(nav_baking) and n < 500:
+		OS.delay_msec(10)
+		n += 1
 
 # ---------------------------------------------------------------- interaction
 func _best_target() -> Dictionary:

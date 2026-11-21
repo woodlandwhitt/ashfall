@@ -26,6 +26,7 @@ var stats := {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "ch
 var perks: Dictionary = {}
 var karma := 0
 var weapon := "pipe_pistol"
+var nade := ""                 # the readied throwable (thrown first)
 var armor := "vault_suit"
 var magd := {"pipe_pistol": 8}  # rounds loaded, per weapon
 var discovered: Dictionary = {}
@@ -125,7 +126,9 @@ func use_item(id: String) -> void:
 			return
 		"aid":
 			if it.get("throw"):
-				msg("Grenades come in the next build.")
+				nade = id
+				msg(iname(id) + " readied. Tap NADE (or G) to throw.")
+				Sfx.play("k_click", -6.0)
 				return
 			take(id)
 			var heal := float(it.get("heal", 0))
@@ -149,7 +152,7 @@ func save_game(slot: String) -> bool:
 		return false
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
 		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points,
-		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "armor": armor, "magd": magd, "discovered": discovered,
+		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "armor": armor, "magd": magd, "discovered": discovered,
 		"dead": dead, "looted": looted}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
 	if f == null:
@@ -175,7 +178,7 @@ func load_game(slot: String) -> bool:
 		return false
 	for k in ["inv", "flags", "quests", "kills", "stats", "perks", "magd", "discovered", "dead", "looted"]:
 		set(k, s[k])
-	for k in ["hp", "caps", "xp", "level", "points", "karma", "weapon", "armor"]:
+	for k in ["hp", "caps", "xp", "level", "points", "karma", "weapon", "nade", "armor"]:
 		set(k, s[k])
 	for k in ["caps", "xp", "level", "points", "karma"]:
 		set(k, int(get(k)))
@@ -196,6 +199,7 @@ func reset() -> void:
 	points = 0
 	karma = 0
 	weapon = "pipe_pistol"
+	nade = ""
 	armor = "vault_suit"
 	magd = {"pipe_pistol": 8}
 	hp = hp_max
@@ -417,3 +421,12 @@ func hurt(d: float) -> void:
 	stats_changed.emit()
 	if main:
 		main.on_player_hurt(d)
+
+# the throwable that goes first: the readied one, else whatever is carried
+func nade_kind() -> String:
+	if nade != "" and has(nade):
+		return nade
+	for k in Nade.THROWN:
+		if has(k):
+			return k
+	return ""

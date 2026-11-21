@@ -163,8 +163,20 @@ func _dist(k: String, p: Vector3) -> float:
 # blocking build of everything around a spot (start and after travel, behind the loading screen)
 func load_now(p: Vector3) -> void:
 	for k in wanted(p):
-		if not loaded.has(k):
-			_build(k, load(files[k]) if files.has(k) else null)
+		if loaded.has(k):
+			continue
+		var ps: PackedScene = null
+		if pending.has(k):
+			# already loading on a worker thread: wait for that load rather than starting a second one
+			ps = ResourceLoader.load_threaded_get(pending[k])
+			pending.erase(k)
+		elif ready_scenes.has(k):
+			ps = ready_scenes[k]
+			ready_scenes.erase(k)
+		elif files.has(k):
+			ps = load(files[k])
+		queue.erase(k)
+		_build(k, ps)
 
 func _build(k: String, ps: PackedScene) -> void:
 	if loaded.has(k):
@@ -258,3 +270,9 @@ func _poll() -> void:
 
 func count() -> int:
 	return loaded.size()
+
+# finish any GLB still loading on a worker thread before this node goes (scene reload on Load, or quit)
+func _exit_tree() -> void:
+	for k in pending.keys():
+		ResourceLoader.load_threaded_get(pending[k])
+	pending.clear()
