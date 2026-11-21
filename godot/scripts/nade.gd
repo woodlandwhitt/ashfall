@@ -117,6 +117,10 @@ func _explode() -> void:
 	for e in Game.main.enemies:
 		if is_instance_valid(e):
 			e.hear(at)
+	if not by_enemy and not pulse:
+		for n in Game.main.npcs.duplicate():
+			if is_instance_valid(n) and n.visible and not n.follow and n.global_position.distance_to(at) < r:
+				Game.main.provoke(n, dmg * (1.0 - n.global_position.distance_to(at) / r * 0.75), (n.global_position - at).normalized())
 	if not pulse and Game.player:
 		var pd: float = Game.player.global_position.distance_to(at)
 		if pd < r:

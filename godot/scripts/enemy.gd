@@ -33,6 +33,8 @@ var idx := -1
 var eid := ""          # the spawn's id: quests ask whether a named enemy is dead
 var group := ""        # neutral groups (Kess's crew, the herd) turn on you together
 var loot = null          # what the body holds once searched
+var npc = null           # a townsperson you provoked
+var essential := false   # they yield instead of dying
 var foe = null           # the companion it is fighting, or null for you
 var crip := {}           # FOCUS hits: crippled legs slow it, crippled arms spoil its aim
 
@@ -51,7 +53,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 	type = d.type
 	def = td
 	quad = bool(td.get("quad", false))
-	ranged = bool(td.get("ranged", false)) and not quad
+	ranged = (bool(td.get("ranged", false)) or bool(d.get("ranged", false))) and not quad
 	hp_max = float(td.get("hp", 40)) if td.get("hp") != null else 40.0
 	hp = hp_max
 	speed = (float(td.speed) if td.get("speed") != null else 3.2) * (1.0 if quad else 0.85)
@@ -78,17 +80,53 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		cs.shape = cap
 		cs.position.y = 0.88
 	add_child(cs)
-	if PEOPLE.has(type) and not quad:
-		var p: Array = PEOPLE[type]
-		model = Humanoid.build(p[0], p[1], p[2])
-		if type == "heavy":
-			model.scale = Vector3.ONE * 1.12
+	if d.has("look"):
+		# a townsperson who turned on you keeps their own face and clothes
+		model = Humanoid.person(d.look, hash(String(d.get("npc", ""))), "guard" if type == "townguard" else "")
 		add_child(model)
 		ap = model.get_node("AnimationPlayer")
 		if ranged:
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
-			Humanoid.hold_aligned(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121), Vector3(0.0, -0.05, 0.07))
+			Humanoid.hold_gun(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121))
+		ap.play("Pistol_Idle" if ranged else "Idle")
+	elif PEOPLE.has(type) and not quad:
+		var p: Array = PEOPLE[type]
+		# every raider his own: cut, dye, skin, hair, beard, headgear
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(String(d.get("id", "")) + type + str(d.x))
+		var fem: bool = String(p[0]).begins_with("Female") or (type in ["raider", "jackal"] and rng.randf() < 0.25)
+		var outfit: String = p[0]
+		if not fem and type in ["raider", "jackal", "pyro"]:
+			outfit = ["Male_Ranger", "Male_Peasant", "Male_Knight_Cloth", "Male_Ranger"][rng.randi() % 4]
+		elif fem:
+			outfit = "Female_Ranger" if rng.randf() < 0.6 else "Female_Peasant"
+		if type == "heavy":
+			outfit = "Male_Knight_Cloth"
+		elif type == "tollking":
+			outfit = "Male_Noble"
+		var cloth: Color = (p[1] as Color).lerp(Color.from_hsv(rng.randf(), 0.4, 0.6), 0.25) * rng.randf_range(0.8, 1.1)
+		var skins := [Color(1.0, 0.86, 0.76), Color(0.85, 0.66, 0.52), Color(0.62, 0.45, 0.33), Color(0.45, 0.32, 0.24), Color(0.95, 0.78, 0.66)]
+		var skin: Color = p[2] if type == "ghoul" else skins[rng.randi() % skins.size()]
+		model = Humanoid.build(outfit, cloth, skin)
+		var hc: Color = Humanoid.HAIR_COLS[rng.randi() % Humanoid.HAIR_COLS.size()]
+		var hat: String = ["", "", "cap", "wide", "helmet", ""][rng.randi() % 6] if type != "ghoul" else ""
+		if type == "heavy":
+			hat = "helmet"
+		if hat != "helmet" and type != "ghoul":
+			Humanoid.add_hair(model, (Humanoid.HAIR_F if fem else Humanoid.HAIR_M)[rng.randi() % 6], hc)
+		if not fem and type != "ghoul":
+			Humanoid.add_hair(model, Humanoid.FACE_M[rng.randi() % Humanoid.FACE_M.size()], hc)
+		if hat != "":
+			Humanoid.add_hat(model, hat, Color(0.33, 0.34, 0.33) if hat == "helmet" else Color.from_hsv(rng.randf(), 0.3, 0.35))
+		var hh := rng.randf_range(0.95, 1.05)
+		model.scale = Vector3.ONE * hh * (1.12 if type == "heavy" else 1.0)
+		add_child(model)
+		ap = model.get_node("AnimationPlayer")
+		if ranged:
+			ap.play("Pistol_Aim_Neutral")
+			ap.seek(0.0, true)
+			Humanoid.hold_gun(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121))
 		ap.play("Pistol_Idle" if ranged else "Idle")
 		ap.seek(randf() * 2.0, true)
 	else:
@@ -114,6 +152,11 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 		_one_shot(["Hit_Chest", "Hit_Head"][randi() % 2], 0.45)
 	Game.main.blood(at, dir)
 	Sfx.play_at(("o_bark2" if quad else ["o_mhurt1", "o_mhurt2"][randi() % 2]), at, 0.0, randf_range(0.9, 1.1))
+	if hp <= 0.0 and essential:
+		if hostile:
+			Game.main.npc_yield(self)
+		hp = 1.0
+		return
 	if hp <= 0.0:
 		die(dir)
 	else:
@@ -126,6 +169,8 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 
 func die(dir: Vector3) -> void:
 	dead = true
+	if npc != null and Game.main:
+		Game.main.npc_died(self)
 	if idx >= 0:
 		Game.dead[str(idx)] = true
 	state = "dead"

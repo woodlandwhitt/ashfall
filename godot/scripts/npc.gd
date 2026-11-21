@@ -33,6 +33,7 @@ var think := 0.0
 var bark_t := 0.0
 var los := false
 var held: Node3D = null
+var idle_anim := "Idle"
 
 static func look_colors(look: Dictionary) -> Array:
 	var cloth := Color(0.85, 0.8, 0.72)
@@ -61,23 +62,27 @@ func setup(d: Dictionary) -> void:
 	cs.shape = cap
 	cs.position.y = 0.88
 	add_child(cs)
-	var look: Dictionary = d.get("look", {})
+	look = d.get("look", {})
 	if id in ANIMALS:
 		model = (load(Game.char_path("npc_" + id + ".glb")) as PackedScene).instantiate()
 		rig = Rig.new(model, true)
 	else:
-		var fem: bool = look.get("fem", false)
-		var hooded: bool = look.get("hat") == "hood" or look.get("coat") != null
-		var cols := look_colors(look)
-		model = Humanoid.build(("Female_" if fem else "Male_") + ("Ranger" if hooded else "Peasant"), cols[0], cols[1])
-		model.scale = Vector3.ONE * float(look.get("bulk", 1.0)) if float(look.get("bulk", 1.0)) > 1.0 else Vector3.ONE
+		var role := ""
+		if id in ["sheriff", "deputy", "guard12", "lamp1"] or id.begins_with("guard"):
+			role = "guard"
+		elif id in ["mayor", "overseer", "brannock", "boss", "cass"]:
+			role = "boss"
+		elif id in ["preacher", "doc_osei", "halloran", "teacher", "wick"]:
+			role = "robe"
+		model = Humanoid.person(look, hash(id), role)
 		ap = model.get_node("AnimationPlayer")
+		idle_anim = Humanoid.IDLES[absi(hash(id + "i")) % Humanoid.IDLES.size()]
 	add_child(model)
 	for mi in model.find_children("*", "GeometryInstance3D", true, false):
 		(mi as GeometryInstance3D).visibility_range_end = 140.0
 	model.rotation.y = face_yaw
 	if ap:
-		ap.play("Idle")
+		ap.play(idle_anim)
 		ap.seek(randf() * 2.0, true)
 	target = home
 
@@ -127,12 +132,21 @@ func _physics_process(d: float) -> void:
 	if not near:
 		return
 	if ap:
-		Humanoid.play(ap, "Idle_Talking" if talking else ("Walk" if moving else "Idle"))
+		Humanoid.play(ap, "Idle_Talking" if talking else ("Walk" if moving else idle_anim))
 	elif rig:
 		rig.animate(d, spd, t)
 
 
 # ---------------------------------------------------------------- companions (main.js updParty)
+# shot, stabbed or blown up: the town turns on you (main.provoke)
+var hostile := false
+var look: Dictionary = {}
+
+func hit(dmg: float, _at: Vector3, dir: Vector3) -> void:
+	if follow or hostile or Game.main == null:
+		return
+	Game.main.provoke(self, dmg, dir)
+
 func join(c: Dictionary, st: String) -> void:
 	comp = c
 	follow = true
@@ -143,7 +157,7 @@ func join(c: Dictionary, st: String) -> void:
 	wander_r = 0.0
 	collision_layer = 0
 	if ap and c.get("ranged", false) and held == null:
-		held = Humanoid.hold_aligned(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121), Vector3(0.0, -0.05, 0.07))
+		held = Humanoid.hold_gun(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121))
 
 func leave() -> void:
 	follow = false

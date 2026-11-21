@@ -77,6 +77,8 @@ static func model_for(id: String) -> Array:
 	var fit := Basis.IDENTITY
 	if f.has("k"):
 		fit = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(Vector3.ONE * float(f.k))
+	# first-person guns are drawn a little larger than life, as in the original
+	fit = fit.scaled(Vector3.ONE * float(f.get("s", 1.0)))
 	return ["res://guns/" + glb + ".glb", fit]
 
 func weapon_changed() -> void:

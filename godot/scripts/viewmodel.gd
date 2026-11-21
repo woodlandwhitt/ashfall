@@ -16,7 +16,9 @@ var idle_anim := "Pistol_Aim_Neutral"
 var attack_anim := "Pistol_Shoot"
 var can_reload := true
 static var GRIP := Vector3(0.0, -0.05, 0.07)
-const OFFSET := Vector3(0.06, 0.05, -0.05)
+const OFFSET := Vector3(0.0, 0.0, 0.0)
+# turn the arms about the eye: down and to the right, so you look over the gun instead of at the back of your hands
+const TILT := Vector3(-0.04, -0.07, 0.0)
 
 func _make_rig() -> void:
 	rig = Humanoid.build("Male_Peasant", Color(0.42, 0.55, 0.95), Color(0.9, 0.78, 0.7))
@@ -44,6 +46,7 @@ func _place() -> void:
 		n = n.get_parent()
 	base_pos = -(Basis(Vector3.UP, PI) * eye_in_rig) + OFFSET
 	rig.position = base_pos
+	rotation = TILT
 	state = "aim"
 
 func _no_shadow(n: Node) -> void:
@@ -55,7 +58,7 @@ func setup(gun_scene: PackedScene, fit: Basis) -> void:
 	_make_rig()
 	ap.play("Pistol_Aim_Neutral")
 	ap.seek(0.0, true)
-	gun = Humanoid.hold_aligned(rig, gun_scene, fit, GRIP)
+	gun = Humanoid.hold_gun(rig, gun_scene, fit)
 	_no_shadow(gun)
 	# the muzzle is the front of the model's bounds along its own forward axis, near the top
 	var bb := AABB()

@@ -140,7 +140,7 @@ func _spawn_chunk(k: String) -> void:
 		var i: int = it[1]
 		if it[0] == "n":
 			var d: Dictionary = Game.region.npcs[i]
-			if live_npc.has(i):
+			if live_npc.has(i) or Game.flags.has("npcDead_" + String(Game.region.npcs[i].id)):
 				continue
 			var n = preload("res://scripts/npc.gd").new()
 			add_child(n)
@@ -255,6 +255,84 @@ func _restore_party() -> void:
 		for id in pd.keys():
 			recruit(String(id), true)
 
+# ---------------------------------------------------------------- townsfolk can be attacked (main.js provokeNpc)
+# Essential people (the story, town leaders) fight back but yield at zero health; guards nearby join in; children
+# can't be hurt. Attacking costs karma, murder more.
+const ESSENTIAL := ["overseer", "pell", "nan", "cass", "brannock", "wick", "halloran", "sheriff", "ines", "vex", "finch", "maren", "core"]
+const GUARDS := ["saltguard", "knuckles", "sheriff", "guard12", "renn2", "kess"]
+const CHILDREN := ["pip"]
+
+func provoke(n, dmg: float, dir: Vector3, chain := false) -> void:
+	if n.hostile or n.follow or String(n.id) in CHILDREN or not n.visible:
+		return
+	if dialog_npc == n:
+		end_dialog()
+	n.hostile = true
+	n.visible = false
+	n.collision_layer = 0
+	n.set_physics_process(false)
+	var guard: bool = String(n.id) in GUARDS
+	var type := "townguard" if guard else "townsfolk"
+	var src: Dictionary = Game.DB.enemies.get(type, {})
+	var td := {"hp": src.get("hp", 65), "name": n.display_name, "dmg": src.get("dmg", 6), "speed": src.get("spd", 4.0), "range": src.get("range", 2.0),
+		"xp": src.get("xp", 10), "ranged": src.get("ranged", false), "quad": false, "scale": 1}
+	var e = preload("res://scripts/enemy.gd").new()
+	add_child(e)
+	e.setup({"type": type, "x": n.global_position.x, "z": n.global_position.z, "y": n.global_position.y, "hostile": true, "id": "npc_" + String(n.id),
+		"look": n.look, "npc": String(n.id), "ranged": guard}, td)
+	e.npc = n
+	e.essential = String(n.id) in ESSENTIAL
+	e.state = "chase"
+	e.face_yaw = n.face_yaw
+	enemies.append(e)
+	if not chain:
+		Game.add_karma(-6, "Attacked " + String(n.display_name))
+		Game.msg(String(n.display_name) + " turns on you!")
+		for o in npcs.duplicate():
+			if o != n and not o.hostile and not o.follow and o.visible and String(o.id) in GUARDS and o.global_position.distance_to(n.global_position) < 40.0:
+				provoke(o, 0.0, Vector3.ZERO, true)
+	if dmg > 0.0:
+		e.hit(dmg, e.global_position + Vector3.UP * 1.2, dir if dir != Vector3.ZERO else Vector3.FORWARD)
+
+# an essential person at zero health drops their guard and gives up; after a moment they (and anyone who joined
+# in nearby) go back to being townsfolk
+func npc_yield(e) -> void:
+	e.hp = 1.0
+	e.hostile = false
+	e.state = "idle"
+	var n = e.npc
+	Game.banner(String(n.display_name).to_upper() + " YIELDS", "Essential: they can't be killed")
+	speak(["Enough! Enough. I give up.", "Stop! Please, I yield.", "You win. Put it down. Please."][randi() % 3], String(n.id))
+	await get_tree().create_timer(4.0).timeout
+	for o in enemies.duplicate():
+		if is_instance_valid(o) and o.get("npc") != null and not o.dead and o.global_position.distance_to(e.global_position) < 45.0:
+			_calm(o)
+	if is_instance_valid(e) and not e.dead:
+		_calm(e)
+
+func _calm(o) -> void:
+	var m = o.npc
+	enemies.erase(o)
+	if is_instance_valid(m):
+		m.global_position = o.global_position
+		m.hostile = false
+		m.visible = true
+		m.collision_layer = 4
+		m.set_physics_process(true)
+	o.queue_free()
+
+func npc_died(e) -> void:
+	var n = e.npc
+	Game.flags["npcDead_" + String(n.id)] = 1
+	if not (String(n.id) in GUARDS):
+		Game.add_karma(-10, "Murdered " + String(n.display_name))
+	Game.msg(String(n.display_name) + " is dead.")
+	npcs.erase(n)
+	for i in live_npc.keys():
+		if live_npc[i] == n:
+			live_npc.erase(i)
+	n.queue_free()
+
 # a quest started or finished: anyone it summons appears if their chunk is already loaded
 func refresh_spawns() -> void:
 	if chunks == null:
@@ -328,6 +406,22 @@ func _test_hooks() -> void:
 		Game.give("combat_knife", 1)
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
+	if args.has("weapon"):
+		Game.give(String(args.weapon), 1)
+		Game.weapon = String(args.weapon)
+		player.weapon_changed()
+		if args.has("sidecam"):
+			# look at the hands from the right side, to check the grip
+			var sc := Camera3D.new()
+			add_child(sc)
+			await _wait(3)
+			var sk: Skeleton3D = player.vm.skel
+			var gp: Vector3 = sk.global_transform * sk.get_bone_global_pose(sk.find_bone("hand_r")).origin
+			sc.global_position = gp + player.cam.global_basis.x * 0.45 + player.cam.global_basis.y * 0.05
+			sc.look_at(gp, Vector3.UP)
+			sc.fov = 40.0
+			sc.near = 0.01
+			sc.current = true
 	if args.has("screen"):
 		var sv := String(args.screen).split(":")
 		match sv[0]:
@@ -789,6 +883,38 @@ func _selftest() -> void:
 	out.append("after wait: %s; flags.party %s" % [str(Game.G.partyState("jory")), str(Game.flags.get("party"))])
 	Game.G.dismiss("jory")
 	out.append("after dismiss: party %s" % [str(party.map(func(p): return p.id))])
+	# shooting a townsperson: Duggan turns on you; shooting the sheriff, who can't die, makes her yield
+	fast_travel("dustwell")
+	await _wait(10)
+	var dug = null
+	var sher = null
+	for n in npcs:
+		if n.id == "duggan":
+			dug = n
+		if n.id == "sheriff":
+			sher = n
+	if dug:
+		var k0 := Game.karma
+		dug.hit(10.0, dug.global_position + Vector3.UP, Vector3.FORWARD)
+		var de = null
+		for e in enemies:
+			if e.get("npc") == dug:
+				de = e
+		out.append("provoked duggan: hidden %s enemy %s hp %.0f karma %d -> %d" % [not dug.visible, str(de != null), de.hp if de else -1.0, k0, Game.karma])
+		if de:
+			de.hit(9999.0, de.global_position + Vector3.UP, Vector3.FORWARD)
+			out.append("duggan dead %s flag %s karma %d npcs has him %s" % [de.dead, str(Game.flags.get("npcDead_duggan")), Game.karma, npcs.has(dug)])
+	if sher:
+		sher.hit(5.0, sher.global_position + Vector3.UP, Vector3.FORWARD)
+		var se = null
+		for e in enemies:
+			if e.get("npc") == sher:
+				se = e
+		if se:
+			se.hit(9999.0, se.global_position + Vector3.UP, Vector3.FORWARD)
+			out.append("sheriff after lethal hit: dead %s hp %.0f hostile %s" % [se.dead, se.hp, se.hostile])
+			await get_tree().create_timer(4.5).timeout
+			out.append("sheriff back: visible %s hostile %s" % [sher.visible, sher.hostile])
 	# road events: a caravan under attack, a dead scavenger, a stranded traveller
 	Game.booted = true
 	player.global_position = Vector3(-40.0, Game.height(-40.0, 60.0) + 0.5, 60.0)
