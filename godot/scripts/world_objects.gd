@@ -27,8 +27,6 @@ func setup(m) -> void:
 	for d in W.get("doors", []):
 		_add("ldoor", d)
 	for p in W.get("points", []):
-		if String(p.get("id", "")) in ["cellin", "cellout"]:
-			continue
 		_add("point", p)
 	if W.get("door") != null:
 		_add("door", W.door)

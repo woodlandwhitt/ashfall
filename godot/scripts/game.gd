@@ -379,6 +379,7 @@ func load_game(slot: String) -> bool:
 	return true
 
 var pending_pos = null
+var CELLS: Array = []        # building interiors: room origin and size, sign, street door
 
 # a new resident of Haven 12: the name and aptitudes from the registration screen, waking in their quarters
 func new_game(nm: String, st: Dictionary, pts: int) -> void:
@@ -444,6 +445,7 @@ func _ready() -> void:
 		if not DB.items.has(k):
 			DB.items[k] = EXTRA_ITEMS[k]
 	L = _json("res://data/logic.json")
+	CELLS = _json("res://data/cells.json")
 	vm = JsVM.new()
 	G = GApi.install(vm, L)
 	DIALOGUE = L.get("dialogue", {})
@@ -481,6 +483,17 @@ func dir() -> String:
 
 func interior() -> bool:
 	return area != "world"
+
+func cell_name(i: int) -> String:
+	if i < 0 or i >= CELLS.size():
+		return "the building"
+	var sg := String(CELLS[i].get("sign", ""))
+	if sg == "":
+		return "the building"
+	var w := []
+	for part in sg.to_lower().split(" "):
+		w.append(part.substr(0, 1).to_upper() + part.substr(1))
+	return " ".join(w)
 
 # the region, heightmap and world objects of an area (the valley or an interior); main rebuilds the scene after
 func load_area(a: String) -> void:

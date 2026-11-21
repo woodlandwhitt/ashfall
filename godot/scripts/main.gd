@@ -99,6 +99,12 @@ func _ready() -> void:
 		_khole_arrive.call_deferred()
 	elif Game.flags.has("khBack"):
 		_khole_back.call_deferred()
+	if Game.flags.has("cellOutSpot") and Game.area == "world":
+		_cell_step_out.call_deferred()
+	if Game.flags.has("cellFade"):
+		Game.flags.erase("cellFade")
+		_fade.call_deferred(false, Color.BLACK, 0.45)
+		Sfx.play.call_deferred("k_door_close", -6.0)
 	if Game.pending_new:
 		Game.pending_new = false
 		_opening.call_deferred()
@@ -138,6 +144,43 @@ func vault_travel(inward: bool) -> void:
 	else:
 		var L: Dictionary = Game.DB.locs.vault
 		Game.travel_area("world", float(L.x), float(L.z) - 7.0, 0.0)
+
+# through a building's front door, in either direction (main.js cellTravel)
+func cell_travel(i: int, inward: bool) -> void:
+	if i < 0 or i >= Game.CELLS.size():
+		return
+	var C: Dictionary = Game.CELLS[i]
+	Sfx.play("k_door_open", -4.0)
+	Game.flags["cellFade"] = 1
+	await _fade(true, Color.BLACK, 0.35)
+	if inward:
+		Game.travel_area("cells", float(C.ox), float(C.oz) + float(C.D2) / 2.0 - 1.7, 0.0)
+		return
+	var o: Dictionary = C.get("out", {})
+	var nx := float(o.get("nx", 0))
+	var nz := float(o.get("nz", 1))
+	Game.flags["cellOutSpot"] = [float(o.x), float(o.z), nx, nz]
+	Game.travel_area("world", float(o.x) + nx * 0.6, float(o.z) + nz * 0.6, atan2(-nx, -nz))
+
+# out on the street: step onto the first clear spot in front of the door (porches, posts and crates crowd some of them)
+func _cell_step_out() -> void:
+	var c: Array = Game.flags.get("cellOutSpot")
+	Game.flags.erase("cellOutSpot")
+	var space := get_world_3d().direct_space_state
+	for k in [0.6, 0.0, 1.2, -0.5, 2.0]:
+		for l in [0.0, 0.7, -0.7, 1.4, -1.4]:
+			var x: float = c[0] + c[2] * k + c[3] * l
+			var z: float = c[1] + c[3] * k - c[2] * l
+			var q := PhysicsShapeQueryParameters3D.new()
+			var sh := CapsuleShape3D.new()
+			sh.radius = 0.42
+			sh.height = 1.6
+			q.shape = sh
+			q.transform = Transform3D(Basis(), Vector3(x, Game.height(x, z) + 1.0, z))
+			q.collision_mask = 1
+			if space.intersect_shape(q, 1).is_empty():
+				player.global_position = Vector3(x, Game.height(x, z) + 0.1, z)
+				return
 
 func _fade(out: bool, col := Color.BLACK, secs := 1.2) -> ColorRect:
 	var r := ColorRect.new()
@@ -563,6 +606,8 @@ func _test_hooks() -> void:
 		await _newgame_test()
 	if args.has("khtest"):
 		await _khole_test()
+	if args.has("celltest"):
+		await _cell_test(int(args.celltest) if String(args.celltest) != "" else 1)
 	if args.has("perf"):
 		await _perf_report()
 	if args.has("pip"):
@@ -794,6 +839,56 @@ func _khole_test() -> void:
 	var r: Dictionary = Game.flags.get("khRetTest", {})
 	out.append("back: area %s at %s, %.0f m from where we fell, khT %s, kholes %s" % [Game.area, str(player.global_position.snapped(Vector3.ONE)),
 		Vector2(float(r.get("x", 0)) - player.global_position.x, float(r.get("z", 0)) - player.global_position.z).length(), str(Game.flags.get("khT")), str(Game.flags.get("kholes"))])
+	for l in out:
+		print("TEST ", l)
+	get_tree().quit()
+
+# through a street door into a building and back out
+func _cell_test(i: int) -> void:
+	var out: Array = Game.test_log
+	if Game.area == "world" and out.is_empty():
+		Game.booted = true
+		Game.flags["leftVault"] = 1
+		var door = null
+		for k in objects.grid:
+			for o in objects.grid[k]:
+				if o._k == "point" and String(o.id) == "cellin" and int(o.get("cellIn", -1)) == i:
+					door = o
+		if door == null:
+			var o: Dictionary = Game.CELLS[i].out
+			player.global_position = Vector3(float(o.x), Game.height(float(o.x), float(o.z)) + 0.2, float(o.z))
+			await _wait(10)
+			for k in objects.grid:
+				for o2 in objects.grid[k]:
+					if o2._k == "point" and String(o2.id) == "cellin" and int(o2.get("cellIn", -1)) == i:
+						door = o2
+		if door == null:
+			out.append("no street door for cell %d" % i)
+			for l in out:
+				print("TEST ", l)
+			get_tree().quit()
+			return
+		var o: Dictionary = Game.CELLS[i].out
+		await _goto(_obj_pos(door) + Vector3(float(o.nx), 0, float(o.nz)) * 1.0, _obj_pos(door))
+		out.append("street door %d: %s" % [i, str(_best_target().get("label", "nothing"))])
+		Game.flags["cellTestFrom"] = [player.global_position.x, player.global_position.z]
+		objects.point_use(door)
+		return
+	if Game.area == "cells":
+		await _wait(20)
+		out.append("inside at %s, people %s, chunks %d" % [str(player.global_position.snapped(Vector3.ONE * 0.1)), str(npcs.map(func(n): return n.id)), chunks.loaded.size()])
+		var ex = null
+		for k in objects.grid:
+			for o in objects.grid[k]:
+				if o._k == "point" and String(o.id) == "cellout" and int(o.get("cellOut", -1)) == i:
+					ex = o
+		out.append("exit: " + (str(objects.point_label(ex)) + " at " + str(_obj_pos(ex).snapped(Vector3.ONE * 0.1)) if ex else "none"))
+		if ex:
+			objects.point_use(ex)
+		return
+	await _wait(20)
+	var f: Array = Game.flags.get("cellTestFrom", [0, 0])
+	out.append("outside again at %s, %.1f m from where we went in, yaw %.2f" % [str(player.global_position.snapped(Vector3.ONE * 0.1)), Vector2(f[0] - player.global_position.x, f[1] - player.global_position.z).length(), player.yaw])
 	for l in out:
 		print("TEST ", l)
 	get_tree().quit()
@@ -1318,6 +1413,30 @@ func _environment() -> void:
 	add_child(sun)
 	if Game.area == "khole":
 		KHole.environment(env, sun)
+	elif Game.area == "cells":
+		# inside the town's buildings: lamplight and a little daylight from the windows
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.02, 0.018, 0.015)
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color(0.95, 0.85, 0.7)
+		env.ambient_light_energy = 0.75
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+		env.fog_enabled = false
+		sun.visible = false
+		sun.shadow_enabled = false
+		var cy := float(Game.L.consts.CELLS.y)
+		for C in Game.CELLS:
+			var n := 1 if float(C.D2) < 16.0 else 2
+			for k in n:
+				var l := OmniLight3D.new()
+				l.light_color = Color(1.0, 0.82, 0.6)
+				l.light_energy = 1.7
+				l.omni_range = maxf(float(C.W2), float(C.D2) / n) * 0.8
+				l.omni_attenuation = 0.8
+				l.shadow_enabled = false
+				add_child(l)
+				var dz := 0.0 if n == 1 else (k - 0.5) * float(C.D2) * 0.5
+				l.global_position = Vector3(float(C.ox), cy + 3.2, float(C.oz) + dz)
 	elif Game.area == "vault":
 		# underground: no sky, no sun, cool strip lights along the corridors
 		env.background_mode = Environment.BG_COLOR

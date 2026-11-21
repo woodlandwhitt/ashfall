@@ -119,6 +119,11 @@ Keep every existing quest and line, then deepen them:
    people and objects; `Game.load_area`), which godot-7's building interiors will reuse. Radstorms wait for the
    weather system.*
 5. **godot-7:** day/night, weather, radio, the vehicle, drugs, the K-hole, interiors for every important
-   building.
+   building. *Status: shipped. A 1000-second day with sun, moon and stars; clear, cloudy, rain, storms with
+   thunder, and radstorms; radiation and Rad Flush; the radio (DJ, news, music) on the Pip-Boy; the Rust Runner
+   buggy; chems with buffs, crashes and addiction; the K-hole (blackout, or two minutes in the Hole:
+   `data/khole/`, drawn by `scripts/khole.gd`); and the 21 building interiors (`data/cells/`, entered through
+   their street doors). Also in this build: townsfolk look different from each other, guns sit in the hands
+   properly, and townsfolk can be shot (essential people yield, guards join in).*
 6. **godot-8:** the story overhaul (new beats, factions, companion quests), all endings and epilogues, polish.
    At that point the Godot build replaces the WebView build.
