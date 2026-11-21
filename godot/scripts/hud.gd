@@ -337,8 +337,15 @@ func toggle_pause() -> void:
 		_gfx_label()
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_GO_BACK_REQUEST and not Game.paused:
-		toggle_pause()
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if screens.is_open():
+			screens.close()
+		elif pip.visible:
+			toggle_pip()
+		elif Game.main.in_dialog():
+			Game.main.end_dialog()
+		elif not Game.paused:
+			toggle_pause()
 
 func _process(d: float) -> void:
 	hurt_rect.color.a = maxf(0.0, hurt_rect.color.a - d * 0.8)

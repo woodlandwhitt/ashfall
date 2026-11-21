@@ -88,7 +88,8 @@ func item(id) -> Dictionary:
 	return DB.items.get(id, {}) if id != null else {}
 
 func iname(id) -> String:
-	return String(item(id).get("n", str(id)))
+	var up := int(upgrades.get(id, 0)) if id != null else 0
+	return String(item(id).get("n", str(id))) + (" +" + str(up) if up > 0 else "")
 
 func count(id) -> int:
 	return int(inv.get(id, 0))

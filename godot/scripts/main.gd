@@ -191,6 +191,30 @@ func _test_hooks() -> void:
 		Game.give("combat_knife", 1)
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
+	if args.has("screen"):
+		var sv := String(args.screen).split(":")
+		match sv[0]:
+			"trade": hud.screens.open_trade(sv[1] if sv.size() > 1 else "cass")
+			"lock":
+				Game.give("bobby_pin", 4)
+				Game.stats.agility = 7
+				hud.screens.open_lock(1, "Footlocker", func(_ok): pass)
+				hud.screens.lp.pin = 0.5
+				hud.screens.lp.turn = 0.4
+			"term":
+				var l: Dictionary = Game.DB.lore.values()[0]
+				hud.screens.open_term(String(l.h), String(l.t))
+				hud.screens.term_i = String(l.t).length() - 2
+			"loot": hud.screens.open_loot("Footlocker", [["stimpak", 2], ["ammo_9", 24], ["caps", 35], ["scrap_metal", 3]], func(_e): pass)
+			"craft":
+				Game.give("scrap_metal", 6)
+				Game.give("duct_tape", 3)
+				hud.open_craft(true)
+			"dialog":
+				for n in npcs:
+					if n.id == (sv[1] if sv.size() > 1 else "cass"):
+						start_dialog(n, n.id)
+			"banner": Game.banner("QUEST COMPLETE", "Bad Water")
 	if args.has("shot"):
 		for i in int(args.get("frames", "40")):
 			await get_tree().process_frame

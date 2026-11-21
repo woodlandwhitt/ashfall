@@ -413,6 +413,14 @@ class MapView extends Control:
 			draw_circle(p, 5.0, Color(0.85, 1.0, 0.85) if known else Color(0.3, 0.55, 0.35))
 			if known:
 				draw_string(f, p + Vector2(8, 5), String(L.name), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 1.0, 0.85))
+		var qt = Game.quest_target()
+		if qt != null:
+			var q: Vector2 = to_map.call(qt.x, qt.z)
+			draw_arc(q, 9.0, 0, TAU, 24, Color(1.0, 0.82, 0.3), 2.5)
+			draw_circle(q, 3.0, Color(1.0, 0.82, 0.3))
+			var o := Game.current_objective()
+			if not o.is_empty():
+				draw_string(f, q + Vector2(12, -8), String(o.title), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.85, 0.4))
 		var pp: Vector3 = Game.player.global_position
 		var c: Vector2 = to_map.call(pp.x, pp.z)
 		var yaw: float = Game.player.yaw

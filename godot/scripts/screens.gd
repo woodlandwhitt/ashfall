@@ -39,14 +39,9 @@ var term_l: Label
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fill(self, 0, 0)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel = PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.offset_left = 24
-	panel.offset_top = 18
-	panel.offset_right = -24
-	panel.offset_bottom = -18
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.02, 0.06, 0.03, 0.96)
 	sb.border_color = Color(0.3, 0.8, 0.4)
@@ -56,6 +51,7 @@ func _ready() -> void:
 	panel.add_theme_stylebox_override("panel", sb)
 	panel.theme = pip_theme()
 	add_child(panel)
+	_fill(panel, 24, 18)
 	body = VBoxContainer.new()
 	body.add_theme_constant_override("separation", 8)
 	panel.add_child(body)
@@ -83,6 +79,16 @@ func _ready() -> void:
 	banner_s.add_theme_constant_override("outline_size", 6)
 	banner_box.add_child(banner_s)
 	banner_box.modulate.a = 0.0
+
+static func _fill(c: Control, mx: float, my: float) -> void:
+	c.anchor_left = 0.0
+	c.anchor_top = 0.0
+	c.anchor_right = 1.0
+	c.anchor_bottom = 1.0
+	c.offset_left = mx
+	c.offset_top = my
+	c.offset_right = -mx
+	c.offset_bottom = -my
 
 static func pip_theme() -> Theme:
 	var th := Theme.new()
@@ -152,7 +158,7 @@ func _label(parent: Node, t: String, size := 19, col := GREEN) -> Label:
 	l.text = t
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF if parent is HBoxContainer else TextServer.AUTOWRAP_WORD
 	parent.add_child(l)
 	return l
 
