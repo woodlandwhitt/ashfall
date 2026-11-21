@@ -186,7 +186,11 @@ static func guard_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
 
 # where the hand closes on each gun, as fractions of the model: [from the back towards the muzzle, down from the top,
 # the support hand's spot along the gun]. Tuned by eye with --gungrid.
-const GRIPS := {}
+const GRIPS := {
+	"AssaultRifle2_2": [0.34, 0.6, 0.68], "AssaultRifle_3": [0.12, 0.6, 0.66], "Bullpup_1": [0.33, 0.6, 0.86],
+	"Revolver_3": [0.22, 0.62, 0.6], "Rifle_Battle_West": [0.33, 0.68, 0.62], "SMG_Compact_West": [0.57, 0.66, 0.82],
+	"Shotgun_Pump_West": [0.33, 0.62, 0.76], "Sniper_Rifle_West": [0.25, 0.68, 0.6], "SubmachineGun_3": [0.66, 0.62, 0.86],
+}
 
 static func grip_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
 	var inv := fit.orthonormalized().inverse()

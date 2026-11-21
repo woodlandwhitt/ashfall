@@ -7,7 +7,7 @@ var upper := -1
 var lower := -1
 var hand := -1
 var target: Node3D
-var hand_basis = null   # optional: the hand's orientation in the target's frame
+var pin_rotation := false   # the hand takes the target's orientation (a grip), not the animation's
 
 func setup(sk: Skeleton3D, side: String, tgt: Node3D) -> void:
 	upper = sk.find_bone("upperarm_" + side)
@@ -48,6 +48,8 @@ func _process_modification_with_delta(_d: float) -> void:
 	var ua_rot := r2 * r0 * ua.basis.get_rotation_quaternion()
 	var la_rot := r2 * r0 * r1 * la.basis.get_rotation_quaternion()
 	var hd_rot := r2 * r0 * r1 * hd.basis.get_rotation_quaternion()
+	if pin_rotation:
+		hd_rot = (sk.global_transform.affine_inverse() * target.global_transform).basis.get_rotation_quaternion()
 	var pu := sk.get_bone_parent(upper)
 	var parent_rot := sk.get_bone_global_pose(pu).basis.get_rotation_quaternion() if pu >= 0 else Quaternion.IDENTITY
 	sk.set_bone_pose_rotation(upper, parent_rot.inverse() * ua_rot)

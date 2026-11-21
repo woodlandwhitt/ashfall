@@ -78,26 +78,82 @@ func _align(fit: Basis, bb: AABB, gf: Dictionary) -> void:
 	var rear_top: Vector3 = g_vm * (c - fwd_m * half_len + up_m * half_h)
 	var centre: Vector3 = g_vm * c
 	var long: bool = not gf.get("pistol", false)
-	# long guns come back to the shoulder (our arms are shorter than the WebView build's floating ones)
-	var want := Vector3(0.17 if long else 0.2, -0.17 + float(gf.get("sight", 0.07)) + (0.03 if long else 0.0), -0.5 + float(gf.get("rear", 0.07)) + (0.24 if long else 0.0))
+	var want := Vector3(0.2, -0.17 + float(gf.get("sight", 0.07)), -0.5 + float(gf.get("rear", 0.07)))
 	rig.position += Vector3(want.x - centre.x, want.y - rear_top.y, want.z - rear_top.z)
 	base_pos = rig.position
 	rotation = Vector3.ZERO
-	# long guns: the left hand goes out to the handguard (IK on the left arm, run after the animation each frame)
-	if not gf.get("pistol", false) and skel.find_bone("upperarm_l") >= 0:
-		var tgt := Node3D.new()
-		gun.add_child(tgt)
-		var sc := fit.get_scale().x
-		tgt.position = Humanoid.guard_fit(bb, fit, gf)
-		var ik := ArmIK.new()
-		skel.add_child(ik)
-		ik.setup(skel, "l", tgt)
-		if OS.get_cmdline_user_args().has("--ikdbg"):
-			var names := []
-			for i in [skel.find_bone("upperarm_l"), skel.find_bone("lowerarm_l"), skel.find_bone("hand_l")]:
-				names.append(skel.get_bone_name(skel.get_bone_parent(i)))
-			print("IKDBG parents ", names)
-		ik_tgt = tgt
+	_mount(sk, long, bb, fit, gf)
+
+# The gun comes off the hand bone onto a mount fixed in front of the camera, and both hands are pinned to it with IK
+# (the right on the grip, the left on the handguard or wrapped round the right), so animations can't pull the hands
+# off the gun. Recoil and reloading move the mount; the arms follow.
+var mount: Node3D
+var kick: Node3D
+var k_back := Vector3.BACK
+var k_up := Vector3.UP
+var k_right := Vector3.RIGHT
+var guard_t: Node3D
+
+func _mount(sk: Transform3D, long: bool, bb: AABB, fit: Basis, gf: Dictionary) -> void:
+	skel.force_update_all_bone_transforms()
+	var hb0 := skel.get_bone_global_pose(skel.find_bone("hand_r"))
+	if OS.get_cmdline_user_args().has("--ikdbg"):
+		var hr := skel.find_bone("hand_r")
+		for i in skel.get_bone_count():
+			if skel.get_bone_parent(i) == hr:
+				print("IKDBG child ", skel.get_bone_name(i), " local ", hb0.affine_inverse() * skel.get_bone_global_pose(i).origin)
+	var hl0 := skel.get_bone_global_pose(skel.find_bone("hand_l"))
+	var mg: Transform3D = hb0 * gun.transform
+	gun.get_parent().remove_child(gun)
+	kick = Node3D.new()
+	skel.add_child(kick)
+	mount = Node3D.new()
+	kick.add_child(mount)
+	mount.transform = Transform3D(mg.basis.orthonormalized(), mg.origin)
+	mount.add_child(gun)
+	gun.transform = mount.transform.affine_inverse() * mg
+	# camera-space directions in the skeleton's space
+	var sk_from_vm: Transform3D = (rig.transform * sk).affine_inverse()
+	var unit := (sk_from_vm.basis * Vector3(0, 0, 1)).length()
+	k_back = sk_from_vm.basis * Vector3(0, 0, 1)
+	k_up = sk_from_vm.basis * Vector3(0, 1, 0)
+	k_right = sk_from_vm.basis * Vector3(1, 0, 0)
+	# the right hand closes round the grip: back of the hand to the right, knuckles forward, thumb up (hand bones:
+	# fingers along +Y, thumb side +Z, palm towards -X), the palm's centre on the grip point
+	var vm_from_sk: Transform3D = rig.transform * sk
+	var grip_vm: Vector3 = vm_from_sk * (mg * Humanoid.grip_fit(bb, fit, gf))
+	var hy := Vector3(-0.22, 0.12 if long else 0.18, -1.0).normalized()
+	var hx := Vector3(1.0, 0.0, -0.15)
+	hx = (hx - hy * hx.dot(hy)).normalized()
+	var hand_vm := Basis(hx, hy, hx.cross(hy).normalized())
+	var wrist_vm := grip_vm - hand_vm * Vector3(-0.03, 0.065, 0.0)
+	var rt := Node3D.new()
+	mount.add_child(rt)
+	var want_sk: Transform3D = sk_from_vm * Transform3D(hand_vm, wrist_vm)
+	rt.transform = mount.transform.affine_inverse() * Transform3D(want_sk.basis.orthonormalized(), want_sk.origin)
+	var ikr := ArmIK.new()
+	skel.add_child(ikr)
+	ikr.setup(skel, "r", rt)
+	ikr.pin_rotation = true
+	var lt := Node3D.new()
+	if long:
+		# a long gun comes back to the shoulder, the support hand under the handguard
+		gun.add_child(lt)
+		lt.position = Humanoid.guard_fit(bb, fit, gf)
+		lt.rotation = Vector3.ZERO
+		mount.position += sk_from_vm.basis * Vector3(-0.04, 0.0, 0.2)
+	else:
+		# a handgun is held in the right hand alone (as in the Fallout games); the left arm hangs out of sight
+		skel.add_child(lt)
+		lt.position = sk_from_vm * Vector3(-0.3, -0.75, -0.05)
+	var ikl := ArmIK.new()
+	skel.add_child(ikl)
+	ikl.setup(skel, "l", lt)
+	ikl.pin_rotation = false
+	guard_t = lt
+	ik_tgt = lt
+	if unit < 1e-6:
+		k_back = Vector3.BACK
 
 func _no_shadow(n: Node) -> void:
 	for c in n.find_children("*", "GeometryInstance3D", true, false):
@@ -176,17 +232,41 @@ func setup_melee(armed: bool, id: String) -> void:
 	_place()
 	ap.play(idle_anim)
 
+var kick_tw: Tween
+
 func shoot() -> void:
-	ap.play(attack_anim, 0.03)
-	ap.seek(0.0, true)
-	state = "shoot"
+	if kick == null:
+		ap.play(attack_anim, 0.03)
+		ap.seek(0.0, true)
+		state = "shoot"
+		return
+	# kick back and up, then settle
+	if kick_tw:
+		kick_tw.kill()
+	kick.position = Vector3.ZERO
+	kick_tw = create_tween()
+	kick_tw.tween_property(kick, "position", k_back * 0.045 + k_up * 0.012, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	kick_tw.tween_property(kick, "position", Vector3.ZERO, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 
 func reload(dur: float) -> void:
 	if not can_reload:
 		return
-	var a := ap.get_animation("Pistol_Reload")
-	ap.play("Pistol_Reload", 0.1, a.length / dur)
-	state = "reload"
+	if kick == null:
+		var a := ap.get_animation("Pistol_Reload")
+		ap.play("Pistol_Reload", 0.1, a.length / dur)
+		state = "reload"
+		return
+	# dip the gun and tip it towards you, work it, bring it back up
+	if kick_tw:
+		kick_tw.kill()
+	var m0 := mount.transform
+	var tipped := Transform3D(Basis(k_back.normalized(), -0.5) * Basis(k_right.normalized(), 0.35), Vector3.ZERO) * m0
+	tipped.origin = m0.origin - k_up * 0.1 + k_back * 0.04
+	kick_tw = create_tween()
+	kick_tw.tween_property(mount, "transform", tipped, dur * 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	kick_tw.tween_property(kick, "position", -k_up * 0.02, dur * 0.2)
+	kick_tw.tween_property(kick, "position", Vector3.ZERO, dur * 0.15)
+	kick_tw.tween_property(mount, "transform", m0, dur * 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 
 var dbg_t := 0
 var ik_tgt: Node3D

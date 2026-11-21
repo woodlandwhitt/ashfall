@@ -612,7 +612,6 @@ func _test_hooks() -> void:
 		await _newgame_test()
 	if args.has("gungrid"):
 		await _gun_grid()
-		return
 	if args.has("aitest"):
 		await _ai_test()
 	if args.has("khtest"):
