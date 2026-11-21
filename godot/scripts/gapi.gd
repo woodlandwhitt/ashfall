@@ -31,7 +31,7 @@ static func install(v: JsVM, logic: Dictionary) -> GApi:
 	v.define("radMul", func(): return 1.0)
 	v.define("setTimeout", func(f = null, ms = 0): (func(): v.call_value(f)).call_deferred())
 	v.define("karmaTitle", func(k = 0): return Game.karma_title(int(v.num(k))))
-	v.define("stageText", func(id = ""): return Game.stage_text(String(id)))
+	v.define("stageText", func(id = ""): return Game.stage_text(_s(id)))
 	v.define("killed", Game.killed)
 	for k in logic.get("helpers", {}):
 		v.define(k, v.fn_of(logic.helpers[k]))
@@ -47,6 +47,9 @@ static func install(v: JsVM, logic: Dictionary) -> GApi:
 	v.define("LOCS", Game.DB.locs)
 	return g
 
+static func _s(v) -> String:
+	return "" if v == null else str(v)
+
 func js_get(k: String):
 	match k:
 		"flags": return Game.flags
@@ -56,19 +59,19 @@ func js_get(k: String):
 	return null
 
 # ---------------------------------------------------------------- inventory
-func count(id = "") -> int: return Game.count(String(id))
-func has(id = "") -> bool: return Game.count(String(id)) > 0
-func stat(s = "") -> int: return int(Game.stats.get(String(s), 5))
+func count(id = "") -> int: return Game.count(_s(id))
+func has(id = "") -> bool: return Game.count(_s(id)) > 0
+func stat(s = "") -> int: return int(Game.stats.get(_s(s), 5))
 func give(id = "", n = 1) -> void:
-	if String(id) == "caps":
+	if _s(id) == "caps":
 		Game.caps += int(vm.num(n))
 		Game.stats_changed.emit()
 		return
-	Game.give(String(id), int(vm.num(n)))
+	Game.give(_s(id), int(vm.num(n)))
 	Game.check_quests()
 func take(id = "", n = 1) -> void:
-	if Game.count(String(id)) > 0:
-		Game.take(String(id), int(vm.num(n)))
+	if Game.count(_s(id)) > 0:
+		Game.take(_s(id), int(vm.num(n)))
 func addCaps(n = 0) -> void:
 	Game.caps = maxi(0, Game.caps + int(vm.num(n)))
 	Game.stats_changed.emit()
@@ -76,32 +79,32 @@ func msg(t = "", b = null) -> void: Game.msg(vm.to_str(t))
 
 # ---------------------------------------------------------------- quests and flags
 func setFlag(f = "", v = true) -> void:
-	Game.flags[String(f)] = v
+	Game.flags[_s(f)] = v
 	Game.check_quests()
-func questKnown(id = "") -> bool: return Game.quests.has(String(id))
-func questActive(id = "") -> bool: return Game.quests.has(String(id)) and not Game.quests[String(id)].done
-func questDone(id = "") -> bool: return Game.quests.has(String(id)) and Game.quests[String(id)].done
-func qStage(id = "") -> int: return Game.stage(String(id))
-func start(id = "") -> void: Game.start(String(id))
-func advance(id = "") -> void: Game.advance(String(id))
-func complete(id = "") -> void: Game.complete(String(id))
-func karma(n = 0, why = "") -> void: Game.add_karma(int(vm.num(n)), "" if why == null else String(why))
-func finish(k = "") -> void: Game.finish(String(k))
+func questKnown(id = "") -> bool: return Game.quests.has(_s(id))
+func questActive(id = "") -> bool: return Game.quests.has(_s(id)) and not Game.quests[_s(id)].done
+func questDone(id = "") -> bool: return Game.quests.has(_s(id)) and Game.quests[_s(id)].done
+func qStage(id = "") -> int: return Game.stage(_s(id))
+func start(id = "") -> void: Game.start(_s(id))
+func advance(id = "") -> void: Game.advance(_s(id))
+func complete(id = "") -> void: Game.complete(_s(id))
+func karma(n = 0, why = "") -> void: Game.add_karma(int(vm.num(n)), "" if why == null else _s(why))
+func finish(k = "") -> void: Game.finish(_s(k))
 func coreChoice(k = "") -> void:
-	Game.flags["coreChoice"] = String(k)
+	Game.flags["coreChoice"] = _s(k)
 	if Game.main and Game.main.has_method("core_set"):
-		Game.main.core_set(String(k))
+		Game.main.core_set(_s(k))
 	Game.banner("COOLANT RESTORED" if k == "repair" else "CORE SHUT DOWN", "The core settles to a steady blue" if k == "repair" else "The green light dies")
 	Sfx.play("o_hatch_open")
 	Game.check_quests()
 
 # ---------------------------------------------------------------- the world
-func kills(t = "") -> int: return int(Game.flags.get("k_" + String(t), 0))
-func killed(id = "") -> bool: return Game.killed.has(String(id))
-func enemyName(t = "") -> String: return String(Game.DB.enemies.get(String(t), {}).get("n", t))
+func kills(t = "") -> int: return int(Game.flags.get("k_" + _s(t), 0))
+func killed(id = "") -> bool: return Game.killed.has(_s(id))
+func enemyName(t = "") -> String: return str(Game.DB.enemies.get(_s(t), {}).get("n", _s(t)))
 func allDead(pre = "", n = 0) -> bool:
 	for i in int(vm.num(n)):
-		if not Game.killed.has(String(pre) + str(i)):
+		if not Game.killed.has(_s(pre) + str(i)):
 			return false
 	return true
 func campCleared(ci = 0, n = 0) -> bool:
@@ -109,10 +112,10 @@ func campCleared(ci = 0, n = 0) -> bool:
 		if not Game.killed.has("cp" + vm.to_str(ci) + "_" + str(i)):
 			return false
 	return true
-func visited(k = "") -> bool: return Game.discovered.has(String(k))
+func visited(k = "") -> bool: return Game.discovered.has(_s(k))
 func makeHostile(id = "") -> void:
 	if Game.main:
-		Game.main.make_hostile(String(id))
+		Game.main.make_hostile(_s(id))
 func nearestPool():
 	return Game.main.nearest_pool() if Game.main else null
 func nearestFungus():
@@ -123,9 +126,9 @@ func nextCellSpot():
 # ---------------------------------------------------------------- screens other systems own
 func openTrade(id = "") -> void:
 	if Game.main:
-		Game.main.queue_trade(String(id))
+		Game.main.queue_trade(_s(id))
 func casino(g = "", m = null) -> void: Game.msg("The tables at the Spur open in a later build.")
-func event(k = "") -> void: Game.flags["ev_" + String(k)] = true
+func event(k = "") -> void: Game.flags["ev_" + _s(k)] = true
 func sleep(cost = 0) -> void:
 	Game.caps -= int(vm.num(cost))
 	Game.day += 1
@@ -136,9 +139,10 @@ func sleep(cost = 0) -> void:
 
 # companions arrive with godot-6; until then the logic sees them as not travelling with you
 func recruit(id = "") -> void:
-	Game.flags["recruited_" + String(id)] = true
-	Game.msg(String(vm.get_member(vm.globals.vars.COMPANIONS, String(id)).get("n", id)) + " will travel with you in a later build. They'll remember you offered.")
-func dismiss(id = "") -> void: Game.flags.erase("recruited_" + String(id))
+	Game.flags["recruited_" + _s(id)] = true
+	var c = vm.get_member(vm.globals.vars.COMPANIONS, _s(id))
+	Game.msg((str(c.get("n", _s(id))) if c is Dictionary else _s(id)) + " will travel with you in a later build. They'll remember you offered.")
+func dismiss(id = "") -> void: Game.flags.erase("recruited_" + _s(id))
 func inParty(id = "") -> bool: return false
 func partyState(id = ""): return null
 func partyCmd(id = "", st = "") -> void: pass

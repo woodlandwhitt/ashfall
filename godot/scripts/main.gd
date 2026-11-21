@@ -564,6 +564,53 @@ func _selftest() -> void:
 	out.append("saved caps %d (now %d), weapon %s, level %d" % [int(sv.caps), Game.caps, sv.weapon, int(sv.level)])
 	Game.caps = caps0
 	out.append("xp %d/%d level %d points %d carry %.0f/%.0f" % [Game.xp, Game.xp_need(), Game.level, Game.points, Game.carry_now(), Game.carry_max()])
+	# every conversation line, option condition, quest stage text, check and marker, evaluated against the current state
+	var e0: int = Game.vm.errors
+	var nf := 0
+	for id in Game.DIALOGUE:
+		Game.dlg_entry(id)
+		for nk in Game.DIALOGUE[id].get("nodes", {}):
+			Game.dlg_say(id, nk)
+			Game.dlg_options(id, nk)
+			nf += 1
+	for q in Game.L.quests:
+		var d: Dictionary = Game.L.quests[q]
+		Game.vm.val(d.get("desc", ""), [Game.G])
+		Game.vm.val(d.get("reward"), [Game.G])
+		for st in d.get("stages", []):
+			Game.vm.val(st.get("txt", ""), [Game.G])
+			if st.has("done"):
+				Game.vm.call_value(st.done, [Game.G])
+			if st.has("pos"):
+				Game.vm.val(st.pos, [Game.G])
+	for k in Game.L.points:
+		if Game.L.points[k].has("label"):
+			Game.vm.call_value(Game.L.points[k].label, [{"id": k, "echo": 0, "cellIn": 0}])
+	out.append("evaluated %d dialogue nodes, %d quests, %d quest objects: %d errors %s" % [nf, Game.L.quests.size(), Game.L.points.size(), Game.vm.errors - e0, Game.vm.last_error])
+	# every option's effect, run on a copy of the game state that is thrown away afterwards
+	var keep := {}
+	for k in ["inv", "flags", "quests", "kills", "killed", "shops", "upgrades", "opened", "looted", "discovered"]:
+		keep[k] = Game.get(k).duplicate(true)
+	for k in ["caps", "xp", "level", "points", "karma", "hp", "day"]:
+		keep[k] = Game.get(k)
+	var e1: int = Game.vm.errors
+	var na := 0
+	for id in Game.DIALOGUE:
+		for nk in Game.DIALOGUE[id].get("nodes", {}):
+			for o in Game.DIALOGUE[id].nodes[nk].get("opts", []):
+				if o.has("act"):
+					Game.vm.call_value(o.act, [Game.G])
+					na += 1
+	for k in Game.L.points:
+		if Game.L.points[k].has("use"):
+			Game.vm.call_value(Game.L.points[k].use, [{"id": k, "echo": 0, "cellIn": 0}])
+			na += 1
+	pending_trade = ""
+	hud.screens.close()
+	out.append("ran %d option and object effects: %d errors %s; quests now %d" % [na, Game.vm.errors - e1, Game.vm.last_error, Game.quests.size()])
+	for k in keep:
+		Game.set(k, keep[k])
+	Game._vm_state()
 	for l in out:
 		print("TEST ", l)
 
