@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cax22rstnwbci"
-path="res://.godot/imported/enemy_ghoul_0.png-5485de0a12c1e3eeb482e2f9d95065ed.ctex"
+path.s3tc="res://.godot/imported/enemy_ghoul_0.png-5485de0a12c1e3eeb482e2f9d95065ed.s3tc.ctex"
+path.etc2="res://.godot/imported/enemy_ghoul_0.png-5485de0a12c1e3eeb482e2f9d95065ed.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "001294cb9515b1d290153cf82568f787"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://data/chars/enemy_ghoul_0.png"
-dest_files=["res://.godot/imported/enemy_ghoul_0.png-5485de0a12c1e3eeb482e2f9d95065ed.ctex"]
+dest_files=["res://.godot/imported/enemy_ghoul_0.png-5485de0a12c1e3eeb482e2f9d95065ed.s3tc.ctex", "res://.godot/imported/enemy_ghoul_0.png-5485de0a12c1e3eeb482e2f9d95065ed.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -39,5 +41,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=512
 detect_3d/compress_to=1

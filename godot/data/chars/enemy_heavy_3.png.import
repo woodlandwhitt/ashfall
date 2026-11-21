@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bk0r0vjqg6mh8"
-path="res://.godot/imported/enemy_heavy_3.png-d875e94266fb00d303d72ca5899c4c45.ctex"
+path.s3tc="res://.godot/imported/enemy_heavy_3.png-d875e94266fb00d303d72ca5899c4c45.s3tc.ctex"
+path.etc2="res://.godot/imported/enemy_heavy_3.png-d875e94266fb00d303d72ca5899c4c45.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "08f83e5c30224562c6acc4f0db7e42f4"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://data/chars/enemy_heavy_3.png"
-dest_files=["res://.godot/imported/enemy_heavy_3.png-d875e94266fb00d303d72ca5899c4c45.ctex"]
+dest_files=["res://.godot/imported/enemy_heavy_3.png-d875e94266fb00d303d72ca5899c4c45.s3tc.ctex", "res://.godot/imported/enemy_heavy_3.png-d875e94266fb00d303d72ca5899c4c45.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -39,5 +41,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=512
 detect_3d/compress_to=1

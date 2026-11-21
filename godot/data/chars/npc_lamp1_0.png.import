@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cod4u26nnh576"
-path="res://.godot/imported/npc_lamp1_0.png-b453e60f8d3284c778e8fcffa64c228c.ctex"
+path.s3tc="res://.godot/imported/npc_lamp1_0.png-b453e60f8d3284c778e8fcffa64c228c.s3tc.ctex"
+path.etc2="res://.godot/imported/npc_lamp1_0.png-b453e60f8d3284c778e8fcffa64c228c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "017ef1e2d9f9857ae83838c28ef3e915"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://data/chars/npc_lamp1_0.png"
-dest_files=["res://.godot/imported/npc_lamp1_0.png-b453e60f8d3284c778e8fcffa64c228c.ctex"]
+dest_files=["res://.godot/imported/npc_lamp1_0.png-b453e60f8d3284c778e8fcffa64c228c.s3tc.ctex", "res://.godot/imported/npc_lamp1_0.png-b453e60f8d3284c778e8fcffa64c228c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -39,5 +41,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=512
 detect_3d/compress_to=1

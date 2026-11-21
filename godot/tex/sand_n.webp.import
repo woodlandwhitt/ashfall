@@ -3,27 +3,29 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cu64fncmy7jq6"
-path="res://.godot/imported/sand_n.webp-104f4e59fe37d47404f85fab0c2226e4.ctex"
+path.s3tc="res://.godot/imported/sand_n.webp-104f4e59fe37d47404f85fab0c2226e4.s3tc.ctex"
+path.etc2="res://.godot/imported/sand_n.webp-104f4e59fe37d47404f85fab0c2226e4.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://tex/sand_n.webp"
-dest_files=["res://.godot/imported/sand_n.webp-104f4e59fe37d47404f85fab0c2226e4.ctex"]
+dest_files=["res://.godot/imported/sand_n.webp-104f4e59fe37d47404f85fab0c2226e4.s3tc.ctex", "res://.godot/imported/sand_n.webp-104f4e59fe37d47404f85fab0c2226e4.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=0
+compress/normal_map=1
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
