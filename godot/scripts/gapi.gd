@@ -164,6 +164,7 @@ func recruit(id = "") -> void:
 func dismiss(id = "") -> void:
 	if Game.main:
 		Game.main.dismiss(_s(id))
+func addXp(n = 0) -> void: Game.add_xp(int(vm.num(n)))
 func approve(id = "", n = 0, why = "") -> void: Game.approve(_s(id), int(vm.num(n)), "" if why == null else _s(why))
 func approval(id = "") -> int: return Game.approval(_s(id))
 func loyal(id = "") -> bool: return Game.is_loyal(_s(id))

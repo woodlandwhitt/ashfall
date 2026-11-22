@@ -49,7 +49,7 @@ func setup(m) -> void:
 	lamp.shadow_enabled = false
 	m.add_child(lamp)
 	# rain streaks and blowing dust follow the camera
-	rain_p = _particles(600, Vector3(22, 10, 22), Vector3(1.5, -26, 0.5), Color(0.82, 0.86, 0.92, 0.55), Vector2(0.025, 1.3), 0.8)
+	rain_p = _particles(700, Vector3(22, 10, 22), Vector3(1.5, -26, 0.5), Color(0.82, 0.86, 0.92, 0.4), Vector2(0.018, 0.9), 0.8)
 	dust_p = _particles(90, Vector3(36, 6, 36), Vector3(6, 0.2, 2), Color(0.85, 0.72, 0.52, 0.22), Vector2(3.0, 3.0), 4.0)
 	# soft round puffs, not cards
 	var g := Gradient.new()
@@ -114,6 +114,10 @@ func _particles(n: int, box: Vector3, vel: Vector3, col: Color, size: Vector2, l
 	m.albedo_color = col
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y if size.y > size.x else BaseMaterial3D.BILLBOARD_ENABLED
 	m.disable_receive_shadows = true
+	# streaks right in front of the lens fade out instead of drawing a white bar across the screen
+	m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	m.distance_fade_min_distance = 2.0
+	m.distance_fade_max_distance = 6.0
 	q.material = m
 	p.mesh = q
 	p.local_coords = false
@@ -223,6 +227,10 @@ func _process(dt: float) -> void:
 	var rn := float(cur.rain)
 	rain_p.emitting = rn > 0.1 and not roofed
 	rain_p.global_position = pp + Vector3.UP * 8.0
+	# rain is only as bright as the sky: grey streaks at night, not neon
+	var rm := (rain_p.mesh as QuadMesh).material as StandardMaterial3D
+	var lit := lerpf(0.22, 0.85, day)
+	rm.albedo_color = Color(lit * 0.95, lit, lit * 1.05, lerpf(0.22, 0.4, day))
 	dust_p.emitting = haze > 0.3
 	dust_p.global_position = pp + Vector3.UP * 2.0
 	_vol("o_wind", -24.0 + float(cur.wind) * 5.0)

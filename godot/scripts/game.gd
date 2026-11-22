@@ -41,7 +41,9 @@ var level := 1
 var points := 0               # unspent stat points
 var perk_pts := 0             # unspent perks (one every second level)
 var ap := 100.0               # action points for FOCUS targeting
-var stats := {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}
+# S.P.E.C.I.A.L.: Strength (might), Perception (aim), Endurance, Charisma (charm), Intelligence (intellect), Agility, Luck
+const SPECIAL := ["might", "aim", "endurance", "charm", "intellect", "agility", "luck"]
+var stats := {"might": 5, "aim": 5, "endurance": 5, "charm": 5, "intellect": 5, "agility": 5, "luck": 5}
 var perks: Dictionary = {}
 var karma := 0
 var weapon := "pipe_pistol"
@@ -193,7 +195,7 @@ func use_item(id: String) -> void:
 			take(id)
 			var heal := float(it.get("heal", 0))
 			if heal > 0:
-				hp = minf(hp_max, hp + heal * (1.25 if perks.has("iron_gut") else 1.0))
+				hp = minf(hp_max, hp + heal * (1.25 if perks.has("iron_gut") else 1.0) * (1.0 + (int(stats.get("intellect", 5)) - 5) * 0.04))
 			if it.get("rad") and not perks.has("iron_gut"):
 				add_rad(float(it.rad) * (1.0 - (int(stats.endurance) - 5) * 0.04), false)
 			if it.get("radx"):
@@ -373,6 +375,9 @@ func load_game(slot: String) -> bool:
 	for k in ["killed", "shops", "upgrades", "opened"]:
 		set(k, s.get(k, {}))
 	day = int(s.get("day", 1))
+	for st in SPECIAL:
+		if not stats.has(st):
+			stats[st] = 5
 	for q in quests:
 		quests[q].stage = int(quests[q].stage)
 	_vm_state()
@@ -435,7 +440,7 @@ func reset() -> void:
 		set(k, {})
 	day = 1
 	_vm_state()
-	stats = {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}
+	stats = {"might": 5, "aim": 5, "endurance": 5, "charm": 5, "intellect": 5, "agility": 5, "luck": 5}
 	caps = 25
 	xp = 0
 	level = 1
@@ -463,6 +468,11 @@ func _ready() -> void:
 	for k in EXTRA_ITEMS:
 		if not DB.items.has(k):
 			DB.items[k] = EXTRA_ITEMS[k]
+	# the seventh letter, and every stat named for its letter
+	DB.statinfo = {"might": ["STRENGTH", "Melee damage, carry weight, intimidation"], "aim": ["PERCEPTION", "Firearm damage, FOCUS accuracy, spotting trouble"],
+		"endurance": ["ENDURANCE", "Health and radiation resistance"], "charm": ["CHARISMA", "Better prices and new things to say"],
+		"intellect": ["INTELLIGENCE", "Experience gained, healing from medicine, and clever things to say"],
+		"agility": ["AGILITY", "Move speed, reload speed, Action Points"], "luck": ["LUCK", "Critical hit chance, the tables at the Spur"]}
 	L = _json("res://data/logic.json")
 	_merge_story()
 	CELLS = _json("res://data/cells.json")
@@ -731,6 +741,7 @@ func cell_at(x: float, z: float) -> int:
 	return -1
 
 func add_xp(n: int) -> void:
+	n = maxi(1, int(round(n * (1.0 + (int(stats.get("intellect", 5)) - 5) * 0.05)))) if n > 0 else n
 	xp += n
 	while xp >= xp_need():
 		xp -= xp_need()

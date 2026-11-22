@@ -229,6 +229,8 @@ func _build(k: String, ps: PackedScene) -> void:
 		on_enter.call(k)
 
 func _tune(n: Node) -> void:
+	if Game.area in ["world", "cells"]:
+		Weathering.apply(n)
 	for c in n.find_children("*", "MeshInstance3D", true, false):
 		var mi := c as MeshInstance3D
 		if mi.name == "Ground":

@@ -29,14 +29,14 @@ func _make_rig() -> void:
 		m.visible = String(m.name).ends_with("_Arms")
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if m.visible and m.mesh:
-			# sleeves and elbows that come right up to the lens dissolve instead of filling the corners
+			# only what actually touches the lens dissolves (the arms themselves stay solid)
 			var fade := func(src: Material) -> Material:
 				if not src is StandardMaterial3D:
 					return src
 				var mm := (src as StandardMaterial3D).duplicate() as StandardMaterial3D
 				mm.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
-				mm.distance_fade_min_distance = 0.25
-				mm.distance_fade_max_distance = 0.4
+				mm.distance_fade_min_distance = 0.04
+				mm.distance_fade_max_distance = 0.09
 				return mm
 			if m.material_override:
 				m.material_override = fade.call(m.material_override)
@@ -269,7 +269,7 @@ func setup_melee(armed: bool, id: String) -> void:
 		n = n.get_parent()
 	var vm_from_sk: Transform3D = rig.transform * sk
 	var sk_from_vm := vm_from_sk.affine_inverse()
-	melee_kind = id if armed else "fist"
+	melee_kind = id if armed and id != "" and id != "fists" else "fist"
 	var two := id in ["sledge", "bat"]
 	var grip_vm := Vector3(0.2, -0.24, -0.38) if not two else Vector3(0.17, -0.27, -0.36)
 	if melee_kind == "fist":

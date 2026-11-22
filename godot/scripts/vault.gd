@@ -27,7 +27,8 @@ func P(x: float, y: float, z: float) -> Vector3:
 static func mat(c: Color, metal := 0.0, rough := 0.7) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = c
-	m.metallic = metal
+	# no sky down here to reflect, so real metal reads as black: paint it instead
+	m.metallic = minf(metal, 0.25)
 	m.roughness = rough
 	return m
 
@@ -208,6 +209,7 @@ func _locker() -> void:
 	var g := Node3D.new()
 	add_child(g)
 	g.position = P(-19.0, 0.0, 73.4)
+	g.rotation.y = PI    # doors toward the room, back to the wall
 	box(Vector3(1.6, 2.0, 0.55), Vector3(0, 1.0, 0), body, g)
 	for x in [-0.4, 0.4]:
 		box(Vector3(0.76, 1.9, 0.02), Vector3(x, 1.0, 0.285), mat(Color(0.36, 0.43, 0.41), 0.6, 0.4), g)

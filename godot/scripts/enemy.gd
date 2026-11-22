@@ -35,6 +35,7 @@ var group := ""        # neutral groups (Kess's crew, the herd) turn on you toge
 var loot = null          # what the body holds once searched
 var npc = null           # a townsperson you provoked
 var essential := false   # they yield instead of dying
+var since_hit := 0.0     # a provoked townsperson cools off when you stop hitting them and walk away
 var foe = null           # the companion it is fighting, or null for you
 var crip := {}           # FOCUS hits: crippled legs slow it, crippled arms spoil its aim
 # tactics: what it is doing inside a fight
@@ -163,6 +164,7 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 	if Game.dev.onehit:
 		amount = maxf(amount, hp + 1.0)
 	hp -= amount
+	since_hit = 0.0
 	flash = 0.12
 	if ap and hp > 0.0:
 		_one_shot(["Hit_Chest", "Hit_Head"][randi() % 2], 0.45)

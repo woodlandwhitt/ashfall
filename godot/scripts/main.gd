@@ -248,6 +248,14 @@ func _place_stealables() -> void:
 			var h := space.intersect_ray(q)
 			if h.is_empty() or h.normal.y < 0.8:
 				continue
+			# not inside a closed building's shell (traders stand at their doors; the room behind is its own interior)
+			var up := space.intersect_ray(PhysicsRayQueryParameters3D.create(h.position + Vector3.UP * 0.3, h.position + Vector3.UP * 12.0, 1))
+			if not up.is_empty() and Game.area == "world":
+				continue
+			# and in plain view of its owner
+			var seen := space.intersect_ray(PhysicsRayQueryParameters3D.create(h.position + Vector3.UP * 0.3, Vector3(float(d.x), float(d.get("y", h.position.y)) + 1.2, float(d.z)), 1))
+			if not seen.is_empty():
+				continue
 			# on something flat and clear (a counter, a table, the floor), not in a wall
 			var sq := PhysicsShapeQueryParameters3D.new()
 			var sh := SphereShape3D.new()
@@ -681,6 +689,25 @@ func npc_yield(e) -> void:
 	if is_instance_valid(e) and not e.dead:
 		_calm(e)
 
+# townsfolk you provoked don't stay angry forever: once you've stopped hitting them for a while and kept your
+# distance (or simply left them alone long enough), they go back to their lives and their quests carry on
+var _forgive_t := 0.0
+func _forgive_tick(d: float) -> void:
+	_forgive_t -= d
+	if _forgive_t > 0.0:
+		return
+	_forgive_t = 1.0
+	for e in enemies.duplicate():
+		if not is_instance_valid(e) or e.dead or e.get("npc") == null:
+			continue
+		e.since_hit += 1.0
+		var far: bool = e.global_position.distance_to(player.global_position) > 30.0
+		if (far and e.since_hit > 25.0) or e.since_hit > 120.0:
+			var nm := String(e.npc.display_name) if is_instance_valid(e.npc) else "They"
+			_calm(e)
+			Game.msg(nm + " has calmed down.")
+			Game.flags["forgiven_" + String(e.get("npc_id") if e.get("npc_id") else nm)] = Game.day
+
 func _calm(o) -> void:
 	var m = o.npc
 	enemies.erase(o)
@@ -787,6 +814,19 @@ func _test_hooks() -> void:
 		await _story_test()
 	if args.has("forgetest"):
 		await _forge_test()
+	if args.has("matdump"):
+		# list the meshes and materials around a spot (finding which exported material a prop uses)
+		var v := String(args.matdump).split(",")
+		var c := Vector3(float(v[0]), 0, float(v[1]))
+		await _wait(20)
+		for mi in find_children("*", "MeshInstance3D", true, false):
+			var ab: AABB = mi.global_transform * mi.get_aabb()
+			var cc := ab.get_center()
+			if Vector2(cc.x - c.x, cc.z - c.z).length() < float(v[2]) or (ab.size.length() >= 30.0 and ab.grow(0.5).has_point(Vector3(c.x, ab.get_center().y, c.z))):
+				for i in mi.mesh.get_surface_count():
+					var m = mi.get_active_material(i)
+					print("MAT %s %s size %s surf %d mat %s %s vc %s tex %s" % [mi.name, str(cc.snapped(Vector3.ONE * 0.1)), str(ab.size.snapped(Vector3.ONE * 0.1)), i, str(m.resource_name) if m else "-", m.get_class() if m else "", str(m.vertex_color_use_as_albedo if m is StandardMaterial3D else ""), str(m.albedo_texture.resource_path if m is StandardMaterial3D and m.albedo_texture else "")])
+		get_tree().quit()
 	if args.has("casinotest"):
 		await _casino_test()
 	if args.has("casino"):
@@ -853,8 +893,9 @@ func _test_hooks() -> void:
 		atmos.set_weather(String(args.wx), true)
 		atmos.cur = Atmos.WX[String(args.wx)].duplicate()
 	if args.has("weapon"):
-		Game.give(String(args.weapon), 1)
-		Game.weapon = String(args.weapon)
+		if String(args.weapon) != "none":
+			Game.give(String(args.weapon), 1)
+		Game.weapon = "" if String(args.weapon) == "none" else String(args.weapon)
 		player.weapon_changed()
 		if args.has("sidecam"):
 			# look at the hands from the right side, to check the grip
@@ -2110,7 +2151,8 @@ func _environment() -> void:
 	elif Game.area == "cells":
 		# inside the town's buildings: lamplight and a little daylight from the windows
 		env.background_mode = Environment.BG_COLOR
-		env.background_color = Color(0.02, 0.018, 0.015)
+		# a pinhole between two wall pieces shows this, so make it the colour of the room, not a black void
+		env.background_color = Color(0.26, 0.22, 0.18)
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.ambient_light_color = Color(0.95, 0.87, 0.75)
 		env.ambient_light_energy = 0.95
@@ -2134,7 +2176,7 @@ func _environment() -> void:
 	elif Game.area == "vault":
 		# underground: no sky, no sun, cool strip lights along the corridors
 		env.background_mode = Environment.BG_COLOR
-		env.background_color = Color(0.02, 0.025, 0.03)
+		env.background_color = Color(0.24, 0.27, 0.26)
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.ambient_light_color = Color(0.7, 0.74, 0.78)
 		env.ambient_light_energy = 1.0
@@ -2144,7 +2186,7 @@ func _environment() -> void:
 		sun.shadow_enabled = false
 		env.ambient_light_energy = 0.8
 		env.ambient_light_color = Color(0.72, 0.75, 0.78)
-		env.background_color = Color(0.02, 0.022, 0.025)
+		env.background_color = Color(0.24, 0.27, 0.26)
 		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 		env.glow_intensity = 0.5
 		env.glow_bloom = 0.04
@@ -2850,6 +2892,7 @@ func _process(d: float) -> void:
 	if player == null or hud == null:
 		return
 	_spur_ambience(d)
+	_forgive_tick(d)
 	_bake_nav()
 	disc_t -= d
 	if disc_t <= 0.0:

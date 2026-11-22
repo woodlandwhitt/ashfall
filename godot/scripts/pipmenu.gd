@@ -414,8 +414,9 @@ func _special() -> void:
 		"aim": "Firearm damage %+d%%" % ((int(Game.stats.aim) - 5) * 5),
 		"luck": "%d%% chance of a critical hit" % maxi(0, 3 + int(Game.stats.luck) - 5),
 		"charm": "Better prices from traders; new things to say",
+		"intellect": "Experience %+d%%, healing from medicine %+d%%" % [(int(Game.stats.get("intellect", 5)) - 5) * 5, (int(Game.stats.get("intellect", 5)) - 5) * 4],
 	}
-	for k in ["might", "agility", "endurance", "aim", "luck", "charm"]:
+	for k in Game.SPECIAL:
 		var info: Array = Game.DB.statinfo.get(k, [k.to_upper(), ""])
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
@@ -436,7 +437,7 @@ func _special() -> void:
 			var r := ColorRect.new()
 			r.custom_minimum_size = Vector2(14, 20)
 			r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			r.color = GREEN if i < int(Game.stats[k]) else Color(0.08, 0.2, 0.1)
+			r.color = GREEN if i < int(Game.stats.get(k, 5)) else Color(0.08, 0.2, 0.1)
 			pips.add_child(r)
 		_label(row, str(int(Game.stats[k])), 20, BRIGHT).custom_minimum_size = Vector2(28, 0)
 		if Game.points > 0 and int(Game.stats[k]) < 10:
@@ -894,7 +895,6 @@ func _radio() -> void:
 			show_tab("RADIO"), 110)
 	if Game.main.radio_on and Game.main.now_playing != "":
 		_label(L, "Now playing: " + Game.main.now_playing, 17, AMBERC)
-		_label(L, "Music: filmmusic.io (CC BY 4.0)", 14, DIM)
 	if not Game.main.station_open(1):
 		_label(L, "Somewhere north a transmitter is waiting for someone to fix it.", 15, DIM)
 	_title(R, "Broadcasts received")

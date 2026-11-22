@@ -159,11 +159,13 @@ func best(pp: Vector3, fwd: Vector3, bd: float) -> Dictionary:
 				found = {"k": "obj", "o": o, "label": String(l), "d": bd, "at": Vector3(x, float(o.y) if o.has("y") else Game.height(x, z), z)}
 	# nothing through walls: the eye must see the object (doors and wall-mounted things are allowed their own wall)
 	if not found.is_empty() and found.o._k not in ["ldoor", "door"] and not found.o.has("pr"):
-		var at: Vector3 = found.at + Vector3.UP * 0.9
+		var small: bool = found.o._k == "pickup"
+		var at: Vector3 = found.at + Vector3.UP * (0.25 if small else 0.9)
 		var eye := pp + Vector3.UP * 1.5
 		var q := PhysicsRayQueryParameters3D.create(eye, at, 1)
 		var hit := get_world_3d().direct_space_state.intersect_ray(q)
-		if not hit.is_empty() and Vector2(hit.position.x - at.x, hit.position.z - at.z).length() > 1.3:
+		# things on the ground must be in plain sight; furniture-sized things may sit against their own wall
+		if not hit.is_empty() and (hit.position.distance_to(at) > 0.45 if small else Vector2(hit.position.x - at.x, hit.position.z - at.z).length() > 1.3):
 			return {}
 	return found
 

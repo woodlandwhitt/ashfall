@@ -676,7 +676,7 @@ func _intro(i: int) -> void:
 func _create() -> void:
 	mode = "create"
 	if cre.is_empty():
-		cre = {"stats": {"might": 5, "agility": 5, "endurance": 5, "aim": 5, "luck": 5, "charm": 5}, "points": 3}
+		cre = {"stats": {"might": 5, "aim": 5, "endurance": 5, "charm": 5, "intellect": 5, "agility": 5, "luck": 5}, "points": 3}
 	_clear()
 	_label(body, "HAVEN 12 RESIDENT REGISTRATION", 26, Color(1.0, 0.85, 0.5))
 	var nr := _row()
