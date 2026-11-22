@@ -1175,7 +1175,7 @@ func _system() -> void:
 	ab.pressed.connect(func(): Game.load_game("auto"))
 	arow.add_child(ab)
 	var g := Button.new()
-	g.text = "Graphics: " + Quality.NAMES[Game.main.quality] + "  (tap to change)"
+	g.text = "Graphics: " + Quality.label(Game.main.quality) + "  (tap to change)"
 	g.custom_minimum_size = Vector2(0, 54)
 	g.pressed.connect(func():
 		Game.main.cycle_quality()

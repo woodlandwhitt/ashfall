@@ -377,7 +377,7 @@ func _render() -> void:
 	_btn(g, "SHOWN" if Game.main.hud.root.visible else "HIDDEN", func(): Game.main.hud.root.visible = not Game.main.hud.root.visible)
 	g = _row("Field of view", "%d°" % int(Game.player.cam.fov))
 	for f in [60, 75, 90, 105]:
-		_btn(g, str(f) + "°", func(): Game.player.cam.fov = f)
+		_btn(g, str(f) + "°", func(): Quality.fov = f; Game.player.cam.fov = f)
 	g = _row("Debug", "")
 	_btn(g, "SHOW COLLISION BOXES" if not get_tree().debug_collisions_hint else "HIDE COLLISION BOXES", func():
 		get_tree().debug_collisions_hint = not get_tree().debug_collisions_hint

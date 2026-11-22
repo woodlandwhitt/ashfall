@@ -30,6 +30,13 @@ var talk_cd := 0.0
 var chunks
 var grass_nodes: Array = []
 var quality := 1
+var lamp_nodes: Array = []
+var lamp_detail := 1:
+	set(v):
+		lamp_detail = v
+		for o in lamp_nodes:
+			if is_instance_valid(o):
+				(o as OmniLight3D).distance_fade_begin = [22.0, 50.0, 95.0][clampi(v, 0, 2)]
 var terrain_mi: MeshInstance3D
 var terrain_full: ShaderMaterial
 var terrain_lite: ShaderMaterial
@@ -2511,7 +2518,8 @@ func set_quality(l: int) -> void:
 	chunks.set_material(terrain_lite if l == 0 else terrain_full)
 
 func cycle_quality() -> String:
-	set_quality((quality + 1) % 3)
+	Quality.custom = {}
+	set_quality((quality + 1) % Quality.NAMES.size())
 	return Quality.NAMES[quality]
 
 func _colliders() -> void:
@@ -2611,9 +2619,10 @@ func _lamps() -> void:
 		o.omni_range = float(l.d) if float(l.d) > 0.0 else 10.0
 		o.position = Vector3(l.x, l.y, l.z)
 		o.distance_fade_enabled = true
-		o.distance_fade_begin = 50.0
+		o.distance_fade_begin = [22.0, 50.0, 95.0][clampi(lamp_detail, 0, 2)]
 		o.distance_fade_length = 15.0
 		add_child(o)
+		lamp_nodes.append(o)
 
 # one grass tuft: seven thin blades leaning out from the centre (chunks scatter them)
 func _grass_mesh() -> Mesh:

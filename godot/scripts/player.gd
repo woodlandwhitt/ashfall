@@ -192,7 +192,7 @@ func _physics_process(d: float) -> void:
 	# chems, buffs and radiation; action points come back over time, slower while something is hunting you
 	Game.body_tick(d)
 	fxc = Game.fx()
-	cam.fov = lerpf(cam.fov, 75.0 * float(fxc.fov) + sin(Time.get_ticks_msec() * 0.0011) * 4.0 * float(fxc.warp), minf(1.0, d * 3.0))
+	cam.fov = lerpf(cam.fov, Quality.fov * float(fxc.fov) + sin(Time.get_ticks_msec() * 0.0011) * 4.0 * float(fxc.warp), minf(1.0, d * 3.0))
 	if Game.dev.ap:
 		Game.ap = Game.ap_max
 	if Game.ap < Game.ap_max:

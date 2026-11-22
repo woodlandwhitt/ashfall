@@ -235,7 +235,7 @@ func _ready() -> void:
 	pause_panel = _center_panel("Paused", [["Resume", toggle_pause], ["Save game", _save_now], ["Settings", _open_settings],
 		["Developer", func(): toggle_pause(); toggle_dev()], ["Forge mode", func(): toggle_pause(); Game.main.forge.toggle()],
 		["Main menu", func(): toggle_pause(); screens.open_title()]])
-	settings_panel = _center_panel("Settings", [["Graphics", _cycle_gfx], ["Camera: first / third person", func(): Game.player.toggle_view(); _settings_labels()],
+	settings_panel = _center_panel("Settings", [["Graphics", _open_gfx], ["Camera: first / third person", func(): Game.player.toggle_view(); _settings_labels()],
 		["DEV button on screen", func(): _flip_setting("dev")], ["FORGE button on screen", func(): _flip_setting("forge")], ["Back", func(): settings_panel.visible = false; pause_panel.visible = true]])
 	settings_panel.offset_top = -260
 	settings_panel.offset_bottom = 260
@@ -511,6 +511,81 @@ func _panel_button(p: PanelContainer, prefix: String) -> Button:
 			return b
 	return null
 
+# ---------------------------------------------------------------- the Graphics menu: a preset, then every setting
+var gfx_panel: PanelContainer
+func _open_gfx() -> void:
+	settings_panel.visible = false
+	if gfx_panel == null:
+		gfx_panel = PanelContainer.new()
+		_place(gfx_panel, Control.PRESET_CENTER, -290, -300, 580, 600)
+		root.add_child(gfx_panel)
+	gfx_panel.visible = true
+	_gfx_rows()
+
+func _gfx_rows() -> void:
+	for c in gfx_panel.get_children():
+		c.queue_free()
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 8)
+	gfx_panel.add_child(outer)
+	var t := Label.new()
+	t.text = "Graphics"
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.add_theme_font_size_override("font_size", 24)
+	outer.add_child(t)
+	var sc := ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	outer.add_child(sc)
+	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_theme_constant_override("separation", 6)
+	sc.add_child(v)
+	var add := func(text: String, cb: Callable) -> void:
+		var b := Button.new()
+		b.text = text
+		b.custom_minimum_size = Vector2(0, 50)
+		b.pressed.connect(cb)
+		v.add_child(b)
+	add.call("Preset: " + Quality.label(Game.main.quality) + "  (tap to change)", func():
+		Game.main.cycle_quality()
+		_gfx_rows())
+	var q := Quality.current(Game.main.quality)
+	for o in Quality.OPTS:
+		var key: String = o[0]
+		var vals: Array = o[2]
+		var names: Array = o[3]
+		var cur = q.get(key)
+		var i := 0
+		for j in vals.size():
+			if typeof(vals[j]) == typeof(cur) and vals[j] == cur or (typeof(cur) in [TYPE_INT, TYPE_FLOAT] and typeof(vals[j]) in [TYPE_INT, TYPE_FLOAT] and is_equal_approx(float(vals[j]), float(cur))):
+				i = j
+		add.call("%s: %s" % [o[1], names[i]], func():
+			var nv = vals[(i + 1) % vals.size()]
+			if key == "fov":
+				Quality.fov = float(nv)
+			else:
+				Quality.custom[key] = nv
+			Game.main.set_quality(Game.main.quality)
+			_gfx_rows())
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	outer.add_child(row)
+	for b2 in [["Reset to preset", func():
+			Quality.custom = {}
+			Quality.fov = 75.0
+			Game.main.set_quality(Game.main.quality)
+			_gfx_rows()], ["Back", func():
+			gfx_panel.visible = false
+			settings_panel.visible = true
+			_settings_labels()]]:
+		var bb := Button.new()
+		bb.text = b2[0]
+		bb.custom_minimum_size = Vector2(0, 50)
+		bb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bb.pressed.connect(b2[1])
+		row.add_child(bb)
+
 func _open_settings() -> void:
 	pause_panel.visible = false
 	settings_panel.visible = true
@@ -524,7 +599,7 @@ func _flip_setting(k: String) -> void:
 func _settings_labels() -> void:
 	var g := _panel_button(settings_panel, "Graphics")
 	if g and Game.main:
-		g.text = "Graphics: " + Quality.NAMES[Game.main.quality] + "  (tap to change)"
+		g.text = "Graphics: " + Quality.label(Game.main.quality) + "  (more)"
 	var c := _panel_button(settings_panel, "Camera")
 	if c and Game.player:
 		c.text = "Camera: " + ("third person" if Game.player.tp and Game.player.tp.on else "first person")
@@ -635,6 +710,8 @@ func toggle_pause() -> void:
 	get_tree().paused = Game.paused
 	pause_panel.visible = Game.paused
 	settings_panel.visible = false
+	if gfx_panel:
+		gfx_panel.visible = false
 	var sb := _panel_button(pause_panel, "Save game")
 	if sb:
 		sb.text = "Save game"

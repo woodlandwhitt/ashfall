@@ -211,7 +211,7 @@ func _process(dt: float) -> void:
 		sm.sun_angle_max = 20.0 if not moon else 6.0
 	var fogc := Color(0.78, 0.68, 0.55).lerp(Color(0.1, 0.1, 0.14), night).lerp(Color(0.75, 0.62, 0.45) * (0.35 + 0.65 * day), haze)
 	env.fog_light_color = fogc.lerp(Color(0.5, 0.7, 0.38) * (0.3 + 0.7 * day), green * 0.45)
-	env.fog_density = 0.0045 * (1.0 + haze * 5.0 + float(cur.rain) * 1.0) * (1.0 + night * 0.4)
+	env.fog_density = 0.0045 * Quality.haze * (1.0 + haze * 5.0 + float(cur.rain) * 1.0) * (1.0 + night * 0.4)
 	env.tonemap_exposure = 1.0 + (0.45 * night if float(f.night) > 0.0 else 0.0) * float(f.night)
 	env.adjustment_saturation = 0.9 * float(f.sat)
 	env.adjustment_contrast = 1.05 * float(f.con)
