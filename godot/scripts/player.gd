@@ -17,6 +17,8 @@ var vm: Viewmodel
 var fxc: Dictionary = {"speed": 1.0, "spread": 1.0, "ap": 1.0, "fov": 1.0, "warp": 0.0}
 var flash_q: MeshInstance3D
 var running := false
+var crouch := false          # sneaking: slower, lower, much harder to notice
+var eye_h := EYE
 var step_d := 0.0
 var step_lr := 0
 var fire_cd := 0.0
@@ -146,7 +148,11 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_R: reload()
 			KEY_G: throw_nade()
 			KEY_V: Game.main.hud.focus.enter()
-			KEY_SHIFT: running = not running
+			KEY_SHIFT:
+				running = not running
+				if running:
+					crouch = false
+			KEY_C, KEY_CTRL: toggle_crouch()
 			KEY_ESCAPE: Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			KEY_F1, KEY_QUOTELEFT: Game.main.hud.toggle_dev()
 			KEY_F2: Game.main.forge.toggle()
@@ -177,7 +183,7 @@ func _physics_process(d: float) -> void:
 	if Game.main.buggy and Game.main.buggy.driving:
 		Game.main.buggy.drive(d, iv)
 		return
-	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 else WALK) * float(fxc.speed) * float(Game.dev.speed)
+	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 and not crouch else WALK) * float(fxc.speed) * float(Game.dev.speed) * (0.5 if crouch else 1.0)
 	# free flight: through walls, wherever you look (forge mode flies this way too)
 	if Game.dev.noclip or (Game.main.forge and Game.main.forge.active):
 		collision_mask = 0
@@ -221,6 +227,24 @@ func _physics_process(d: float) -> void:
 	if trigger and not talking:
 		fire()
 
+func toggle_crouch() -> void:
+	crouch = not crouch
+	if crouch:
+		running = false
+	Sfx.play("k_cloth1", -10.0)
+
+# how noticeable you are: sneaking and keeping still hide you; running gives you away
+func visibility() -> float:
+	var v := 1.0
+	var hs := Vector2(velocity.x, velocity.z).length()
+	if crouch:
+		v = 0.32 if hs < 0.5 else 0.48
+	elif hs > WALK + 0.5:
+		v = 1.2
+	if Game.dev.invis:
+		v = 0.0
+	return v * (0.8 if Game.time < 0.25 or Game.time > 0.8 else 1.0)
+
 func jump() -> void:
 	if is_on_floor():
 		velocity.y = JUMP_V
@@ -232,7 +256,8 @@ func _process(d: float) -> void:
 	var sh := Vector2(randf() - 0.5, randf() - 0.5) * hurt_shake * 0.03
 	cam.rotation = Vector3(pitch + recoil * 0.06 + sh.y, 0, sh.x)
 	rotation.y = yaw
-	cam.position.y = EYE + sin(bob * 2.0) * 0.025
+	eye_h = lerpf(eye_h, EYE * (0.62 if crouch else 1.0), 1.0 - exp(-10.0 * d))
+	cam.position.y = eye_h + sin(bob * 2.0) * 0.025
 	var hs := Vector2(velocity.x, velocity.z).length()
 	var target := Vector3(sin(bob) * 0.008 * hs * 0.2, absf(cos(bob)) * 0.006 * hs * 0.2, recoil * 0.025)
 	if reload_t > 0.0:
@@ -322,10 +347,15 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 			if c.get("quad") == false and c.get("model") != null:
 				head = hit.position.y - c.global_position.y > 1.5 * float(c.model.scale.y)
 			var was_dead: bool = c.get("dead") == true
+			# a sneak attack: crouched, on something that hasn't noticed you
+			var sneak: bool = crouch and c.get("hostile") == true and c.get("state") != null and c.get("state") != "chase"
+			if sneak:
+				dmg *= 3.0 if String(Game.item(Game.weapon).get("kind", "")) == "melee" or Game.weapon == "" else 2.0
+				Game.msg("Sneak attack!")
 			c.hit(dmg * randf_range(0.9, 1.1) * (2.0 if crit else 1.0) * (1.5 if head else 1.0), hit.position, dir)
 			if c.get("hp_max") != null and Game.main and Game.main.hud:
 				var killed: bool = c.get("dead") == true and not was_dead
-				Game.main.hud.hit_marker("kill" if killed else ("crit" if crit or head else "hit"))
+				Game.main.hud.hit_marker("kill" if killed else ("crit" if crit or head or sneak else "hit"))
 				Game.main.hud.track_target(c)
 				if head and not killed:
 					Sfx.play("k_click", -10.0, 1.6)

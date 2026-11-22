@@ -28,6 +28,22 @@ func _make_rig() -> void:
 		var m := mi as MeshInstance3D
 		m.visible = String(m.name).ends_with("_Arms")
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if m.visible and m.mesh:
+			# sleeves and elbows that come right up to the lens dissolve instead of filling the corners
+			var fade := func(src: Material) -> Material:
+				if not src is StandardMaterial3D:
+					return src
+				var mm := (src as StandardMaterial3D).duplicate() as StandardMaterial3D
+				mm.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+				mm.distance_fade_min_distance = 0.25
+				mm.distance_fade_max_distance = 0.4
+				return mm
+			if m.material_override:
+				m.material_override = fade.call(m.material_override)
+			else:
+				for i in m.mesh.get_surface_count():
+					var src: Material = m.get_surface_override_material(i)
+					m.set_surface_override_material(i, fade.call(src if src else m.mesh.surface_get_material(i)))
 		m.extra_cull_margin = 2.0
 	ap = rig.get_node("AnimationPlayer")
 	ap.playback_default_blend_time = 0.12
@@ -229,6 +245,9 @@ var melee_m0 := Transform3D.IDENTITY
 var melee_off := Transform3D.IDENTITY
 var melee_holder: Node3D
 var melee_hand := -1
+var fist_l: Node3D
+var fist_r: Node3D
+var jab_left := false
 
 func setup_melee(armed: bool, id: String) -> void:
 	_make_rig()
@@ -253,6 +272,12 @@ func setup_melee(armed: bool, id: String) -> void:
 	melee_kind = id if armed else "fist"
 	var two := id in ["sledge", "bat"]
 	var grip_vm := Vector3(0.2, -0.24, -0.38) if not two else Vector3(0.17, -0.27, -0.36)
+	if melee_kind == "fist":
+		grip_vm = Vector3(0.15, -0.19, -0.36)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--curl="):
+			var c := a.trim_prefix("--curl=").split(",")
+			FingerCurl.AXIS = Vector3(float(c[0]), float(c[1]), float(c[2]))
 	kick = Node3D.new()
 	skel.add_child(kick)
 	mount = Node3D.new()
@@ -278,9 +303,26 @@ func setup_melee(armed: bool, id: String) -> void:
 	ikr.setup(skel, "r", rt)
 	ikr.pin_rotation = true
 	var lt := Node3D.new()
-	skel.add_child(lt)
-	lt.position = sk_from_vm * Vector3(-0.3, -0.75, -0.05)
 	var ikl := ArmIK.new()
+	if melee_kind == "fist":
+		# bare hands: both fists up in a guard, knuckles forward
+		mount.add_child(lt)
+		var lfy := Vector3(0.22, 0.1, -1.0).normalized()
+		var lfx := Vector3(-1.0, 0.0, -0.15)
+		lfx = (lfx - lfy * lfx.dot(lfy)).normalized()
+		var lhand := Basis(lfx, lfy, lfx.cross(lfy).normalized())
+		var lgrip := Vector3(-grip_vm.x + 0.02, grip_vm.y + 0.02, grip_vm.z - 0.03)
+		lt.transform = to_mount.call(Transform3D(lhand, lgrip - lhand * Vector3(-0.03, 0.065, 0.0)))
+		ikl.pin_rotation = true
+		fist_l = lt
+		fist_r = rt
+		for side in ["r", "l"]:
+			var fc := FingerCurl.new()
+			skel.add_child(fc)
+			fc.setup(skel, side)
+	else:
+		skel.add_child(lt)
+		lt.position = sk_from_vm * Vector3(-0.3, -0.75, -0.05)
 	skel.add_child(ikl)
 	ikl.setup(skel, "l", lt)
 	# the weapon, built along +Y (handle at the origin) and turned so it rises up and forward out of the fist
@@ -370,6 +412,16 @@ func _melee_swing() -> void:
 		var r := Basis(Vector3(1, 0, 0), rx) * Basis(Vector3(0, 0, 1), rz)
 		return Transform3D(B0 * r, O0 + B0 * off)
 	kick_tw = create_tween()
+	if melee_kind == "fist" and fist_l:
+		# jab, alternating hands: the punching fist drives forward and in, then snaps back
+		jab_left = not jab_left
+		var f: Node3D = fist_l if jab_left else fist_r
+		var p0 := f.position
+		var fwd := (mount.transform.basis.inverse() * k_back).normalized() * -1.0
+		var inward := (mount.transform.basis.inverse() * k_right).normalized() * (0.06 if jab_left else -0.06)
+		kick_tw.tween_property(f, "position", p0 + fwd * 0.2 + inward, 0.07).set_ease(Tween.EASE_OUT)
+		kick_tw.tween_property(f, "position", p0, 0.16).set_trans(Tween.TRANS_QUAD)
+		return
 	if melee_kind == "fist" or melee_kind == "piston_fist":
 		kick_tw.tween_property(mount, "transform", pose.call(-0.25, 0.0, Vector3(-0.1, 0.06, -0.22)), 0.07).set_ease(Tween.EASE_OUT)
 		kick_tw.tween_property(mount, "transform", melee_m0, 0.18).set_trans(Tween.TRANS_QUAD)

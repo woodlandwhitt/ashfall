@@ -35,6 +35,13 @@ export const QUEST_REP = {
 export const VENDOR_FACTION = {duggan: 'dustwell', cass: 'dustwell', brannock: 'dustwell', halloran: 'dustwell', wick: 'dustwell', hollis: 'dustwell',
   kess: 'gantry', ro: 'lamplight', vex: 'spur', della: 'spur', oskar: 'saltreach', jun: 'saltreach', hale: 'saltreach', maren: 'saltreach', ezra: 'saltreach'};
 
+// whose people are whose (stealing in front of them costs standing with their faction)
+export const NPC_FACTION = {sheriff: 'dustwell', cass: 'dustwell', duggan: 'dustwell', brannock: 'dustwell', halloran: 'dustwell', wick: 'dustwell',
+  hollis: 'dustwell', tamsin: 'dustwell', finch: 'dustwell', pip: 'dustwell', ines: 'saltreach', oskar: 'saltreach', jun: 'saltreach', hale: 'saltreach',
+  maren: 'saltreach', ezra: 'saltreach', amos: 'saltreach', teodor: 'saltreach', tobias: 'saltreach', ro: 'lamplight', kess: 'gantry',
+  vex: 'spur', della: 'spur', lou: 'spur', pockets: 'spur', overseer: 'haven', pell: 'haven', nan: 'haven', grower: 'haven', cook: 'haven',
+  teacher: 'haven', doc_osei: 'haven', guard12: 'haven'};
+
 export const ITEMS = {
   finch_strongbox: {n: 'Finch\'s Strongbox', t: 'quest', w: 4, v: 0, desc: 'A dented steel box from Finch\'s lead wagon. Inside: survey maps drawn before the war, wrapped in oilcloth.'},
   kess_ledger: {n: 'Kess\'s Ledger', t: 'quest', w: 0.5, v: 0, desc: 'Every name in Dustwell who sold Kess water on the side, and what she means to charge per cup when the wells fail.'},

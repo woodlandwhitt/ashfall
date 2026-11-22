@@ -145,6 +145,19 @@ func equip(id: String) -> void:
 		msg("Wearing " + iname(id))
 	stats_changed.emit()
 
+# take off what you're wearing, or put the gun away (bare hands)
+func unequip(id: String) -> void:
+	if id == weapon:
+		weapon = ""
+		if player:
+			player.weapon_changed()
+		msg("Bare hands")
+	elif id == armor:
+		_armor_bonus(armor, -1)
+		armor = ""
+		msg("Took off " + iname(id))
+	stats_changed.emit()
+
 func _armor_bonus(id, sgn: int) -> void:
 	var b: Dictionary = item(id).get("bonus", {})
 	for k in b:

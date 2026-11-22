@@ -283,7 +283,8 @@ func _label(parent: Node, t: String, size := 18, col := GREEN) -> Label:
 	l.text = t
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# a label sitting in a row must not wrap: in a row it has no width of its own and breaks after every letter
+	l.autowrap_mode = TextServer.AUTOWRAP_OFF if parent is HBoxContainer else TextServer.AUTOWRAP_WORD_SMART
 	parent.add_child(l)
 	return l
 
@@ -642,6 +643,9 @@ func _item_card(R: VBoxContainer, id: String) -> void:
 			show_tab(current), 130)
 	if equipped:
 		_label(row, "Equipped", 17, AMBERC)
+		_button(row, "UNEQUIP", func():
+			Game.unequip(id)
+			show_tab(current), 140)
 	if t != "quest" and not equipped:
 		_button(row, "DROP", func():
 			Game.take(id, 1)

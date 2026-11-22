@@ -18,6 +18,7 @@ func setup(m) -> void:
 	_lights()
 	_doors()
 	_walls()
+	_locker()
 	_great_door()
 
 func P(x: float, y: float, z: float) -> Vector3:
@@ -50,7 +51,8 @@ func _wall_material() -> ShaderMaterial:
 		return wall_mat
 	var sh := Shader.new()
 	sh.code = """shader_type spatial;
-uniform vec3 paint : source_color = vec3(0.58, 0.63, 0.6);
+render_mode cull_disabled;
+uniform vec3 paint : source_color = vec3(0.4, 0.45, 0.43);
 uniform float floor_y = -60.0;
 varying vec3 wp;
 varying vec3 wn;
@@ -72,8 +74,9 @@ void fragment(){
 	float rivet = 1.0 - step(0.022, length(vec2(abs(fract(p.x) - 0.5) - 0.44, abs(fract(p.y) - 0.5) - 0.42) * vec2(1.5, 1.2)));
 	c = mix(c, paint * 0.6, rivet);
 	ALBEDO = c;
-	METALLIC = 0.35;
-	ROUGHNESS = 0.5 + n * 0.15;
+	METALLIC = 0.25;
+	ROUGHNESS = 0.65 + n * 0.15;
+	SPECULAR = 0.3;
 }"""
 	wall_mat = ShaderMaterial.new()
 	wall_mat.shader = sh
@@ -93,9 +96,12 @@ func brighten(n: Node) -> void:
 			if m is StandardMaterial3D and not seen.has(m):
 				seen[m] = true
 				var sm := m as StandardMaterial3D
+				# walls built for one side only show the void from the other: draw every face both ways
+				sm.cull_mode = BaseMaterial3D.CULL_DISABLED
 				if sm.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+					sm.albedo_color = sm.albedo_color * 0.82
 					continue
-				sm.albedo_color = sm.albedo_color * 1.4
+				sm.albedo_color = sm.albedo_color * 1.2
 				sm.metallic = minf(sm.metallic, 0.2)
 
 # ---------------------------------------------------------------- ceilings
@@ -103,7 +109,7 @@ func _ceilings() -> void:
 	var sh := Shader.new()
 	sh.code = """shader_type spatial;
 render_mode cull_disabled;
-uniform vec3 base : source_color = vec3(0.42, 0.45, 0.46);
+uniform vec3 base : source_color = vec3(0.3, 0.32, 0.33);
 varying vec3 wp;
 void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment(){
@@ -131,10 +137,10 @@ void fragment(){
 	float seam = smoothstep(0.475, 0.5, max(f.x, f.y));
 	float n = fract(sin(dot(floor(p), vec2(127.1, 311.7))) * 43758.5453);
 	float chk = mod(floor(p.x) + floor(p.y), 2.0);
-	vec3 c = mix(vec3(0.34, 0.36, 0.35), vec3(0.27, 0.3, 0.31), chk) * (0.94 + n * 0.08);
+	vec3 c = mix(vec3(0.25, 0.26, 0.26), vec3(0.19, 0.21, 0.22), chk) * (0.94 + n * 0.08);
 	ALBEDO = mix(c, vec3(0.2), seam);
-	ROUGHNESS = 0.62;
-	SPECULAR = 0.4;
+	ROUGHNESS = 0.7;
+	SPECULAR = 0.25;
 }"""
 	var fm := ShaderMaterial.new()
 	fm.shader = fsh
@@ -151,12 +157,12 @@ const LIGHTS := [[-14, 9], [-14, 21], [-14, 32], [-14, 44, 1], [-14, 56, 1], [-1
 func _lights() -> void:
 	var lm := StandardMaterial3D.new()
 	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	lm.albedo_color = Color(1.6, 1.65, 1.7)
+	lm.albedo_color = Color(1.25, 1.28, 1.3)
 	for L in LIGHTS:
 		var warm: bool = L.size() > 2
 		var l := OmniLight3D.new()
 		l.light_color = Color(1.0, 0.9, 0.75) if warm else Color(0.9, 0.95, 1.0)
-		l.light_energy = 1.6
+		l.light_energy = 1.2
 		l.omni_range = 12.0
 		l.omni_attenuation = 0.8
 		l.shadow_enabled = false
@@ -165,7 +171,7 @@ func _lights() -> void:
 	for a in [[-6, 80, 7.2], [6, 80, 7.2], [0, 86, 7.2], [0, 89.5, 5.4]]:
 		var l := OmniLight3D.new()
 		l.light_color = Color(0.95, 0.96, 1.0)
-		l.light_energy = 2.2
+		l.light_energy = 1.6
 		l.omni_range = 14.0
 		add_child(l)
 		l.position = P(float(a[0]), float(a[2]) - 0.6, float(a[1]))
@@ -193,6 +199,38 @@ func _doors() -> void:
 			box(Vector3(0.1, 0.5, 0.06), Vector3(0, 1.2, -s * 0.37), dark, h)
 			halves.append(h)
 		doors.append({"l": halves[0], "r": halves[1], "c": c, "open": 0.0})
+
+# the security locker with your gear in it (the original drew it separately, so it never reached the export)
+func _locker() -> void:
+	var body := mat(Color(0.32, 0.38, 0.36), 0.6, 0.45)
+	var trim := mat(Color(0.85, 0.68, 0.2), 0.2, 0.6)
+	var dark := mat(Color(0.1, 0.1, 0.11), 0.5, 0.5)
+	var g := Node3D.new()
+	add_child(g)
+	g.position = P(-19.0, 0.0, 73.4)
+	box(Vector3(1.6, 2.0, 0.55), Vector3(0, 1.0, 0), body, g)
+	for x in [-0.4, 0.4]:
+		box(Vector3(0.76, 1.9, 0.02), Vector3(x, 1.0, 0.285), mat(Color(0.36, 0.43, 0.41), 0.6, 0.4), g)
+		for y in [1.7, 1.62, 1.54]:
+			box(Vector3(0.5, 0.025, 0.03), Vector3(x, y, 0.3), dark, g)
+		box(Vector3(0.04, 0.22, 0.05), Vector3(x + (0.3 if x < 0 else -0.3), 1.0, 0.31), dark, g)
+	box(Vector3(1.62, 0.12, 0.57), Vector3(0, 2.0, 0), trim, g)
+	var l := Label3D.new()
+	l.text = "SECURITY"
+	l.font_size = 48
+	l.pixel_size = 0.004
+	l.modulate = Color(0.1, 0.08, 0.02)
+	l.outline_size = 0
+	l.position = Vector3(0, 2.0, 0.29)
+	g.add_child(l)
+	var sb := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(1.6, 2.0, 0.55)
+	cs.shape = bs
+	cs.position.y = 1.0
+	sb.add_child(cs)
+	g.add_child(sb)
 
 # steel ribs down the corridor walls between the doors, and up the atrium's tall sides
 func _walls() -> void:

@@ -70,9 +70,17 @@ func spawn_chunk(key: String) -> void:
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
-		mi.global_position = Vector3(float(o.x), Game.height(float(o.x), float(o.z)) + 0.1, float(o.z))
+		# on the table or shelf it was left on, if it was left on one
+		var gy := Game.height(float(o.x), float(o.z))
+		var y := float(o.y) if o.has("y") and float(o.y) > gy - 0.3 else gy
+		mi.global_position = Vector3(float(o.x), y + 0.08, float(o.z))
 		mi.rotation.y = hash(o.id) % 628 / 100.0
 		pickup_nodes[o.id] = mi
+
+# a pickup added after its chunk was built gets its model straight away
+func add_pickup_now(o: Dictionary) -> void:
+	_add("pickup", o)
+	spawn_chunk(key_of(float(o.x), float(o.z)))
 
 func despawn_chunk(key: String) -> void:
 	for o in grid.get(key, []):
@@ -88,11 +96,13 @@ func label_of(o: Dictionary) -> Variant:
 				return null
 			if o.get("lock") != null and not Game.opened.has("u_" + String(o.id)):
 				return "Pick lock (" + LOCK_NAMES[clampi(int(o.lock), 0, 3)] + ")"
+			if o.get("owned", false) and not Game.opened.has(String(o.id)):
+				return "Steal from " + String(o.get("name", "someone's things"))
 			return "Open " + String(o.name) if o.has("name") else "Search container"
 		"pickup":
 			if Game.looted.has("pk_" + String(o.id)):
 				return null
-			return "Take " + Game.iname(o.item) + (" (" + str(int(o.qty)) + ")" if int(o.get("qty", 1)) > 1 else "")
+			return ("Steal " if o.get("owned") else "Take ") + Game.iname(o.item) + (" (" + str(int(o.qty)) + ")" if int(o.get("qty", 1)) > 1 else "")
 		"term":
 			return "Read terminal" if String(o.kind) == "lore" else "Use terminal"
 		"bench":
@@ -180,9 +190,11 @@ func _chest(o: Dictionary) -> void:
 				Game.opened["u_" + id] = true
 				Game.add_xp(10 + int(o.lock) * 10)
 				if o.get("owned", false):
-					_steal()
+					_steal(String(o.get("name", "a container")))
 				_chest(o))
 		return
+	if o.get("owned", false) and o.get("lock") == null and not Game.opened.has(id):
+		_steal("from " + String(o.get("name", "someone's things")))
 	if not Game.opened.has(id):
 		var out: Array = []
 		for f in o.get("fixed", []):
@@ -211,14 +223,46 @@ func _chest(o: Dictionary) -> void:
 	main.hud.screens.open_loot(String(o.get("name", "Container")), Game.opened[id], func(_empty): pass)
 
 # breaking into someone's property costs karma, and a guard who sees it comes for you
-func _steal() -> void:
-	Game.add_karma(-2, "Broke into someone's property")
+# Taking what isn't yours. Unseen, it costs a little karma. Seen (anyone nearby with a clear look at you, and how
+# far they notice depends on how well you're sneaking) it costs more, and their people think less of you; get
+# caught a third time and the owner stops warning you.
+const CAUGHT := ["Hey! Put that back!", "Thief! I saw that.", "That's not yours, friend.", "Drop it. Now.", "I'm watching you."]
+func _steal(what := "", owner := "") -> bool:
+	var pp: Vector3 = main.player.global_position
+	var vis: float = main.player.visibility()
+	var space: PhysicsDirectSpaceState3D = main.get_world_3d().direct_space_state
+	var seen = null
 	for n in main.npcs:
-		if n.global_position.distance_to(main.player.global_position) < 11.0:
-			Game.msg(String(n.display_name) + " saw that!")
-			break
+		if not is_instance_valid(n) or not n.visible or n.get("hostile") == true or n.get("follow") == true:
+			continue
+		var dd: float = n.global_position.distance_to(pp)
+		if dd > 13.0 * vis + 2.0:
+			continue
+		var q := PhysicsRayQueryParameters3D.create(n.global_position + Vector3.UP * 1.6, pp + Vector3.UP * 1.0, 1)
+		q.exclude = [main.player.get_rid(), n.get_rid()]
+		if space.intersect_ray(q).is_empty():
+			seen = n
+			if String(n.id) == owner:
+				break
+	if seen == null:
+		Game.add_karma(-2, "Stole " + what if what != "" else "Stole")
+		Game.msg("Nobody saw.")
+		return false
+	Game.add_karma(-6, "Caught stealing")
+	var line: String = CAUGHT[randi() % CAUGHT.size()]
+	Game.msg(String(seen.display_name) + ": \"" + line + "\"")
+	main.speak(line, String(seen.id))
+	var f = Game.STORY.get("npc_faction", {}).get(String(seen.id))
+	if f != null:
+		Game.rep(String(f), -2)
+	Game.flags["caught"] = int(Game.flags.get("caught", 0)) + 1
+	if int(Game.flags.caught) >= 3 and not String(seen.id) in main.ESSENTIAL and not String(seen.id) in main.CHILDREN:
+		main.provoke(seen, 0.0, Vector3.FORWARD)
+	return true
 
 func _pickup(o: Dictionary) -> void:
+	if o.get("owned"):
+		_steal(Game.iname(o.item), String(o.owned))
 	Game.looted["pk_" + String(o.id)] = true
 	Game.give(String(o.item), int(o.get("qty", 1)))
 	Sfx.play("k_cloth1", -4.0)

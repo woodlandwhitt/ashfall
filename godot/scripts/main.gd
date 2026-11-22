@@ -48,6 +48,8 @@ func _ready() -> void:
 	_terrain()
 	if vault_dress:
 		chunks.on_built = vault_dress.brighten
+	elif Game.area == "cells":
+		chunks.on_built = _dress_cell
 	_colliders()
 	_pools()
 	_lamps()
@@ -77,6 +79,7 @@ func _ready() -> void:
 	events = RoadEvents.new()
 	add_child(events)
 	events.setup(self)
+	_place_stealables.call_deferred()
 	if Game.area == "world":
 		for pr in Game.STORY.get("props", []):
 			if String(pr.kind) == "wagon_burnt":
@@ -198,6 +201,110 @@ func _cell_step_out() -> void:
 			if space.intersect_shape(q, 1).is_empty():
 				player.global_position = Vector3(x, Game.height(x, z) + 0.1, z)
 				return
+
+# Things left lying around where people live and work: on a trader's counter, a table, a shelf. Taking them is
+# stealing (world_objects._steal): unseen it costs a little karma, seen it costs more and the owner's people notice.
+func _place_stealables() -> void:
+	await get_tree().create_timer(1.5, false).timeout
+	var pool: Array = []
+	for k in Game.DB.items:
+		var it: Dictionary = Game.DB.items[k]
+		if String(it.get("t", "")) in ["aid", "junk", "ammo"] and float(it.get("v", 0)) >= 8.0 and float(it.get("v", 0)) <= 110.0 and not it.get("quest", false):
+			pool.append(k)
+	pool.sort()
+	if pool.is_empty():
+		return
+	var space := get_world_3d().direct_space_state
+	for d in Game.region.npcs:
+		var id := String(d.id)
+		if not (Game.L.get("vendors", {}).has(id) or Game.STORY.get("npc_faction", {}).has(id)):
+			continue
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(id + Game.area)
+		var placed := 0
+		for tries in 14:
+			if placed >= (2 if Game.L.get("vendors", {}).has(id) else 1):
+				break
+			var a := rng.randf() * TAU
+			var r := rng.randf_range(1.2, 3.0)
+			var x := float(d.x) + cos(a) * r
+			var z := float(d.z) + sin(a) * r
+			var top := float(d.get("y", Game.height(x, z))) + 2.2
+			var q := PhysicsRayQueryParameters3D.create(Vector3(x, top, z), Vector3(x, top - 3.5, z), 1)
+			var h := space.intersect_ray(q)
+			if h.is_empty() or h.normal.y < 0.8:
+				continue
+			# on something flat and clear (a counter, a table, the floor), not in a wall
+			var sq := PhysicsShapeQueryParameters3D.new()
+			var sh := SphereShape3D.new()
+			sh.radius = 0.15
+			sq.shape = sh
+			sq.transform = Transform3D(Basis(), h.position + Vector3.UP * 0.2)
+			sq.collision_mask = 1
+			if not space.intersect_shape(sq, 1).is_empty():
+				continue
+			var item: String = pool[rng.randi() % pool.size()]
+			var o := {"id": "steal_%s_%s_%d" % [Game.area, id, placed], "item": item, "qty": (rng.randi_range(6, 18) if String(Game.item(item).get("t", "")) == "ammo" else 1),
+				"x": h.position.x, "z": h.position.z, "y": h.position.y, "owned": id}
+			if not Game.looted.has("pk_" + o.id):
+				objects.add_pickup_now(o)
+			placed += 1
+
+# The town's rooms: walls drawn both ways (nothing shows the void), and the bare plaster papered over: faded
+# striped wallpaper, a different pattern and colour in each building, aged and grimy, the plaster showing through.
+const PLASTER_TEX := "3634cc61-1562"
+var _paper: ShaderMaterial
+func _dress_cell(root: Node) -> void:
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh: Mesh = (mi as MeshInstance3D).mesh
+		if mesh == null:
+			continue
+		for i in mesh.get_surface_count():
+			var m := mesh.surface_get_material(i)
+			if not m is StandardMaterial3D:
+				continue
+			var sm := m as StandardMaterial3D
+			sm.cull_mode = BaseMaterial3D.CULL_DISABLED
+			if sm.albedo_texture and PLASTER_TEX in sm.albedo_texture.resource_path:
+				if _paper == null:
+					var sh := Shader.new()
+					sh.code = """shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D plaster : source_color, filter_linear_mipmap, repeat_enable;
+uniform float floor_y = -60.0;
+varying vec3 wp;
+varying vec3 wn;
+void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz); }
+float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+void fragment(){
+	vec2 room = floor((wp.xz - vec2(2000.0, -500.0)) / 115.0);
+	float r = h(room);
+	vec3 pal[6] = vec3[6](vec3(0.42,0.5,0.4), vec3(0.58,0.42,0.42), vec3(0.62,0.54,0.33), vec3(0.4,0.46,0.55), vec3(0.6,0.56,0.46), vec3(0.47,0.38,0.5));
+	vec3 base = pal[int(r * 6.0)];
+	float u = abs(wn.x) > abs(wn.z) ? wp.z : wp.x;
+	float y = wp.y - floor_y;
+	float stripe = smoothstep(0.42, 0.5, abs(fract(u * (1.6 + r * 1.4)) - 0.5));
+	vec2 dp = vec2(u * 3.2, y * 3.2);
+	float dot_ = 1.0 - smoothstep(0.08, 0.13, length(fract(dp + vec2(0.5 * mod(floor(dp.y), 2.0), 0.0)) - 0.5));
+	vec3 c = mix(base, base * 1.18, stripe * 0.6);
+	c = mix(c, base * 0.72, dot_ * (r > 0.5 ? 0.6 : 0.0));
+	vec3 pl = texture(plaster, vec2(u, y) * 0.35).rgb;
+	float age = smoothstep(0.62, 0.92, vn(vec2(u, y) * 0.8 + room * 7.0) * 0.75 + pl.r * 0.3);
+	c = mix(c, base * 0.55 + pl * 0.25, age * 0.45);
+	c *= 0.92 + pl.r * 0.12;
+	c *= mix(0.62, 1.0, smoothstep(0.0, 1.2, y)) * mix(1.0, 0.75, smoothstep(2.6, 3.6, y));
+	// floors, rugs and table-tops that shared the plaster keep a plain worn finish
+	ALBEDO = mix(c * 0.9, pl * vec3(0.62, 0.58, 0.52), step(0.6, abs(wn.y)));
+	ROUGHNESS = 0.9;
+	SPECULAR = 0.2;
+}"""
+					_paper = ShaderMaterial.new()
+					_paper.shader = sh
+					_paper.set_shader_parameter("plaster", sm.albedo_texture)
+					_paper.set_shader_parameter("floor_y", float(Game.L.consts.CELLS.y))
+				(mi as MeshInstance3D).set_surface_override_material(i, _paper)
 
 func _fade(out: bool, col := Color.BLACK, secs := 1.2) -> ColorRect:
 	var r := ColorRect.new()
@@ -1750,14 +1857,14 @@ func _environment() -> void:
 		env.fog_enabled = false
 		sun.visible = false
 		sun.shadow_enabled = false
-		env.ambient_light_energy = 1.5
-		env.ambient_light_color = Color(0.78, 0.8, 0.82)
-		# metal reflects a soft grey room rather than black
-		env.background_color = Color(0.45, 0.47, 0.48)
-		env.reflected_light_source = Environment.REFLECTION_SOURCE_BG
-		env.glow_intensity = 0.8
-		env.glow_bloom = 0.1
-		env.tonemap_exposure = 1.05
+		env.ambient_light_energy = 0.8
+		env.ambient_light_color = Color(0.72, 0.75, 0.78)
+		env.background_color = Color(0.02, 0.022, 0.025)
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+		env.glow_intensity = 0.5
+		env.glow_bloom = 0.04
+		env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+		env.tonemap_exposure = 0.92
 		vault_dress = VaultDress.new()
 		add_child(vault_dress)
 		vault_dress.setup(self)

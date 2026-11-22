@@ -198,7 +198,8 @@ func _build(k: String, ps: PackedScene) -> void:
 	if not Game.interior():
 		var g := MeshInstance3D.new()
 		g.name = "Ground"
-		g.mesh = _ground(i, j, 2)
+		# the same 1 m grid the heightmap (and so every prop, pickup and footstep) sits on, so nothing floats or sinks
+		g.mesh = _ground(i, j, 1)
 		g.material_override = terrain_mat
 		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(g)

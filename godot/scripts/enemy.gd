@@ -268,7 +268,14 @@ func _physics_process(d: float) -> void:
 				wait = randf_range(4.0, 9.0)
 			if global_position.distance_to(target) > 1.0:
 				spd = _move_to(target, speed * 0.35, d)
-			if hostile and Game.hp > 0.0 and dist < (24.0 if quad else 30.0) and int(t * 4.0) % 2 == 0 and can_see(pp):
+			# what it notices depends on you: sneaking, standing still and being behind it all help
+			var vis: float = Game.player.visibility() if Game.player and foe == null else 1.0
+			var facev := Vector3(sin(face_yaw), 0, cos(face_yaw))
+			var tov := pp - global_position
+			tov.y = 0.0
+			if tov.length() > 0.1 and facev.dot(tov.normalized()) < -0.2:
+				vis *= 0.55
+			if hostile and Game.hp > 0.0 and dist < (24.0 if quad else 30.0) * vis and int(t * 4.0) % 2 == 0 and can_see(pp):
 				state = "chase"
 				tac = "advance"
 				alert()

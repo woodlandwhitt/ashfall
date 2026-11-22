@@ -40,6 +40,8 @@ var tgt = null
 var tgt_t := 0.0
 var bot_l: Panel
 var bot_r: Panel
+var sneak_l: Label
+var sneak_t := 0.0
 
 const AMBER := Color(0.95, 0.78, 0.45)
 const PANEL := Color(0.07, 0.055, 0.04, 0.82)
@@ -121,7 +123,7 @@ func _ready() -> void:
 			_place(bp, Control.PRESET_BOTTOM_LEFT, 10, -100, 300, 92)
 			bot_l = bp
 		else:
-			_place(bp, Control.PRESET_BOTTOM_RIGHT, -290, -94, 280, 86)
+			_place(bp, Control.PRESET_BOTTOM_RIGHT, -250, -94, 240, 86)
 			bot_r = bp
 		root.add_child(bp)
 	hp_bar = ProgressBar.new()
@@ -154,7 +156,7 @@ func _ready() -> void:
 	ammo_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	weapon_l = _label(Vector2.ZERO, 17)
-	_place(weapon_l, Control.PRESET_BOTTOM_RIGHT, -284, -86, 264, 26)
+	_place(weapon_l, Control.PRESET_BOTTOM_RIGHT, -244, -86, 226, 26)
 	weapon_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hitmark = HitMark.new()
 	_place(hitmark, Control.PRESET_CENTER, -40, -40, 80, 80)
@@ -186,6 +188,12 @@ func _ready() -> void:
 	tgt_bar.add_theme_stylebox_override("background", tb)
 	tgt_box.add_child(tgt_bar)
 	tgt_box.visible = false
+	sneak_l = Label.new()
+	sneak_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sneak_l.add_theme_font_size_override("font_size", 18)
+	_place(sneak_l, Control.PRESET_CENTER, -150, -70, 300, 28)
+	sneak_l.visible = false
+	root.add_child(sneak_l)
 	prompt_l = _label(Vector2.ZERO, 22)
 	_place(prompt_l, Control.PRESET_CENTER, -300, 40, 600, 34)
 	prompt_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -336,6 +344,10 @@ func refresh() -> void:
 	ap_bar.value = Game.ap
 	var it := Game.item(Game.weapon)
 	ammo_l.text = (str(Game.mag) + " / " + str(Game.reserve)) if it.has("mag") else ""
+	# bare hands and blades need no ammo box: just the name, small, in the corner
+	bot_r.visible = it.has("mag")
+	weapon_l.offset_top = -86.0 if it.has("mag") else -40.0
+	weapon_l.offset_bottom = weapon_l.offset_top + 26.0
 	weapon_l.text = Game.iname(Game.weapon)
 	var stims := int(Game.inv.get("stimpak", 0))
 	stat_l.text = "LVL %d   XP %d/%d   CAPS %d" % [Game.level, Game.xp, Game.xp_need(), Game.caps] + ("\nSTIMS " + str(stims) if stims > 0 else "\n") + ("   RAD " + str(int(Game.rad)) if Game.rad >= 1.0 else "")
@@ -361,6 +373,29 @@ func hurt_from(src: Vector3) -> void:
 func track_target(e, hold := 3.5) -> void:
 	tgt = e
 	tgt_t = hold
+
+# while sneaking: [ HIDDEN ], [ CAUTION ] (something hostile is close but hasn't seen you) or [ DANGER ]
+func _sneak_tick(d: float) -> void:
+	var p = Game.player
+	sneak_l.visible = p != null and p.crouch and not (pip and pip.visible)
+	if not sneak_l.visible:
+		return
+	sneak_t -= d
+	if sneak_t > 0.0:
+		return
+	sneak_t = 0.25
+	var st := "HIDDEN"
+	for e in Game.main.enemies:
+		if not is_instance_valid(e) or e.dead or not e.hostile:
+			continue
+		var dd: float = e.global_position.distance_to(p.global_position)
+		if e.state == "chase" and dd < 60.0 and e.foe == null:
+			st = "DANGER"
+			break
+		if dd < 30.0:
+			st = "CAUTION"
+	sneak_l.text = "[ %s ]" % st
+	sneak_l.add_theme_color_override("font_color", {"HIDDEN": Color(0.6, 1.0, 0.6), "CAUTION": Color(1.0, 0.85, 0.3), "DANGER": Color(1.0, 0.35, 0.25)}[st])
 
 func _target_tick(d: float) -> void:
 	tgt_t -= d
@@ -474,6 +509,7 @@ func _notification(what: int) -> void:
 
 func _process(d: float) -> void:
 	_target_tick(d)
+	_sneak_tick(d)
 	hurt_rect.color.a = maxf(0.0, hurt_rect.color.a - d * 0.8)
 	ap_bar.max_value = Game.ap_max
 	ap_bar.value = Game.ap
@@ -597,6 +633,7 @@ class TouchPad extends Control:
 			"swap": [Vector2(s.x - 360, s.y - 70), 36.0, "SWAP"],
 			"nade": [Vector2(s.x - 255, s.y - 360), 34.0, "NADE"],
 			"focus": [Vector2(s.x - 370, s.y - 200), 38.0, "FOCUS"],
+			"sneak": [Vector2(470, s.y - 60), 36.0, "SNEAK"],
 		}
 
 	func _input(e: InputEvent) -> void:
@@ -670,16 +707,22 @@ class TouchPad extends Control:
 			"swap": if on: Game.main.hud.swap_weapon()
 			"nade": if on: p.throw_nade()
 			"focus": if on: Game.main.hud.focus.enter()
+			"sneak":
+				if on:
+					p.toggle_crouch()
+					running = false
 			"run":
 				if on:
 					running = not running
 					p.running = running
+					if running:
+						p.crouch = false
 
 	func _draw() -> void:
 		var f := ThemeDB.fallback_font
 		for k in buttons():
 			var b: Array = buttons()[k]
-			var on: bool = k in held.values() or (k == "run" and running)
+			var on: bool = k in held.values() or (k == "run" and running) or (k == "sneak" and Game.player != null and Game.player.crouch)
 			draw_circle(b[0], b[1], Color(0.95, 0.78, 0.45, 0.32 if on else 0.16))
 			draw_arc(b[0], b[1], 0, TAU, 40, Color(0.95, 0.78, 0.45, 0.55), 2.0)
 			var txt: String = b[2]
