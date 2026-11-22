@@ -72,6 +72,16 @@ func give(id = "", n = 1) -> void:
 func take(id = "", n = 1) -> void:
 	if Game.count(_s(id)) > 0:
 		Game.take(_s(id), int(vm.num(n)))
+func rep(f = "", n = 0) -> void: Game.rep(_s(f), int(vm.num(n)))
+func repOf(f = "") -> int: return Game.rep_of(_s(f))
+# the council: name a side
+func pledge(f = "") -> void:
+	var k := _s(f)
+	Game.flags["pledge"] = k
+	for x in ["dustwell", "saltreach", "lamplight", "gantry", "haven"]:
+		Game.rep(x, 4 if x == k else -1)
+	Game.give("council_token", 1)
+	Game.complete("council")
 func addCaps(n = 0) -> void:
 	Game.caps = maxi(0, Game.caps + int(vm.num(n)))
 	Game.stats_changed.emit()

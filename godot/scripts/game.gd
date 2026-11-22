@@ -451,6 +451,7 @@ func _ready() -> void:
 		if not DB.items.has(k):
 			DB.items[k] = EXTRA_ITEMS[k]
 	L = _json("res://data/logic.json")
+	_merge_story()
 	CELLS = _json("res://data/cells.json")
 	vm = JsVM.new()
 	G = GApi.install(vm, L)
@@ -512,6 +513,17 @@ func load_area(a: String) -> void:
 	x0 = float(region.region.x0)
 	z0 = float(region.region.z0)
 	W = _json(dir() + "world.json") if FileAccess.file_exists(dir() + "world.json") else {}
+	if area == "world" and not STORY.is_empty():
+		if not W.has("points"):
+			W["points"] = []
+		for p in STORY.get("world_points", []):
+			W.points.append(p.duplicate())
+		if not W.has("spawns"):
+			W["spawns"] = []
+		for sp in STORY.get("spawns", []):
+			var d: Dictionary = sp.duplicate()
+			d["y"] = height(float(d.x), float(d.z))
+			W.spawns.append(d)
 	if not interior():
 		_merge_spawns()
 	_extra_dialogue()
@@ -594,6 +606,8 @@ func complete(q: String) -> void:
 		add_xp(int(r.xp))
 	if d.get("rep"):
 		flags["rep"] = int(flags.get("rep", 0)) + int(d.rep)
+	for f in STORY.get("quest_rep", {}).get(q, {}):
+		rep(f, int(STORY.quest_rep[q][f]))
 	if d.get("karma"):
 		add_karma(int(d.karma), "")
 	if d.get("radio"):
@@ -644,6 +658,7 @@ func check_quests() -> void:
 			Sfx.play("o_quest")
 			changed = true
 	_checking = false
+	_story_triggers()
 	if changed:
 		quest_changed.emit()
 
@@ -855,6 +870,78 @@ func spawn_allowed(e: Dictionary) -> bool:
 	return true
 
 var DIALOGUE: Dictionary = {}
+
+# ---------------------------------------------------------------- the build 10 story (data/story.json, from tools/story)
+var STORY: Dictionary = {}
+func _merge_story() -> void:
+	STORY = _json("res://data/story.json")
+	if STORY.is_empty():
+		return
+	for k in STORY.get("quests", {}):
+		L.quests[k] = STORY.quests[k]
+	for npc in STORY.get("dialogue", {}):
+		if L.dialogue.has(npc):
+			for nk in STORY.dialogue[npc].nodes:
+				L.dialogue[npc].nodes[nk] = STORY.dialogue[npc].nodes[nk]
+		else:
+			L.dialogue[npc] = STORY.dialogue[npc]
+	for inj in STORY.get("inject", []):
+		var node: Dictionary = L.dialogue.get(inj.npc, {}).get("nodes", {}).get(inj.node, {})
+		if node.is_empty():
+			continue
+		if not node.has("opts"):
+			node["opts"] = []
+		var at: int = maxi(0, node.opts.size() - 1)
+		for o in inj.opts:
+			node.opts.insert(at, o)
+			at += 1
+	var ep: Array = L.get("epilogue", [])
+	var last = ep.pop_back() if not ep.is_empty() else null
+	ep.append_array(STORY.get("epilogue", []))
+	if last != null:
+		ep.append(last)
+	for k in STORY.get("radio", {}):
+		L.radio[k] = STORY.radio[k]
+	for k in STORY.get("points", {}):
+		L.points[k] = STORY.points[k]
+	for k in STORY.get("items", {}):
+		DB.items[k] = STORY.items[k]
+
+var _trig := false
+func _story_triggers() -> void:
+	if _trig or STORY.is_empty() or vm == null:
+		return
+	_trig = true
+	for t in STORY.get("triggers", []):
+		if vm.truthy(vm.call_value(t["if"], [G])):
+			vm.call_value(t["do"], [G])
+	_trig = false
+
+# standing with the valley's powers, -10 (hated) to +10 (idolised)
+func rep_of(f: String) -> int:
+	var r := int(flags.get("rep_" + f, 0))
+	if f == "dustwell":
+		r += int(flags.get("rep", 0))
+	return clampi(r, -10, 10)
+
+func rep(f: String, n: int) -> void:
+	if n == 0 or not STORY.get("factions", {}).has(f):
+		return
+	var before := rep_title(rep_of(f))
+	flags["rep_" + f] = int(flags.get("rep_" + f, 0)) + n
+	var nm := String(STORY.factions[f].n)
+	msg("%s: %s" % [nm, ("standing rises" if n > 0 else "standing falls")])
+	var after := rep_title(rep_of(f))
+	if after != before:
+		msg("%s now see you as %s." % [nm, after.to_lower()])
+
+static func rep_title(r: int) -> String:
+	if r <= -6: return "Hated"
+	if r <= -2: return "Disliked"
+	if r <= 1: return "Neutral"
+	if r <= 5: return "Liked"
+	if r <= 9: return "Respected"
+	return "Idolised"
 
 # everyone with a conversation in the original speaks it (data/logic.json)
 func _extra_dialogue() -> void:

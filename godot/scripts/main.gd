@@ -77,6 +77,11 @@ func _ready() -> void:
 	events = RoadEvents.new()
 	add_child(events)
 	events.setup(self)
+	if Game.area == "world":
+		for pr in Game.STORY.get("props", []):
+			if String(pr.kind) == "wagon_burnt":
+				var w: Node3D = events._wagon(float(pr.x), float(pr.z), true)
+				w.rotation.y = float(pr.get("rot", 0.0))
 	forge = Forge.new()
 	add_child(forge)
 	forge.setup.call_deferred(self)
@@ -422,8 +427,9 @@ func recruit(id: String, silent := false) -> void:
 	if not c.get("dog", false):
 		for p in party.duplicate():
 			if not p.comp.get("dog", false):
+				var gone := String(p.comp.get("n", p.id))
 				dismiss(p.id, true)
-				Game.msg(String(p.comp.n) + " heads home. You can only bring one person along.")
+				Game.msg(gone + " heads home. You can only bring one person along.")
 	var n = live_npc.get(i)
 	if n == null:
 		n = preload("res://scripts/npc.gd").new()
@@ -628,6 +634,8 @@ func _test_hooks() -> void:
 		await _ai_test()
 	if args.has("khtest"):
 		await _khole_test()
+	if args.has("storytest"):
+		await _story_test()
 	if args.has("forgetest"):
 		await _forge_test()
 	if args.has("dev"):
@@ -1100,6 +1108,92 @@ func _forge_test() -> void:
 	for l in out:
 		print("TEST ", l)
 	get_tree().quit()
+
+# a conversation run from anywhere (the story test): picks are the starts of option texts
+func _dlg(id: String, picks: Array) -> String:
+	start_dialog(null, id)
+	var said := [dialog_node]
+	for pk in picks:
+		var idx := -1
+		for i in dialog_opts.size():
+			if String(dialog_opts[i].t).begins_with(pk):
+				idx = i
+		if idx < 0:
+			var at := dialog_node
+			var opts: Array = dialog_opts.map(func(o): return o.t)
+			end_dialog()
+			return "%s: no option '%s' at %s %s" % [id, pk, at, str(opts)]
+		choose(idx)
+		said.append(dialog_node if in_dialog() else "end")
+	end_dialog()
+	return id + " ok " + str(said)
+
+# build 10's story: the council and its pledge, both companion quests, factions and the epilogue
+func _story_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	await _wait(10)
+	Game.flags["met_sheriff"] = 1
+	Game.flags["met_ro"] = 1
+	Game.start("keys")
+	out.append("keys started -> council known %s, heard_haven %s, radio %s" % [str(Game.known("council")), str(Game.flags.get("heard_haven")), str(Game.flags.get("radio"))])
+	out.append(_dlg_t("sheriff", ["Everyone wants the core", "And if Haven", "Understood"]))
+	out.append(_dlg_t("ines", ["About the Meridian core", "I'll remember"]))
+	out.append(_dlg_t("ro", ["Everyone's lining up", "I'll weigh"]))
+	out.append("council stage %d (heard %s)" % [Game.stage("council"), str(["dustwell", "saltreach", "lamplight", "gantry", "haven"].filter(func(f): return Game.flags.get("heard_" + f)))])
+	out.append(_dlg_t("sheriff", ["I've heard the claims", "Saltreach"]))
+	out.append("pledge %s, council done %s, star %d, standing: %s" % [str(Game.flags.get("pledge")), str(Game.is_done("council")), Game.count("council_token"),
+		str(["dustwell", "saltreach", "lamplight", "gantry", "haven", "spur"].map(func(f): return "%s %d" % [f, Game.rep_of(f)]))])
+	Game.complete("salt_wagons")
+	out.append("after Salt and Blood: saltreach %d (%s)" % [Game.rep_of("saltreach"), Game.rep_title(Game.rep_of("saltreach"))])
+	# Jory
+	Game.level = 4
+	recruit("jory")
+	out.append(_dlg_t("jory", ["Ever lose one", "Was anything left", "Then let's go"]))
+	out.append("jory_wagon stage %d, spawns allowed %d" % [Game.stage("jory_wagon"), Game.region.enemies.filter(func(e): return String(e.get("id", "")).begins_with("jw_") and Game.spawn_allowed(e)).size()])
+	player.global_position = Vector3(-262, Game.height(-262, 132) + 0.3, 132)
+	chunks.load_now(player.global_position)
+	await _wait(20)
+	var box = _obj_point("jory_box")
+	out.append("wreck: box point %s label %s, raiders near %d" % [str(box != null), str(objects.point_label(box)) if box else "-", enemies.filter(func(e): return String(e.eid).begins_with("jw_")).size()])
+	if box:
+		objects.point_use(box)
+	out.append("strongbox %d, stage %d" % [Game.count("finch_strongbox"), Game.stage("jory_wagon")])
+	out.append("finch nodes has f_box %s; screens open %s; opts %s" % [str(Game.DIALOGUE.finch.nodes.has("f_box")), str(hud.screens.is_open()), str(Game.dlg_options("finch", "hub").map(func(o): return o.t))])
+	if hud.screens.is_open():
+		hud.screens.close()
+	out.append(_dlg_t("finch", ["Your lead wagon", "He'll be glad"]))
+	out.append("jory_wagon done %s, jory_box %s, finchFriend %s" % [str(Game.is_done("jory_wagon")), str(Game.flags.get("jory_box")), str(Game.flags.get("finchFriend"))])
+	# Sable
+	Game.complete("signal")
+	dismiss("jory", true)
+	recruit("sable")
+	out.append("party: %s" % str(party.map(func(p): return p.id)))
+	out.append(_dlg_t("sable", ["Why did you leave", "So we take it"]))
+	player.global_position = Vector3(133, Game.height(133, -2) + 0.3, -2)
+	chunks.load_now(player.global_position)
+	await _wait(20)
+	var led = _obj_point("kess_ledger")
+	out.append("ledger point %s label %s" % [str(led != null), str(objects.point_label(led)) if led else "-"])
+	if led:
+		objects.point_use(led)
+	out.append(_dlg_t("sable", ["The ledger", "Burn it"]))
+	out.append("sable_ledger done %s, ledger %s" % [str(Game.is_done("sable_ledger")), str(Game.flags.get("ledger"))])
+	# the ending and its epilogue (lamplight: matches a Saltreach pledge)
+	Game.flags["ending"] = "lamplight"
+	var lines: Array = []
+	for ep in Game.L.epilogue:
+		if not ep.has("if") or Game.vm.truthy(Game.vm.call_value(ep["if"], [Game.G])):
+			lines.append(Game.vm.to_str(Game.vm.val(ep.get("t", ""), [Game.G])).substr(0, 70))
+	out.append("epilogue (%d): %s" % [lines.size(), " || ".join(lines)])
+	out.append("vm errors %d %s" % [Game.vm.errors, Game.vm.last_error])
+	for l in out:
+		print("TEST ", l)
+	get_tree().quit()
+
+func _dlg_t(id: String, picks: Array) -> String:
+	return _dlg(id, picks)
 
 func _talk(id: String, picks: Array) -> String:
 	var n = null

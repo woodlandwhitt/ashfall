@@ -15,7 +15,7 @@ const DIM := Color(0.35, 0.7, 0.42)
 const AMBERC := Color(1.0, 0.9, 0.55)
 const BAD := Color(1.0, 0.5, 0.4)
 const SECTIONS := {"STAT": ["STATUS", "S.P.E.C.I.A.L.", "PERKS", "GENERAL"], "INV": ["WEAPONS", "APPAREL", "AID", "AMMO", "MISC", "QUEST"],
-	"DATA": ["QUESTS", "MAP", "NOTES", "CRAFT"], "RADIO": ["RADIO"], "SYS": ["SYSTEM"]}
+	"DATA": ["QUESTS", "MAP", "FACTIONS", "NOTES", "CRAFT"], "RADIO": ["RADIO"], "SYS": ["SYSTEM"]}
 const INV_CAT := {"WEAPONS": "weapon", "APPAREL": "armor", "AID": "aid", "AMMO": "ammo", "MISC": "junk", "QUEST": "quest"}
 # the old single-word page names still open the right place
 const ALIAS := {"STATS": "STATUS", "ITEMS": "WEAPONS", "SPECIAL": "S.P.E.C.I.A.L."}
@@ -193,6 +193,7 @@ func show_tab(t: String) -> void:
 		"QUESTS": _quests()
 		"MAP": _map()
 		"NOTES": _notes()
+		"FACTIONS": _factions()
 		"CRAFT": _craft()
 		"RADIO": _radio()
 		"SYSTEM": _system()
@@ -730,6 +731,54 @@ func _quests() -> void:
 				show_tab("QUESTS"))
 		else:
 			_label(R, "Being tracked.", 16, AMBERC)
+
+# ---------------------------------------------------------------- DATA: FACTIONS
+var sel_fac := ""
+func _factions() -> void:
+	var F: Dictionary = Game.STORY.get("factions", {})
+	if F.is_empty():
+		_label(body, "No word on the valley's powers yet.", 17, DIM)
+		return
+	var lr := _split(0.9)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
+	if not F.has(sel_fac):
+		sel_fac = F.keys()[0]
+	for f in F:
+		var r := Game.rep_of(f)
+		var row := HBoxContainer.new()
+		L.add_child(row)
+		var b := _list_button(row, String(F[f].n), f == sel_fac, func():
+			sel_fac = f
+			show_tab("FACTIONS"))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var t := _label(row, Game.rep_title(r), 16, BAD if r <= -2 else (AMBERC if r >= 6 else (GREEN if r >= 2 else DIM)))
+		t.custom_minimum_size = Vector2(110, 0)
+		t.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var d: Dictionary = F[sel_fac]
+	var rr := Game.rep_of(sel_fac)
+	_title(R, String(d.n))
+	_row(R, "Led by", String(d.leader))
+	var hb := HBoxContainer.new()
+	R.add_child(hb)
+	_label(hb, "Standing: %s (%+d)" % [Game.rep_title(rr), rr], 17, AMBERC).custom_minimum_size = Vector2(240, 0)
+	var bar := _bar(float(rr + 10), 20.0, BAD if rr < 0 else GREEN, 200)
+	hb.add_child(bar)
+	_label(R, String(d.desc), 17)
+	var p = Game.flags.get("pledge")
+	if p != null:
+		if String(p) == sel_fac:
+			_label(R, "You pledged the Meridian core to them.", 17, AMBERC)
+		elif String(p) == "none" and sel_fac != "spur":
+			_label(R, "You told the council you'd decide at the core.", 16, DIM)
+	var effects := []
+	if Game.STORY.get("vendor_faction", {}).values().has(sel_fac) and sel_fac != "dustwell":
+		effects.append("Their traders' prices move with your standing (up to 15%).")
+	if sel_fac == "dustwell":
+		effects.append("Dustwell's traders give you better prices as your standing rises.")
+	if not effects.is_empty():
+		_label(R, "\n".join(effects), 15, DIM)
+	_label(R, "Work done for them raises your standing; so do the promises you keep.", 15, DIM)
 
 # ---------------------------------------------------------------- DATA: NOTES
 func _notes() -> void:

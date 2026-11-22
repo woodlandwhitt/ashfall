@@ -235,6 +235,9 @@ func _price_mod() -> float:
 		m += minf(0.16, float(Game.flags.get("rep", 0)) * 0.02) + clampf(Game.karma / 100.0, -1.0, 1.0) * 0.08
 	if shop_id == "kess":
 		m += clampf(-Game.karma / 100.0, -1.0, 1.0) * 0.1
+	var vf = Game.STORY.get("vendor_faction", {}).get(shop_id)
+	if vf != null and String(vf) != "dustwell":
+		m += clampf(Game.rep_of(String(vf)) * 0.015, -0.15, 0.15)
 	if shop_id == "finch" and Game.flags.get("finchFriend"):
 		m += 0.15
 	if shop_id == "cass" and Game.flags.get("tomas") == "truth":
