@@ -518,7 +518,8 @@ func _perks() -> void:
 	for pk in perks:
 		if Game.perks.has(pk):
 			continue
-		_list_button(L, String(perks[pk].get("n", pk)), pk == sel_perk, func():
+		var lv := int(perks[pk].get("lvl", 0))
+		_list_button(L, String(perks[pk].get("n", pk)) + ("  (level %d)" % lv if lv > Game.level else ""), pk == sel_perk, func():
 			sel_perk = pk
 			show_tab("PERKS"))
 	if not perks.has(sel_perk):
@@ -527,8 +528,11 @@ func _perks() -> void:
 	var d: Dictionary = perks[sel_perk]
 	_title(R, String(d.get("n", sel_perk)))
 	_label(R, String(d.get("d", "")), 18)
+	var need := int(d.get("lvl", 0))
 	if Game.perks.has(sel_perk):
 		_label(R, "\nYou have this perk.", 17, AMBERC)
+	elif Game.level < need:
+		_label(R, "\nNeeds level %d." % need, 17, DIM)
 	else:
 		var pid := sel_perk
 		_button(R, "TAKE THIS PERK" if Game.perk_pts > 0 else "NO PERK POINTS", func():

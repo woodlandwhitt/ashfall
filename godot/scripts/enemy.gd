@@ -353,6 +353,9 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 
 func die(dir: Vector3) -> void:
 	dead = true
+	if Game.perks.has("bloody_mess") and Game.main:
+		for i in 4:
+			Game.main.blood(global_position + Vector3(randf() - 0.5, 0.6 + randf(), randf() - 0.5), Vector3(randf() - 0.5, 0.8, randf() - 0.5).normalized())
 	if npc != null and Game.main:
 		Game.main.npc_died(self)
 	if idx >= 0:

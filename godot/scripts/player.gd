@@ -143,8 +143,12 @@ func weapon_damage() -> float:
 	var d := float(it.get("dmg", 8)) * (1.0 + 0.12 * int(Game.upgrades.get(Game.weapon, 0)))
 	if String(it.get("kind", "")) == "melee":
 		d *= (1.0 + (int(Game.stats.might) - 5) * 0.07) * (1.35 if Game.perks.has("brawler") else 1.0) * float(Game.fx().melee)
+		if Game.perks.has("nerd_rage") and Game.hp < Game.hp_max * 0.2:
+			d *= 1.5
 	else:
 		d *= (1.0 + (int(Game.stats.aim) - 5) * 0.05) * (1.15 if Game.perks.has("gunner") else 1.0)
+	if Game.perks.has("bloody_mess"):
+		d *= 1.05
 	return d
 
 func _no_shadow(n: Node) -> void:
@@ -196,7 +200,7 @@ func _physics_process(d: float) -> void:
 	if Game.dev.ap:
 		Game.ap = Game.ap_max
 	if Game.ap < Game.ap_max:
-		Game.ap = minf(Game.ap_max, Game.ap + d * (5.0 if Game.main.in_combat() else 9.0) * float(fxc.ap))
+		Game.ap = minf(Game.ap_max, Game.ap + d * (5.0 if Game.main.in_combat() else 9.0) * float(fxc.ap) * (1.3 if Game.perks.has("action_runner") else 1.0))
 	var iv := Game.touch_move
 	if not seat.is_empty():
 		# sitting: any move (or jump) gets you up again
@@ -218,7 +222,7 @@ func _physics_process(d: float) -> void:
 	if Game.main.buggy and Game.main.buggy.driving:
 		Game.main.buggy.drive(d, iv)
 		return
-	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 and not crouch else WALK) * float(fxc.speed) * float(Game.dev.speed) * (0.5 if crouch else 1.0)
+	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 and not crouch else WALK) * float(fxc.speed) * float(Game.dev.speed) * ((0.68 if Game.perks.has("light_step") else 0.5) if crouch else 1.0)
 	# free flight: through walls, wherever you look (forge mode flies this way too)
 	if Game.dev.noclip or (Game.main.forge and Game.main.forge.active):
 		collision_mask = 0
@@ -388,7 +392,7 @@ func fire() -> void:
 	var dmg := weapon_damage() * (0.75 if pel > 1 else 1.0)
 	var moving := 1.5 if Vector2(velocity.x, velocity.z).length() > 1.0 else 1.0
 	for i in pel:
-		_ray(dmg, float(it.get("range", 100)), float(it.get("spread", 0.02)) * moving * float(fxc.spread), kind == "energy")
+		_ray(dmg, float(it.get("range", 100)), float(it.get("spread", 0.02)) * moving * float(fxc.spread) * (0.7 if kind == "rifle" and Game.perks.has("sniper") else 1.0), kind == "energy")
 	if Game.mag == 0:
 		reload()
 
@@ -432,11 +436,14 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 			var sneak: bool = crouch and c.get("hostile") == true and c.get("state") != null and c.get("state") != "chase"
 			if sneak:
 				dmg *= 3.0 if String(Game.item(Game.weapon).get("kind", "")) == "melee" or Game.weapon == "" else 2.0
+				if Game.perks.has("ninja"):
+					dmg *= 1.5
 				Game.msg("Sneak attack!")
 			var ion := float(it.get("ion", 1.0)) if c.get("def") is Dictionary and c.def.get("robot", false) else 1.0
-			c.hit(dmg * ion * randf_range(0.9, 1.1) * (2.0 if crit else 1.0) * (1.5 if head else 1.0), hit.position, dir)
+			c.hit(dmg * ion * randf_range(0.9, 1.1) * (2.0 if crit else 1.0) * ((2.25 if Game.perks.has("sniper") else 1.5) if head else 1.0), hit.position, dir)
+			_stranger(c)
 			if it.has("burn") and c.get("bleed") != null and c.get("dead") == false:
-				c.bleed = [float(it.burn[0]), float(it.burn[1])]
+				c.bleed = [float(it.burn[0]) * (1.5 if Game.perks.has("pyromaniac") else 1.0), float(it.burn[1])]
 			if c.get("hp_max") != null and Game.main and Game.main.hud:
 				var killed: bool = c.get("dead") == true and not was_dead
 				Game.main.hud.hit_marker("kill" if killed else ("crit" if crit or head or sneak else "hit"))
@@ -447,6 +454,19 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 			Game.main.impact(hit.position, hit.normal)
 
 # a plasma bolt bursting where it lands: a little blast that catches anyone close by
+# Mysterious Stranger: something nearly dead, and sometimes a figure in a long coat finishes it for you
+func _stranger(c) -> void:
+	if not Game.perks.has("mysterious_stranger") or c.get("dead") != false or c.get("hp_max") == null:
+		return
+	if float(c.hp) > float(c.hp_max) * 0.35 or randf() > 0.08 + (int(Game.stats.luck) - 5) * 0.01:
+		return
+	await get_tree().create_timer(0.35).timeout
+	if not is_instance_valid(c) or c.dead:
+		return
+	Sfx.play("magnum" if Sfx.stream("magnum") else "pistol", 0.0, 0.8)
+	c.hit(c.hp + 50.0, c.global_position + Vector3.UP * 1.5, (c.global_position - global_position).normalized())
+	Game.msg("A stranger in a long coat fires once, tips his hat, and is gone.")
+
 func _splash(at: Vector3, r: float, dmg: float, col: Color) -> void:
 	for e in Game.main.enemies.duplicate():
 		if is_instance_valid(e) and not e.dead:

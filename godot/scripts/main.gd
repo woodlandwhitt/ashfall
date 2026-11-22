@@ -2818,6 +2818,13 @@ func loot_for(type: String) -> Array:
 			if table.size() > 0:
 				var e: Array = table[randi() % table.size()]
 				add.call(String(e[0]), randi_range(int(e[1]), int(e[2])))
+	if Game.perks.has("treasure_hunter"):
+		for tname in ["uncommon", "common"]:
+			var table: Array = Game.DB.loot.get(tname, [])
+			if table.size() > 0:
+				var e: Array = table[randi() % table.size()]
+				add.call(String(e[0]), randi_range(int(e[1]), int(e[2])))
+				break
 	var out := []
 	for k in got:
 		out.append([k, got[k]])

@@ -279,6 +279,9 @@ func _physics_process(dt: float) -> void:
 		if part.k == "legs" or part.k == "arms":
 			e.crip[part.k] = true
 		e.hit(dmg, at, (at - p.cam.global_position).normalized())
+		if e.dead and Game.perks.has("grim_reaper"):
+			Game.ap = Game.ap_max
+			Game.msg("Grim Reaper's Sprint: Action Points restored.")
 		if part.k == "head":
 			Game.msg("Head shot!")
 	else:

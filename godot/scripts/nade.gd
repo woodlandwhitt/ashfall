@@ -176,7 +176,7 @@ func _physics_process(d: float) -> void:
 				if is_instance_valid(e) and not e.dead and e.global_position.distance_to(global_position) < float(spec.mine):
 					_explode()
 					return
-			if armed_t > 3.0 and Game.player and Game.player.global_position.distance_to(global_position) < 1.0:
+			if armed_t > 3.0 and Game.player and not Game.perks.has("light_step") and Game.player.global_position.distance_to(global_position) < 1.0:
 				_explode()
 		return
 	if not rocket:
@@ -258,8 +258,11 @@ func _explode() -> void:
 		print("NADE ", kind, " at ", at, " fuse ", fuse, " near ", Game.main.enemies.map(func(e): return [e.type, snappedf(e.global_position.distance_to(at), 0.1), e.dead]).slice(0, 4))
 	var r := float(spec.get("r", 8.0))
 	var dmg := float(spec.get("dmg", 95.0))
+	if not by_enemy and Game.perks.has("demolition"):
+		r *= 1.15
+		dmg *= 1.35
 	if spec.get("fire", false):
-		Fire.start(at, r, dmg, float(spec.get("dur", 8.0)), by_enemy)
+		Fire.start(at, r, dmg * (1.5 if not by_enemy and Game.perks.has("pyromaniac") else 1.0), float(spec.get("dur", 8.0)), by_enemy)
 		Sfx.play_at("x_rock1", at, 2.0, 1.6)
 		queue_free()
 		return

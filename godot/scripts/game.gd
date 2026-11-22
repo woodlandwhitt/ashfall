@@ -136,7 +136,7 @@ func xp_need() -> int:
 	return 60 + level * 70
 
 func carry_max() -> float:
-	return 99999.0 if dev.get("carry", false) else 90.0 + int(stats.might) * 12.0
+	return 99999.0 if dev.get("carry", false) else 90.0 + int(stats.might) * 12.0 + (50.0 if perks.has("strong_back") else 0.0)
 
 func carry_now() -> float:
 	var w := 0.0
@@ -210,7 +210,7 @@ func use_item(id: String) -> void:
 			take(id)
 			var heal := float(it.get("heal", 0))
 			if heal > 0:
-				hp = minf(hp_max, hp + heal * (1.25 if perks.has("iron_gut") else 1.0) * (1.0 + (int(stats.get("intellect", 5)) - 5) * 0.04))
+				hp = minf(hp_max, hp + heal * (1.25 if perks.has("iron_gut") else 1.0) * (1.2 if perks.has("fast_metabolism") else 1.0) * (1.0 + (int(stats.get("intellect", 5)) - 5) * 0.04))
 			if it.get("rad") and not perks.has("iron_gut"):
 				add_rad(float(it.rad) * (1.0 - (int(stats.endurance) - 5) * 0.04), false)
 			if it.get("radx"):
@@ -262,7 +262,7 @@ func take_drug(k: String) -> void:
 			stats[st] = clampi(b + int(D.stats[st]), 1, 14)
 			drugs[k].applied[st] = int(stats[st]) - b
 	msg("You take the " + String(D.n) + ". " + String(D.lines[randi() % D.lines.size()]))
-	if randf() < float(D.get("addict", 0.0)) and not addict.has(k):
+	if randf() < float(D.get("addict", 0.0)) * (0.5 if perks.has("chem_resistant") else 1.0) and not addict.has(k):
 		addict[k] = 1
 		msg("You're hooked on " + String(D.n) + ".")
 	stats_changed.emit()
@@ -342,6 +342,8 @@ func body_tick(dt: float) -> void:
 				drugs[k] = {"age": 0.0, "crash": true, "applied": {}}
 				msg("You crash.")
 	var f := fx()
+	if perks.has("rad_child") and rad > 10.0 and hp > 0.0:
+		hp = minf(hp_max, hp + rad / 60.0 * dt)
 	if f.regen > 0.0 and hp > 0.0:
 		hp = minf(hp_max, hp + f.regen * dt)
 	if f.rad > 0.0:
@@ -1007,6 +1009,10 @@ func _merge_arsenal() -> void:
 			DB.items[k] = it
 	for k in A.get("drugs", {}):
 		L.consts.DRUGS[k] = A.drugs[k]
+	for k in A.get("perks", {}):
+		DB.perks[k] = A.perks[k]
+		if L.get("consts", {}).has("PERKS"):
+			L.consts.PERKS[k] = A.perks[k]
 	for v in A.get("stock", {}):
 		if DB.vendors.has(v):
 			DB.vendors[v].stock.append_array(A.stock[v])
@@ -1183,7 +1189,7 @@ func armor_dr() -> float:
 func hurt(d: float) -> void:
 	if hp <= 0 or dev.god:
 		return
-	var dr := armor_dr() + float(fx().dr)
+	var dr := armor_dr() + float(fx().dr) + (30.0 if perks.has("nerd_rage") and hp < hp_max * 0.2 else 0.0)
 	d *= 1.0 - dr / (dr + 40.0)
 	hp = maxf(0.0, hp - d)
 	stats_changed.emit()

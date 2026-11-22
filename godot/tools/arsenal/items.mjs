@@ -231,3 +231,22 @@ export const LOOT = {
     ['lucid', 1, 1], ['ironhide', 1, 1], ['nightjar', 1, 1], ['overclock', 1, 1], ['clover', 1, 1], ['slowburn', 1, 1], ['viper', 1, 1], ['ghostweed', 1, 1]],
 };
 // one of a kind: Wick keeps the Disintegrator behind the counter, priced to match
+
+// ---- build 14: perks with a level to reach and a real effect each (wired in player.gd, game.gd, nade.gd, focus.gd)
+export const PERKS = {
+  bloody_mess: {n: 'Bloody Mess', d: '+5% damage with everything, and the people and things you kill come apart messily.'},
+  fast_metabolism: {n: 'Fast Metabolism', d: 'Stims, food and drink heal 20% more.'},
+  action_runner: {n: 'Action Runner', d: 'Action Points come back 30% faster.'},
+  chem_resistant: {n: 'Chem Resistant', d: 'Half as likely to get hooked on chems.', lvl: 4},
+  strong_back: {n: 'Strong Back', d: 'Carry 50 more.', lvl: 4},
+  demolition: {n: 'Demolition Expert', d: 'Grenades, mines and rockets do 35% more damage over a wider blast.', lvl: 6},
+  pyromaniac: {n: 'Pyromaniac', d: 'Fire does half again as much damage: molotovs, incendiaries, and weapons that set things alight.', lvl: 6},
+  light_step: {n: 'Light Step', d: 'Mines never go off under you, and you move quicker while sneaking.', lvl: 6},
+  mysterious_stranger: {n: 'Mysterious Stranger', d: 'Now and then, when something you\'re fighting is nearly dead, a stranger in a long coat finishes it with one shot and is gone.', lvl: 8},
+  sniper: {n: 'Sniper', d: 'Head shots do half again as much, and rifles hold tighter.', lvl: 8},
+  ninja: {n: 'Ninja', d: 'Sneak attacks do half again as much damage.', lvl: 8},
+  grim_reaper: {n: "Grim Reaper's Sprint", d: 'A kill in FOCUS gives you all your Action Points back.', lvl: 10},
+  nerd_rage: {n: 'Nerd Rage!', d: 'Below a fifth of your health: +30 damage resistance and half again as much melee damage.', lvl: 10},
+  rad_child: {n: 'Rad Child', d: 'Radiation heals you: the more you have, the faster you mend.', lvl: 12},
+  treasure_hunter: {n: 'Treasure Hunter', d: 'Bodies carry one more find.', lvl: 4},
+};
