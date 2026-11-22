@@ -58,7 +58,8 @@ const PEOPLE := {
 	"heavy": ["Male_Ranger", Color(0.38, 0.38, 0.42), Color(0.8, 0.66, 0.56)],
 	"marauder": ["Female_Ranger", Color(0.6, 0.32, 0.28), Color(1.0, 0.86, 0.78)],
 	"pyro": ["Male_Peasant", Color(0.4, 0.37, 0.34), Color(0.75, 0.6, 0.5)],
-	"ghoul": ["Male_Peasant", Color(0.48, 0.48, 0.4), Color(0.7, 0.85, 0.55)],
+	"ghoul": ["Male_Peasant", Color(0.48, 0.48, 0.4), Color(0.8, 0.75, 0.6)],
+	"glowhusk": ["Male_Peasant", Color(0.4, 0.44, 0.36), Color(0.62, 0.9, 0.5)],
 	"tollking": ["Male_Ranger", Color(0.75, 0.62, 0.3), Color(0.9, 0.75, 0.65)],
 }
 
@@ -124,20 +125,40 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 			outfit = "Male_Noble"
 		var cloth: Color = (p[1] as Color).lerp(Color.from_hsv(rng.randf(), 0.4, 0.6), 0.25) * rng.randf_range(0.8, 1.1)
 		var skins := [Color(1.0, 0.86, 0.76), Color(0.85, 0.66, 0.52), Color(0.62, 0.45, 0.33), Color(0.45, 0.32, 0.24), Color(0.95, 0.78, 0.66)]
-		var skin: Color = p[2] if type == "ghoul" else skins[rng.randi() % skins.size()]
-		model = Humanoid.build(outfit, cloth, skin)
+		var ghoulish: bool = type in ["ghoul", "glowhusk"]
+		var skin: Color = (p[2] as Color) * rng.randf_range(0.85, 1.05) if ghoulish else skins[rng.randi() % skins.size()]
+		# every raider his own outfit: shirt, trousers, boots, sleeves, belts and armour pieces from different kits
+		var spec := Humanoid.mix_spec(rng, fem, cloth, type in ["raider", "heavy", "marauder", "tollking", "jackal", "pyro"])
+		if not ghoulish and not type in ["heavy", "tollking"]:
+			outfit = spec.outfit
+		if ghoulish:
+			spec["ghoul"] = true
+			spec["acc"] = []
+			spec["nohood"] = true
+		model = Humanoid.build(outfit, cloth, skin, true, spec)
+		if type == "glowhusk":
+			# they glow from the inside
+			var gl := OmniLight3D.new()
+			gl.light_color = Color(0.5, 1.0, 0.4)
+			gl.light_energy = 0.9
+			gl.omni_range = 4.0
+			gl.position.y = 1.2
+			model.add_child(gl)
 		var hc: Color = Humanoid.HAIR_COLS[rng.randi() % Humanoid.HAIR_COLS.size()]
-		var hat: String = ["", "", "cap", "wide", "helmet", ""][rng.randi() % 6] if type != "ghoul" else ""
+		var hat: String = ["", "", "cap", "wide", "helmet", ""][rng.randi() % 6] if not type in ["ghoul", "glowhusk"] else ""
 		if type == "heavy":
 			hat = "helmet"
-		if hat != "helmet" and type != "ghoul":
+		if hat != "helmet" and not type in ["ghoul", "glowhusk"]:
 			Humanoid.add_hair(model, (Humanoid.HAIR_F if fem else Humanoid.HAIR_M)[rng.randi() % 6], hc)
-		if not fem and type != "ghoul":
+		if not fem and not type in ["ghoul", "glowhusk"]:
 			Humanoid.add_hair(model, Humanoid.FACE_M[rng.randi() % Humanoid.FACE_M.size()], hc)
 		if hat != "":
 			Humanoid.add_hat(model, hat, Color(0.33, 0.34, 0.33) if hat == "helmet" else Color.from_hsv(rng.randf(), 0.3, 0.35))
 		var hh := rng.randf_range(0.95, 1.05)
 		model.scale = Vector3.ONE * hh * (1.12 if type == "heavy" else 1.0)
+		if type in ["ghoul", "glowhusk"]:
+			# wasted to the bone
+			model.scale = Vector3(hh * 0.88, hh * 0.98, hh * 0.88)
 		add_child(model)
 		ap = model.get_node("AnimationPlayer")
 		_twist_setup()
@@ -350,10 +371,13 @@ func _physics_process(d: float) -> void:
 		if ap:
 			if act_t <= 0.0:
 				var a := "Idle"
+				var zed: bool = type in ["ghoul", "glowhusk"]
 				if spd > 2.0:
-					a = "Jog_Fwd"
+					a = "Jog_Fwd" if not zed or spd > 3.8 else "Zombie_Walk_Fwd"
 				elif spd > 0.3:
-					a = "Walk"
+					a = "Walk" if not zed else "Zombie_Walk_Fwd"
+				elif zed:
+					a = "Zombie_Idle"
 				elif aim:
 					a = "Pistol_Aim_Neutral"
 				elif ranged:
@@ -435,7 +459,7 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 		if atk_cd <= 0.0 and dist <= reach and sees:
 			windup = 0.32 if quad else 0.4
 			if not quad:
-				_one_shot(["Punch_Jab", "Punch_Cross"][randi() % 2], 0.6)
+				_one_shot("Zombie_Scratch" if type in ["ghoul", "glowhusk"] and ap.has_animation("Zombie_Scratch") else ["Punch_Jab", "Punch_Cross"][randi() % 2], 0.6)
 			Sfx.play_at("o_bark1" if quad else "k_cloth1", global_position + Vector3.UP, -3.0, randf_range(0.9, 1.1))
 		return [spd, false]
 	# ---- gunmen

@@ -688,6 +688,12 @@ func _item_card(R: VBoxContainer, id: String) -> void:
 		_button(row, u, func():
 			Game.use_item(id)
 			show_tab(current), 130)
+		if Game.can_ready(id):
+			_button(row, "ON CHEM BUTTON" if Game.chem == id else "READY", func():
+				Game.chem = "" if Game.chem == id else id
+				Game.msg((Game.iname(id) + " is on the CHEM button.") if Game.chem == id else "CHEM button cleared.")
+				Game.stats_changed.emit()
+				show_tab(current), 180)
 	if equipped:
 		_label(row, "Equipped", 17, AMBERC)
 		_button(row, "UNEQUIP", func():

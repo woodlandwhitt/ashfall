@@ -171,6 +171,8 @@ func _cheats() -> void:
 	_toggle("One-hit kills", "Everything drops to a single hit", "onehit")
 	_toggle("Invisible", "Nothing can see you", "invis")
 	_toggle("Freeze AI", "Enemies stand where they are", "noai")
+	var gv := _row("Camera", "Third person is also in the pause menu (F5 on a keyboard)")
+	_btn(gv, "THIRD PERSON" if Game.player and Game.player.tp and Game.player.tp.on else "FIRST PERSON", func(): Game.player.toggle_view())
 	_toggle("Unlimited carry weight", "Never over-encumbered", "carry")
 	_toggle("Open every lock", "Locks, safes and locked terminals open on their own", "locks")
 	_toggle("Pass every check", "Strength, Charisma, Intelligence... checks in conversation always pass", "checks")

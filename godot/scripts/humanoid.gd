@@ -38,12 +38,35 @@ static func _mat(key: String, make: Callable) -> Material:
 	return _mats[key]
 
 # outfit: one of OUTFITS. cloth tints the outfit (dusty wasteland colours), skin tints face and hands.
-static func build(outfit: String, cloth: Color, skin: Color, quality_lod := true) -> Node3D:
+# opts (all optional): "mix" {"Body"/"Legs"/"Feet"/"Arms": outfit} wears another outfit's part; "acc" [mesh names]
+# adds belts, pauldrons, bracers, a gorget or a hood from any outfit; "cols" {part: Color} dyes each part on its own;
+# "horns" keeps the knight's horned helm; "ghoul" rots the skin and tears the clothes.
+static func _prefix(outfit: String) -> String:
+	return outfit.replace("_Cloth", "") + "_"
+
+static func _part_of(mesh_name: String, outfit: String) -> String:
+	var rest := mesh_name.trim_prefix(_prefix(outfit))
+	var cat := rest.split("_")[0]
+	# belts and ornaments hang off the body but are accessories
+	if cat == "Body" and rest != "Body" and rest != "Body_Cloth":
+		return "Acc"
+	if cat == "Arms" and rest != "Arms":
+		return "Acc"
+	if cat == "Feet" and rest.begins_with("Feet_Armor"):
+		return "Feet"
+	if cat == "Legs" and rest.begins_with("Legs_Armor"):
+		return "Legs"
+	return cat
+
+static func build(outfit: String, cloth: Color, skin: Color, quality_lod := true, opts := {}) -> Node3D:
 	var root := (load("res://chars/" + outfit + ".gltf") as PackedScene).instantiate() as Node3D
 	var skel := root.find_child("Skeleton3D", true, false) as Skeleton3D
 	var female := outfit.begins_with("Female")
-	var skin_key := "skin_%s_%s" % [female, skin.to_html()]
+	var ghoul: bool = opts.get("ghoul", false)
+	var skin_key := "skin_%s_%s_%s" % [female, skin.to_html(), ghoul]
 	var skin_mat := _mat(skin_key, func():
+		if ghoul:
+			return _ghoul_skin(female, skin)
 		var m := StandardMaterial3D.new()
 		m.albedo_texture = load("res://chars/T_Regular_%s_Dark_BaseColor.png" % ("Female" if female else "Male"))
 		m.normal_enabled = true
@@ -51,17 +74,69 @@ static func build(outfit: String, cloth: Color, skin: Color, quality_lod := true
 		m.roughness_texture = load("res://chars/T_Regular_%s_Roughness.png" % ("Female" if female else "Male"))
 		m.albedo_color = skin
 		return m)
+	var mix: Dictionary = opts.get("mix", {})
+	var acc: Array = opts.get("acc", [])
+	var cols: Dictionary = opts.get("cols", {})
+	# the files carry stray parts of other outfits (and a crown): keep only what this person is wearing
+	for mi in skel.find_children("*", "MeshInstance3D", false, false):
+		var nm := String(mi.name)
+		var keep := false
+		if nm.begins_with(_prefix(outfit)):
+			var cat := _part_of(nm, outfit)
+			keep = not mix.has(cat) and (cat != "Acc" or acc.is_empty() or acc.has(nm))
+			if nm.ends_with("Head_Crown") or (nm.ends_with("Head_Horns") and not opts.get("horns", false)):
+				keep = false
+			if cat == "Head" and nm.ends_with("Hood") and opts.get("nohood", false):
+				keep = false
+		elif acc.has(nm):
+			keep = true
+		if not keep:
+			skel.remove_child(mi)
+			mi.queue_free()
+	# parts borrowed from other outfits move onto this skeleton (bones matched by name, as the head does)
+	var borrow := {}
+	for cat in mix:
+		borrow[String(mix[cat])] = true
+	for nm2 in acc:
+		var o2 := _outfit_of(String(nm2))
+		if o2 != "" and o2 != outfit:
+			borrow[o2] = true
+	for src_outfit in borrow:
+		if not ResourceLoader.exists("res://chars/" + String(src_outfit) + ".gltf"):
+			continue
+		var src := (load("res://chars/" + String(src_outfit) + ".gltf") as PackedScene).instantiate()
+		var ssk := src.find_child("Skeleton3D", true, false)
+		for mi in ssk.find_children("*", "MeshInstance3D", false, false):
+			var nm := String(mi.name)
+			if not nm.begins_with(_prefix(String(src_outfit))):
+				continue
+			var cat := _part_of(nm, String(src_outfit))
+			var take: bool = (mix.get(cat, "") == src_outfit and cat != "Acc") or acc.has(nm)
+			if nm.ends_with("Head_Crown") or (nm.ends_with("Head_Horns") and not opts.get("horns", false)):
+				take = false
+			if take:
+				ssk.remove_child(mi)
+				mi.owner = null
+				skel.add_child(mi)
+				(mi as MeshInstance3D).skeleton = NodePath("..")
+		src.free()
 	for mi in skel.find_children("*", "MeshInstance3D", false, false):
 		var m := mi as MeshInstance3D
+		var nm := String(m.name)
+		var owner_outfit := _outfit_of(nm)
+		var cat := _part_of(nm, owner_outfit) if owner_outfit != "" else "Body"
+		var tint: Color = cols.get(cat, cloth)
 		for s in m.mesh.get_surface_count():
 			var src := m.mesh.surface_get_material(s)
 			if src and String(src.resource_name).begins_with("MI_Regular"):
 				m.set_surface_override_material(s, skin_mat)
 			elif src is StandardMaterial3D:
-				var key := "cloth_%s_%s" % [src.resource_name, cloth.to_html()]
+				var key := "cloth_%s_%s_%s" % [src.resource_name, tint.to_html(), ghoul]
 				m.set_surface_override_material(s, _mat(key, func():
+					if ghoul:
+						return _tatters(src as StandardMaterial3D, tint)
 					var c := (src as StandardMaterial3D).duplicate() as StandardMaterial3D
-					c.albedo_color = cloth
+					c.albedo_color = tint
 					return c))
 	# the head (and eyes, brows) moves onto the outfit's skeleton; bones are matched by name
 	var head := (load("res://chars/head_%s.glb" % ("female" if female else "male")) as PackedScene).instantiate()
@@ -309,6 +384,105 @@ static func add_hat(root: Node3D, kind: String, col: Color) -> void:
 	for c in hat.get_children():
 		(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
+static func _outfit_of(mesh_name: String) -> String:
+	for o in ["Male_Knight_Cloth", "Male_Peasant", "Male_Ranger", "Male_Noble", "Male_Wizard", "Female_Peasant", "Female_Ranger"]:
+		if mesh_name.begins_with(_prefix(o)):
+			return o
+	return ""
+
+# a ghoul's skin: the base skin turned grey-green and waxy, raw red patches where it has sloughed away, dark veins
+static func _ghoul_skin(female: bool, skin: Color) -> ShaderMaterial:
+	var sh := Shader.new()
+	sh.code = """shader_type spatial;
+uniform sampler2D base_tex : source_color, filter_linear_mipmap;
+uniform sampler2D nrm_tex : hint_normal, filter_linear_mipmap;
+uniform vec4 tint : source_color;
+varying vec3 lp;
+float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+void vertex(){ lp = VERTEX; }
+void fragment(){
+	vec3 b = texture(base_tex, UV).rgb;
+	float l = dot(b, vec3(0.3, 0.59, 0.11));
+	vec3 c = mix(vec3(l), b, 0.12) * tint.rgb * 1.1;
+	float n = vn(lp.xy * 18.0 + lp.z * 7.0) * 0.6 + vn(lp.yz * 41.0) * 0.4;
+	// raw flesh where the skin has gone
+	c = mix(c, vec3(0.42, 0.1, 0.07), smoothstep(0.62, 0.72, n) * 0.85);
+	// darker, bruised blotches and veins
+	c *= mix(1.0, 0.55, smoothstep(0.35, 0.2, n));
+	float vein = smoothstep(0.04, 0.0, abs(vn(lp.xy * 9.0) - 0.5));
+	c = mix(c, vec3(0.12, 0.16, 0.1), vein * 0.5);
+	ALBEDO = c;
+	NORMAL_MAP = texture(nrm_tex, UV).rgb;
+	ROUGHNESS = mix(0.35, 0.85, smoothstep(0.62, 0.72, n));
+}"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("base_tex", load("res://chars/T_Regular_%s_Dark_BaseColor.png" % ("Female" if female else "Male")))
+	m.set_shader_parameter("nrm_tex", load("res://chars/T_Regular_%s_Normal.png" % ("Female" if female else "Male")))
+	m.set_shader_parameter("tint", skin)
+	return m
+
+# rags: the outfit's own texture, dyed, filthy, and full of holes
+static func _tatters(src: StandardMaterial3D, tint: Color) -> ShaderMaterial:
+	var sh := Shader.new()
+	sh.code = """shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D tex : source_color, filter_linear_mipmap;
+uniform vec4 tint : source_color;
+varying vec3 lp;
+float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+void vertex(){ lp = VERTEX; }
+void fragment(){
+	float n = vn(lp.xy * 14.0 + lp.z * 5.0) * 0.65 + vn(lp.xz * 30.0) * 0.35;
+	if (n > 0.66) { discard; }
+	vec3 c = texture(tex, UV).rgb * tint.rgb;
+	c *= mix(0.45, 0.95, vn(lp.xy * 6.0));
+	c = mix(c, vec3(0.25, 0.2, 0.12), smoothstep(0.5, 0.66, n) * 0.7);
+	ALBEDO = c;
+	ROUGHNESS = 0.95;
+}"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("tex", src.albedo_texture)
+	m.set_shader_parameter("tint", tint)
+	return m
+
+# every person different: shirt, trousers, boots and sleeves picked from different outfits, each dyed its own
+# wasteland colour (dust, rust, olive, faded denim, leather), plus belts, pauldrons, bracers, a gorget or a hood
+const DYES := [Color(0.55, 0.48, 0.38), Color(0.42, 0.36, 0.3), Color(0.5, 0.33, 0.24), Color(0.36, 0.4, 0.3), Color(0.34, 0.38, 0.46),
+	Color(0.6, 0.56, 0.48), Color(0.3, 0.27, 0.24), Color(0.52, 0.42, 0.3), Color(0.45, 0.25, 0.2), Color(0.4, 0.42, 0.38), Color(0.62, 0.5, 0.34), Color(0.24, 0.26, 0.3)]
+const ACC_M := ["Male_Ranger_Body_Belt_1", "Male_Ranger_Body_Belt_2", "Male_Ranger_Acc_Pauldron", "Male_Ranger_Arms_Bracer", "Male_Noble_Acc_Gorget",
+	"Male_Noble_Body_Belt", "Male_Noble_Acc_Pauldron", "Male_Knight_Acc_Pauldron_Spike", "Male_Noble_Arms_Guards", "Male_Wizard_Body_Belt"]
+const ACC_F := ["Female_Ranger_Body_Belt_1", "Female_Ranger_Body_Belt_2", "Female_Ranger_Acc_Pauldrons", "Female_Ranger_Arms_Bracer"]
+static func mix_spec(rng: RandomNumberGenerator, fem: bool, base: Color, tough := false) -> Dictionary:
+	var pool: Array = ["Female_Peasant", "Female_Ranger"] if fem else ["Male_Peasant", "Male_Ranger", "Male_Noble", "Male_Wizard", "Male_Knight_Cloth"]
+	var body: String = pool[rng.randi() % pool.size()]
+	var mix := {}
+	for cat in ["Legs", "Feet", "Arms"]:
+		var o: String = pool[rng.randi() % pool.size()]
+		# wizard robes and knight plate only for the bold
+		if (o == "Male_Wizard" and cat != "Legs") or (o == "Male_Knight_Cloth" and not tough and rng.randf() < 0.6):
+			o = "Male_Peasant" if not fem else "Female_Peasant"
+		if o != body:
+			mix[cat] = o
+	var cols := {}
+	for cat in ["Body", "Legs", "Feet", "Arms", "Acc"]:
+		var dye: Color = DYES[rng.randi() % DYES.size()]
+		cols[cat] = dye.lerp(base, 0.35 if cat == "Body" else 0.15) * rng.randf_range(0.85, 1.1)
+	cols["Feet"] = (cols["Feet"] as Color).darkened(0.35)
+	cols["Acc"] = (cols["Acc"] as Color).darkened(0.25)
+	var acc: Array = []
+	var ap: Array = ACC_F if fem else ACC_M
+	for i in rng.randi() % (4 if tough else 3):
+		var a: String = ap[rng.randi() % ap.size()]
+		if not acc.has(a):
+			acc.append(a)
+	return {"outfit": body, "mix": mix, "cols": cols, "acc": acc, "nohood": rng.randf() < 0.6, "horns": tough and rng.randf() < 0.3}
+
 # a whole person from the original's look (sex, clothes colour, skin, hat, coat, bulk) plus a seed that settles
 # everything the original left open: outfit cut, hair, beard, hair colour, height, a second clothes tint
 static func person(look: Dictionary, seed: int, role := "") -> Node3D:
@@ -340,9 +514,17 @@ static func person(look: Dictionary, seed: int, role := "") -> Node3D:
 	cloth = cloth.lerp(Color.from_hsv(rng.randf(), 0.35, 0.75), 0.18 + rng.randf() * 0.12)
 	if coat != null:
 		cloth = cloth.lerp(Color(coat).lightened(0.25), 0.5)
-	var m := build(outfit, cloth, cols[1])
+	# everyone dressed differently: parts from different outfits, each dyed its own colour
+	var spec := mix_spec(rng, fem, cloth, role in ["guard", "soldier"])
+	if role == "" and hat != "hood" and coat == null:
+		outfit = spec.outfit
+	else:
+		spec.mix = {} if role != "" else spec.mix
+	if hat == "hood":
+		spec["nohood"] = false
+	var m := build(outfit, cloth, cols[1], true, spec)
 	var hc: Color = HAIR_COLS[rng.randi() % HAIR_COLS.size()]
-	if not (hat in ["helmet"]) and not (hat == "hood" and outfit.ends_with("Ranger")):
+	if not (hat in ["helmet"]) and not (hat == "hood" and outfit.ends_with("Ranger") and not spec.get("nohood", true)):
 		add_hair(m, (HAIR_F if fem else HAIR_M)[rng.randi() % (HAIR_F if fem else HAIR_M).size()], hc)
 	if not fem:
 		add_hair(m, FACE_M[rng.randi() % FACE_M.size()], hc)

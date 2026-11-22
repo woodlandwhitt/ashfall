@@ -27,6 +27,7 @@ var recoil := 0.0
 var bob := 0.0
 var hurt_shake := 0.0
 var trigger := false
+var tp: ThirdPerson
 
 func _ready() -> void:
 	floor_snap_length = 0.45
@@ -67,6 +68,10 @@ func _ready() -> void:
 	flash_q.material_override = fm
 	flash_q.visible = false
 	weapon_changed()
+	tp = ThirdPerson.new()
+	add_child(tp)
+	tp.setup(self)
+	tp.set_on(ThirdPerson.load_on())
 
 # which model a weapon uses: its own, or the closest Quaternius gun for its kind
 const KIND_MODEL := {"pistol": "Pistol_Compact_West", "smg": "SMG_Compact_West", "rifle": "Rifle_Battle_West",
@@ -104,6 +109,8 @@ func weapon_changed() -> void:
 		vm.setup(load(mdl[0]), mdl[1], mdl[2])
 	vm.muzzle.add_child(flash)
 	vm.muzzle.add_child(flash_q)
+	if tp and tp.on:
+		gun.visible = false
 	if it.get("energy") or String(it.get("kind", "")) == "energy":
 		flash.light_color = Color(0.4, 0.8, 1.0)
 	else:
@@ -147,6 +154,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_E: Game.main.interact()
 			KEY_R: reload()
 			KEY_G: throw_nade()
+			KEY_H: Game.use_chem()
+			KEY_F5: toggle_view()
 			KEY_V: Game.main.hud.focus.enter()
 			KEY_SHIFT:
 				running = not running
@@ -272,6 +281,13 @@ func _process(d: float) -> void:
 	if flash.light_energy > 0.0:
 		flash.light_energy = maxf(0.0, flash.light_energy - d * 60.0)
 		flash_q.visible = flash.light_energy > 0.5
+	if tp:
+		tp.update(d)
+
+func toggle_view() -> void:
+	tp.set_on(not tp.on)
+	ThirdPerson.save_on(tp.on)
+	Game.msg("Third-person view" if tp.on else "First-person view")
 
 func reload() -> void:
 	if reload_t > 0.0 or Game.mag_size <= 0 or Game.mag >= Game.mag_size:

@@ -48,6 +48,7 @@ var perks: Dictionary = {}
 var karma := 0
 var weapon := "pipe_pistol"
 var nade := ""                 # the readied throwable (thrown first)
+var chem := ""                 # the readied chem or medicine, on its own quick button
 var armor := "vault_suit"
 var magd := {"pipe_pistol": 8}  # rounds loaded, per weapon
 var discovered: Dictionary = {}
@@ -71,6 +72,20 @@ const EXTRA_ITEMS := {
 	"sample_well": {"n": "Well Water Sample", "t": "quest", "w": 0.5, "v": 0, "desc": "A flask of Dustwell's well water. Faintly green."},
 	"sample_glow": {"n": "Glowing Water Sample", "t": "quest", "w": 0.5, "v": 0, "desc": "A flask from an irradiated pool. It glows in the dark."},
 }
+
+# chems and medicine can be readied onto the CHEM button (stims, chems, Rad Flush): one tap in a fight
+func can_ready(id: String) -> bool:
+	var it := item(id)
+	return String(it.get("t", "")) == "aid" and not it.get("throw", false) and (L.get("consts", {}).get("DRUGS", {}).has(id) or it.has("buff") or float(it.get("heal", 0)) >= 30.0 or id in ["radaway", "rad_tabs", "stimpak", "super_stim"])
+
+func use_chem() -> void:
+	if chem == "" or count(chem) <= 0:
+		msg("No chem readied. Ready one from the Pip-Boy (INV > AID).")
+		return
+	var id := chem
+	use_item(id)
+	if count(id) <= 0:
+		msg(iname(id) + ": that was the last one.")
 
 var hp_max: float:
 	get:
@@ -346,7 +361,7 @@ func save_game(slot: String) -> bool:
 		return false
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
 		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points, "perk_pts": perk_pts, "ap": ap, "name": player_name, "area": area, "rad": rad, "tod": time, "buffs": buffs, "drugs": drugs, "addict": addict,
-		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "armor": armor, "magd": magd, "discovered": discovered,
+		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "chem": chem, "armor": armor, "magd": magd, "discovered": discovered,
 		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
 	if f == null:
@@ -386,6 +401,7 @@ func load_game(slot: String) -> bool:
 	for k in ["caps", "xp", "level", "points", "karma"]:
 		set(k, int(get(k)))
 	perk_pts = int(s.get("perk_pts", 0))
+	chem = String(s.get("chem", ""))
 	rad = float(s.get("rad", 0.0))
 	time = float(s.get("tod", 0.32))
 	buffs = s.get("buffs", {})
@@ -454,6 +470,7 @@ func reset() -> void:
 	karma = 0
 	weapon = "pipe_pistol"
 	nade = ""
+	chem = ""
 	armor = "vault_suit"
 	magd = {"pipe_pistol": 8}
 	hp = hp_max

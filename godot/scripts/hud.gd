@@ -232,7 +232,7 @@ func _ready() -> void:
 	root.add_child(term)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
-	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx],
+	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Camera: first / third person", func(): Game.player.toggle_view()],
 		["Developer", func(): toggle_pause(); toggle_dev()], ["Forge mode", func(): toggle_pause(); Game.main.forge.toggle()],
 		["Main menu", func(): toggle_pause(); screens.open_title()]])
 	_gfx_label()
@@ -665,6 +665,7 @@ class TouchPad extends Control:
 			"nade": [Vector2(s.x - 255, s.y - 360), 34.0, "NADE"],
 			"focus": [Vector2(s.x - 370, s.y - 200), 38.0, "FOCUS"],
 			"sneak": [Vector2(470, s.y - 60), 36.0, "SNEAK"],
+			"chem": [Vector2(s.x - 470, s.y - 120), 34.0, "CHEM"],
 		}
 
 	func _input(e: InputEvent) -> void:
@@ -737,6 +738,7 @@ class TouchPad extends Control:
 			"reload": if on: p.reload()
 			"swap": if on: Game.main.hud.swap_weapon()
 			"nade": if on: p.throw_nade()
+			"chem": if on: Game.use_chem()
 			"focus": if on: Game.main.hud.focus.enter()
 			"sneak":
 				if on:
@@ -757,6 +759,8 @@ class TouchPad extends Control:
 			draw_circle(b[0], b[1], Color(0.95, 0.78, 0.45, 0.32 if on else 0.16))
 			draw_arc(b[0], b[1], 0, TAU, 40, Color(0.95, 0.78, 0.45, 0.55), 2.0)
 			var txt: String = b[2]
+			if k == "chem" and Game.chem != "":
+				txt = "%s %d" % [Game.iname(Game.chem).substr(0, 5).to_upper(), Game.count(Game.chem)]
 			if k == "use" and use_label != "":
 				txt = "USE"
 			if Game.main and Game.main.forge and Game.main.forge.active:

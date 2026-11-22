@@ -852,6 +852,20 @@ func _test_hooks() -> void:
 		if lv > 0 and args.has("guess"):
 			hud.term._guess("XXXXX")
 			await _wait(20)
+	if args.has("lineup"):
+		# a row of people/creatures in front of you, frozen, facing you (checking how they look)
+		Game.dev.noai = true
+		var ts := String(args.lineup).split(",")
+		var f := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
+		var r := Vector3(cos(player.yaw), 0, -sin(player.yaw))
+		for i in ts.size():
+			var p: Vector3 = player.global_position + f * 4.5 + r * (i - (ts.size() - 1) * 0.5) * 1.3
+			var e = events._enemy(ts[i], p.x, p.z, false)
+			if e:
+				e.face_yaw = atan2(-f.x, -f.z)
+				e.model.rotation.y = e.face_yaw
+	if args.has("third"):
+		player.tp.set_on(true)
 	if args.has("itemgrid"):
 		# every item's ground model in rows in front of you (checking how they read)
 		var ids := ["cram", "stew", "sun_pop", "purified_water", "dirty_water", "rotgut", "glowshine", "k_fizz", "stimpak", "super_stim", "radaway", "rad_tabs",
