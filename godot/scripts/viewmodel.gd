@@ -79,7 +79,14 @@ func _align(fit: Basis, bb: AABB, gf: Dictionary) -> void:
 	var centre: Vector3 = g_vm * c
 	var long: bool = not gf.get("pistol", false)
 	var want := Vector3(0.2, -0.17 + float(gf.get("sight", 0.07)), -0.5 + float(gf.get("rear", 0.07)))
+	if not long:
+		# a handgun is held out at arm's length, a little lower, so you see along the top of the slide
+		want += Vector3(0.0, -0.03, -0.1)
 	rig.position += Vector3(want.x - centre.x, want.y - rear_top.y, want.z - rear_top.z)
+	# tip the muzzle down a touch about the back of the gun: held level, a gun below the eye looks to point up
+	var pivot := want
+	var tip := Basis(Vector3.RIGHT, -0.06 if long else -0.14)
+	rig.transform = Transform3D(tip, pivot - tip * pivot) * rig.transform
 	base_pos = rig.position
 	rotation = Vector3.ZERO
 	_mount(sk, long, bb, fit, gf)
@@ -143,13 +150,32 @@ func _mount(sk: Transform3D, long: bool, bb: AABB, fit: Basis, gf: Dictionary) -
 		lt.rotation = Vector3.ZERO
 		mount.position += sk_from_vm.basis * Vector3(-0.04, 0.0, 0.2)
 	else:
-		# a handgun is held in the right hand alone (as in the Fallout games); the left arm hangs out of sight
-		skel.add_child(lt)
-		lt.position = sk_from_vm * Vector3(-0.3, -0.75, -0.05)
+		# a handgun is held two-handed: the left hand cups the right from below
+		mount.add_child(lt)
+		var cup: Vector3 = sk_from_vm * (grip_vm + Vector3(-0.05, -0.045, 0.02))
+		lt.transform = mount.transform.affine_inverse() * Transform3D(Basis(), cup)
 	var ikl := ArmIK.new()
 	skel.add_child(ikl)
 	ikl.setup(skel, "l", lt)
-	ikl.pin_rotation = false
+	ikl.pin_rotation = long
+	if long:
+		# palm up against the underside of the handguard, fingers wrapping round its far side
+		var sgn := -1.0
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--lpalm="):
+				sgn = float(a.trim_prefix("--lpalm="))
+		var fy := Vector3(0.55, 0.45, -0.7).normalized()
+		var palm := Vector3(0.45, 0.9, 0.0)
+		palm = (palm - fy * palm.dot(fy)).normalized()
+		var lhx := palm * sgn
+		var lb_vm := Basis(lhx, fy, lhx.cross(fy).normalized())
+		var lw: Transform3D = sk_from_vm * Transform3D(lb_vm, Vector3.ZERO)
+		var gb: Basis = (mount.transform * gun.transform).basis
+		lt.basis = (gb.inverse() * lw.basis.orthonormalized()).orthonormalized()
+		# the wrist sits back from where the palm meets the gun
+		lt.position -= (gb.inverse() * (sk_from_vm.basis * (lb_vm * Vector3(0, 0.07, 0)))) 
+	# the support hand reaches the handguard however far forward it is: the shoulder (out of sight) comes with it
+	ikl.stretch = long
 	guard_t = lt
 	ik_tgt = lt
 	if unit < 1e-6:

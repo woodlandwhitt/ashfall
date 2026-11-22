@@ -42,6 +42,44 @@ func box(size: Vector3, at: Vector3, m: Material, parent: Node3D = null) -> Mesh
 
 # the exported furniture was lit by the WebView build's lamps and looks coal-black under ours: lift it
 var seen := {}
+var wall_mat: ShaderMaterial
+# the exported walls were cream plaster; a shelter is built of painted steel plate: replace them with panels
+const PLASTER := "4eae9bc5-e2e7"
+func _wall_material() -> ShaderMaterial:
+	if wall_mat:
+		return wall_mat
+	var sh := Shader.new()
+	sh.code = """shader_type spatial;
+uniform vec3 paint : source_color = vec3(0.58, 0.63, 0.6);
+uniform float floor_y = -60.0;
+varying vec3 wp;
+varying vec3 wn;
+void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz); }
+float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void fragment(){
+	float u = abs(wn.x) > abs(wn.z) ? wp.z : wp.x;
+	float y = wp.y - floor_y;
+	vec2 p = vec2(u / 1.5, y / 1.2);
+	vec2 cell = floor(p);
+	vec2 f = abs(fract(p) - 0.5);
+	float seam = smoothstep(0.475, 0.5, max(f.x, f.y));
+	float n = h(cell);
+	vec3 c = paint * (0.9 + n * 0.12);
+	// a lighter cap rail at shoulder height, grime collecting low down
+	c = mix(c, paint * 1.18, smoothstep(1.98, 2.0, y) * (1.0 - smoothstep(2.12, 2.14, y)));
+	c *= mix(0.78, 1.0, smoothstep(0.0, 1.4, y));
+	c = mix(c, paint * 0.42, seam);
+	float rivet = 1.0 - step(0.022, length(vec2(abs(fract(p.x) - 0.5) - 0.44, abs(fract(p.y) - 0.5) - 0.42) * vec2(1.5, 1.2)));
+	c = mix(c, paint * 0.6, rivet);
+	ALBEDO = c;
+	METALLIC = 0.35;
+	ROUGHNESS = 0.5 + n * 0.15;
+}"""
+	wall_mat = ShaderMaterial.new()
+	wall_mat.shader = sh
+	wall_mat.set_shader_parameter("floor_y", O.y)
+	return wall_mat
+
 func brighten(n: Node) -> void:
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		var mesh: Mesh = (mi as MeshInstance3D).mesh
@@ -49,6 +87,9 @@ func brighten(n: Node) -> void:
 			continue
 		for i in mesh.get_surface_count():
 			var m := mesh.surface_get_material(i)
+			if m is StandardMaterial3D and (m as StandardMaterial3D).albedo_texture and PLASTER in (m as StandardMaterial3D).albedo_texture.resource_path:
+				(mi as MeshInstance3D).set_surface_override_material(i, _wall_material())
+				continue
 			if m is StandardMaterial3D and not seen.has(m):
 				seen[m] = true
 				var sm := m as StandardMaterial3D

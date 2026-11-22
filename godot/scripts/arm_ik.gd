@@ -8,6 +8,7 @@ var lower := -1
 var hand := -1
 var target: Node3D
 var pin_rotation := false   # the hand takes the target's orientation (a grip), not the animation's
+var stretch := false        # move the shoulder towards a target the arm can't reach (first person only: unseen)
 
 func setup(sk: Skeleton3D, side: String, tgt: Node3D) -> void:
 	upper = sk.find_bone("upperarm_" + side)
@@ -19,13 +20,21 @@ func _process_modification_with_delta(_d: float) -> void:
 	var sk := get_skeleton()
 	if sk == null or upper < 0 or lower < 0 or hand < 0 or not is_instance_valid(target) or not sk.is_inside_tree() or not target.is_inside_tree():
 		return
+	var t: Vector3 = sk.global_transform.affine_inverse() * target.global_position
+	if stretch:
+		var u0 := sk.get_bone_global_pose(upper).origin
+		var full := u0.distance_to(sk.get_bone_global_pose(lower).origin) + sk.get_bone_global_pose(lower).origin.distance_to(sk.get_bone_global_pose(hand).origin)
+		var excess := u0.distance_to(t) - full * 0.96
+		if excess > 0.0:
+			var pu0 := sk.get_bone_parent(upper)
+			var pb: Basis = sk.get_bone_global_pose(pu0).basis if pu0 >= 0 else Basis()
+			sk.set_bone_pose_position(upper, sk.get_bone_pose_position(upper) + pb.inverse() * ((t - u0).normalized() * excess))
 	var ua := sk.get_bone_global_pose(upper)
 	var la := sk.get_bone_global_pose(lower)
 	var hd := sk.get_bone_global_pose(hand)
 	var a := ua.origin
 	var b := la.origin
 	var c := hd.origin
-	var t: Vector3 = sk.global_transform.affine_inverse() * target.global_position
 	var lab := a.distance_to(b)
 	var lbc := b.distance_to(c)
 	if lab < 1e-5 or lbc < 1e-5:
