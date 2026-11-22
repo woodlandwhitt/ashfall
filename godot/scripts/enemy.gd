@@ -157,6 +157,8 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 	if dead:
 		return
+	if Game.dev.onehit:
+		amount = maxf(amount, hp + 1.0)
 	hp -= amount
 	flash = 0.12
 	if ap and hp > 0.0:
@@ -208,6 +210,8 @@ func hear(at: Vector3) -> void:
 
 # line of sight through the world (not through you or itself: both sit on the world's collision layer)
 func can_see(p: Vector3, from := Vector3.INF) -> bool:
+	if Game.dev.invis:
+		return false
 	var a := (global_position if from == Vector3.INF else from) + Vector3.UP * 1.2
 	var q := PhysicsRayQueryParameters3D.create(a, p + Vector3.UP * 1.3, 1)
 	q.exclude = [get_rid(), Game.player.get_rid()]
@@ -221,6 +225,9 @@ func alert() -> void:
 			e.tac = "advance"
 
 func _physics_process(d: float) -> void:
+	if Game.dev.noai and not dead:
+		velocity = Vector3.ZERO
+		return
 	t += d
 	if flash > 0.0:
 		flash -= d

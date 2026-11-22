@@ -16,6 +16,7 @@ var dialog_node := ""
 var pending_trade := ""
 var objects: WorldObjects
 var events: RoadEvents
+var forge: Forge
 var atmos: Atmos
 var buggy: Buggy
 var khole: KHole
@@ -76,6 +77,9 @@ func _ready() -> void:
 	events = RoadEvents.new()
 	add_child(events)
 	events.setup(self)
+	forge = Forge.new()
+	add_child(forge)
+	forge.setup.call_deferred(self)
 	chunks.on_enter = _spawn_chunk
 	chunks.on_leave = _despawn_chunk
 	player = preload("res://scripts/player.gd").new()
@@ -624,6 +628,21 @@ func _test_hooks() -> void:
 		await _ai_test()
 	if args.has("khtest"):
 		await _khole_test()
+	if args.has("forgetest"):
+		await _forge_test()
+	if args.has("dev"):
+		hud.toggle_dev()
+		hud.dev.show_page(String(args.dev))
+	if args.has("forge"):
+		forge.toggle()
+		if String(args.forge) == "build":
+			for i in 6:
+				forge.cur = i
+				forge._make_ghost()
+				player.yaw += 0.35
+				await get_tree().physics_frame
+				await get_tree().physics_frame
+				forge.place()
 	if args.has("celltest"):
 		await _cell_test(int(args.celltest) if String(args.celltest) != "" else 1)
 	if args.has("perf"):
@@ -1011,6 +1030,66 @@ func _gun_grid() -> void:
 	cam.fov = 55.0
 	cam.current = true
 	sun.rotation = Vector3(-0.6, 0.0, 0)
+
+# forge: build, pick up and move, delete, undo, save with the game, a map slot, and spawn points going live
+func _forge_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	await _wait(20)
+	forge.toggle()
+	out.append("forge on: %s, kinds %d, ghost %s" % [forge.active, forge.kinds.size(), str(forge.ghost != null)])
+	player.pitch = -0.5
+	for k in ["wall", "floor", "crate", "lamp", "loot_rare", "spawn_raider"]:
+		forge.cur = forge.kinds.find(k)
+		forge._make_ghost()
+		player.yaw += 0.6
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		forge.place()
+	out.append("placed %d: %s" % [forge.objs.size(), str(forge.objs.map(func(o): return o.k))])
+	var saved: Array = Game.flags.get("forge_" + Game.area, [])
+	out.append("kept with the save: %d" % saved.size())
+	# look straight at the last thing placed (the spawn marker) and pick it up
+	var last: Dictionary = forge.objs[-1]
+	var tp: Vector3 = last.n.global_position + Vector3.UP * 0.9
+	player.global_position = tp + Vector3(0, 0.0, 3.0) - Vector3(0, player.cam.position.y, 0)
+	player.yaw = 0.0
+	player.pitch = 0.0
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var aimed = forge._aimed()
+	out.append("aimed at: %s" % (aimed.k if aimed else "nothing"))
+	forge.grab()
+	out.append("holding %s, objects %d" % [str(forge.held.k) if forge.held else "nothing", forge.objs.size()])
+	player.yaw = 0.4
+	await get_tree().physics_frame
+	forge.place()
+	out.append("moved it: objects %d" % forge.objs.size())
+	forge.undo_last()
+	out.append("undo: objects %d" % forge.objs.size())
+	forge.save_map("3")
+	var n0: int = forge.objs.size()
+	forge.clear_all()
+	out.append("cleared: %d" % forge.objs.size())
+	forge.load_map("3")
+	out.append("map loaded: %d (was %d)" % [forge.objs.size(), n0])
+	var e0 := enemies.size()
+	forge.toggle()
+	out.append("forge off: spawned %d enemies, markers hidden %s" % [enemies.size() - e0, str(not forge.objs.filter(func(o): return o.k.begins_with("spawn_"))[0].n.get_node("Marker").visible) if not forge.objs.filter(func(o): return o.k.begins_with("spawn_")).is_empty() else "n/a"])
+	# the dev console
+	out.append("console: " + hud.dev.run("give stimpak 3").replace("\n", " | "))
+	out.append("console: " + hud.dev.run("spawn hound 2"))
+	out.append("console: " + hud.dev.run("god"))
+	var hp0 := Game.hp
+	Game.hurt(50.0)
+	out.append("god mode hurt: %.0f -> %.0f" % [hp0, Game.hp])
+	out.append("console: " + hud.dev.run("quest hounds advance"))
+	out.append("console: " + hud.dev.run("tp saltreach"))
+	out.append("console: " + hud.dev.run("nonsense"))
+	out.append("voice key: " + voice_key("Hal and Benny. Good boys, too young for it, {name}."))
+	for l in out:
+		print("TEST ", l)
+	get_tree().quit()
 
 func _talk(id: String, picks: Array) -> String:
 	var n = null
@@ -1932,7 +2011,7 @@ func end_dialog() -> void:
 		dialog_npc.talking = false
 	dialog_npc = null
 	hud.hide_dialogue()
-	DisplayServer.tts_stop()
+	stop_voice()
 
 # the original speaks NPC lines with the device's voice; Godot can use the same text-to-speech
 # ---------------------------------------------------------------- the radio
@@ -1990,16 +2069,51 @@ func radio_tick(dt: float) -> void:
 			Game.msg("RADIO: " + line)
 			speak(line, "radio")
 
+# Spoken lines: every scripted line has a recorded voice (voice/<who>/<key>.ogg, made by tools/voice with Piper and
+# its LibriTTS voices, one speaker per character); anything else falls back to the device's text-to-speech.
+var voice_player: AudioStreamPlayer
+var _voice_re: RegEx
+
+static func voice_key(text: String) -> String:
+	var t := text
+	if Game.player_name != "" and Game.player_name.length() > 1:
+		t = t.replace(Game.player_name, "{name}")
+	if Game.main and Game.main._voice_re == null:
+		Game.main._voice_re = RegEx.create_from_string("[^a-z0-9]")
+	var re: RegEx = Game.main._voice_re if Game.main else RegEx.create_from_string("[^a-z0-9]")
+	return re.sub(t.to_lower(), "", true).md5_text().substr(0, 16)
+
+func voice_path(text: String, who: String) -> String:
+	return "res://voice/%s/%s.ogg" % [who, voice_key(text)]
+
 func speak(text: String, who: String) -> void:
+	if voice_player == null:
+		voice_player = AudioStreamPlayer.new()
+		voice_player.process_mode = Node.PROCESS_MODE_ALWAYS
+		voice_player.volume_db = 1.0
+		add_child(voice_player)
+	var p := voice_path(text, who)
+	if ResourceLoader.exists(p):
+		DisplayServer.tts_stop()
+		voice_player.stop()
+		voice_player.stream = load(p)
+		voice_player.play()
+		return
 	if not ProjectSettings.get_setting("audio/general/text_to_speech", false):
 		return
 	var voices := DisplayServer.tts_get_voices_for_language("en")
 	if voices.is_empty():
 		return
+	voice_player.stop()
 	DisplayServer.tts_stop()
 	var v: String = voices[hash(who) % voices.size()]
 	var pitch := 0.9 + float(hash(who + "p") % 30) / 100.0
 	DisplayServer.tts_speak(text, v, 80, pitch, 1.05)
+
+func stop_voice() -> void:
+	if voice_player:
+		voice_player.stop()
+	DisplayServer.tts_stop()
 
 func in_region(x: float, z: float) -> bool:
 	return x > Game.x0 + 4.0 and z > Game.z0 + 4.0 and x < Game.x0 + Game.hw - 5.0 and z < Game.z0 + Game.hd - 5.0

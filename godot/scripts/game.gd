@@ -55,6 +55,7 @@ var player: Node3D
 var main: Node3D
 var nav_ready := false
 var touch_move := Vector2.ZERO
+var touch_fly := 0.0          # up (+1) or down (-1) while flying, from the touch buttons
 var paused := false
 var DB: Dictionary = {}       # items, enemies, loot, perks, stats, places, vendors, gun fits (data/game.json)
 var L: Dictionary = {}        # quests, dialogue, quest objects, vendors, recipes, endings (data/logic.json)
@@ -202,6 +203,8 @@ func rad_mul() -> float:
 	return maxf(0.05, m)
 
 func add_rad(n: float, scaled := true) -> void:
+	if dev.god and n > 0.0:
+		return
 	var before := int(rad / 25.0)
 	rad = minf(100.0, rad + n * (rad_mul() if scaled else 1.0))
 	if int(rad / 25.0) > before:
@@ -379,7 +382,10 @@ func load_game(slot: String) -> bool:
 	return true
 
 var pending_pos = null
-var CELLS: Array = []        # building interiors: room origin and size, sign, street door
+var CELLS: Array = []
+# developer switches (the DEV menu and console)
+var dev := {"god": false, "noclip": false, "ammo": false, "ap": false, "onehit": false, "invis": false, "noai": false, "speed": 1.0,
+	"dayrate": 1.0, "perf": false, "timescale": 1.0}        # building interiors: room origin and size, sign, street door
 
 # a new resident of Haven 12: the name and aptitudes from the registration screen, waking in their quarters
 func new_game(nm: String, st: Dictionary, pts: int) -> void:
@@ -873,7 +879,7 @@ func armor_dr() -> float:
 	return dr + (8.0 if perks.has("toughness") else 0.0)
 
 func hurt(d: float) -> void:
-	if hp <= 0:
+	if hp <= 0 or dev.god:
 		return
 	var dr := armor_dr() + float(fx().dr)
 	d *= 1.0 - dr / (dr + 40.0)

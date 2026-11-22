@@ -138,6 +138,8 @@ func _unhandled_input(e: InputEvent) -> void:
 	elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT and not DisplayServer.is_touchscreen_available():
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	elif Game.main.forge and Game.main.forge.active and not (e is InputEventKey and e.keycode in [KEY_F1, KEY_F2, KEY_QUOTELEFT, KEY_ESCAPE]):
+		return
 	elif e is InputEventKey and e.pressed and not e.echo:
 		match e.keycode:
 			KEY_E: Game.main.interact()
@@ -146,6 +148,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_V: Game.main.hud.focus.enter()
 			KEY_SHIFT: running = not running
 			KEY_ESCAPE: Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			KEY_F1, KEY_QUOTELEFT: Game.main.hud.toggle_dev()
+			KEY_F2: Game.main.forge.toggle()
 
 func _physics_process(d: float) -> void:
 	if Game.hp <= 0 or Game.paused:
@@ -156,6 +160,8 @@ func _physics_process(d: float) -> void:
 	Game.body_tick(d)
 	fxc = Game.fx()
 	cam.fov = lerpf(cam.fov, 75.0 * float(fxc.fov) + sin(Time.get_ticks_msec() * 0.0011) * 4.0 * float(fxc.warp), minf(1.0, d * 3.0))
+	if Game.dev.ap:
+		Game.ap = Game.ap_max
 	if Game.ap < Game.ap_max:
 		Game.ap = minf(Game.ap_max, Game.ap + d * (5.0 if Game.main.in_combat() else 9.0) * float(fxc.ap))
 	var iv := Game.touch_move
@@ -171,7 +177,22 @@ func _physics_process(d: float) -> void:
 	if Game.main.buggy and Game.main.buggy.driving:
 		Game.main.buggy.drive(d, iv)
 		return
-	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 else WALK) * float(fxc.speed)
+	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 else WALK) * float(fxc.speed) * float(Game.dev.speed)
+	# free flight: through walls, wherever you look (forge mode flies this way too)
+	if Game.dev.noclip or (Game.main.forge and Game.main.forge.active):
+		collision_mask = 0
+		var cf := -cam.global_basis.z
+		var cr := cam.global_basis.x
+		var up := 0.0
+		if not talking:
+			if Input.is_key_pressed(KEY_SPACE): up += 1.0
+			if Input.is_key_pressed(KEY_C) or Input.is_key_pressed(KEY_CTRL): up -= 1.0
+		up += Game.touch_fly
+		var fv := (cr * iv.x - cf * iv.y + Vector3.UP * up) * spd * 2.2
+		velocity = velocity.lerp(fv, 1.0 - exp(-8.0 * d))
+		global_position += velocity * d
+		return
+	collision_mask = 1
 	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
 	var want := (right * iv.x - fwd * iv.y) * spd
@@ -255,7 +276,8 @@ func fire() -> void:
 		Sfx.play("k_click", -6.0)
 		reload()
 		return
-	Game.mag -= 1
+	if not Game.dev.ammo:
+		Game.mag -= 1
 	Game.stats_changed.emit()
 	fire_cd = cd
 	shot_fx(kind)

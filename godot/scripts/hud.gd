@@ -21,6 +21,7 @@ var pause_panel: PanelContainer
 var touch: Control
 var touch_on := false
 var pip
+var dev: DevMenu
 var screens: Screens
 var focus: Focus
 var ap_bar: ProgressBar
@@ -209,13 +210,17 @@ func _ready() -> void:
 	root.add_child(pip_b)
 	pip = preload("res://scripts/pipmenu.gd").new()
 	root.add_child(pip)
+	dev = DevMenu.new()
+	root.add_child(dev)
 	focus = Focus.new()
 	root.add_child(focus)
 	screens = Screens.new()
 	root.add_child(screens)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
-	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Main menu", func(): toggle_pause(); screens.open_title()]])
+	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx],
+		["Developer", func(): toggle_pause(); toggle_dev()], ["Forge mode", func(): toggle_pause(); Game.main.forge.toggle()],
+		["Main menu", func(): toggle_pause(); screens.open_title()]])
 	_gfx_label()
 
 	Game.message.connect(add_msg)
@@ -241,7 +246,7 @@ func _label(pos: Vector2, size: int) -> Label:
 
 func _center_panel(title: String, buttons: Array) -> PanelContainer:
 	var p := PanelContainer.new()
-	_place(p, Control.PRESET_CENTER, -240, -190, 480, 380)
+	_place(p, Control.PRESET_CENTER, -240, -230, 480, 460)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	p.add_child(v)
@@ -415,7 +420,25 @@ func open_craft(bench: bool) -> void:
 	pip.at_bench = bench
 	pip.show_tab("CRAFT")
 
+# the developer menu pauses the game like the Pip-Boy does
+func toggle_dev() -> void:
+	if screens.is_open() or pip.visible:
+		return
+	if dev.visible:
+		dev.visible = false
+		Game.paused = false
+		get_tree().paused = false
+		touch.visible = touch_on
+	else:
+		Game.paused = true
+		get_tree().paused = true
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		touch.visible = false
+		dev.open()
+
 func _unhandled_key_input(e: InputEvent) -> void:
+	if Game.main.forge and Game.main.forge.active:
+		return
 	if e.pressed and not e.echo and (e.keycode == KEY_TAB or e.keycode == KEY_I):
 		toggle_pip()
 	elif e.pressed and not e.echo and e.keycode == KEY_Q and not Game.paused:
@@ -628,6 +651,17 @@ class TouchPad extends Control:
 		var p = Game.player
 		if p == null:
 			return
+		var forging: bool = Game.main.forge != null and Game.main.forge.active
+		if forging or Game.dev.noclip:
+			if k == "jump":
+				Game.touch_fly = 1.0 if on else 0.0
+				return
+			if k == "run":
+				Game.touch_fly = -1.0 if on else 0.0
+				return
+		if forging:
+			Game.main.forge.touch(k, on)
+			return
 		match k:
 			"fire": p.trigger = on
 			"use": if on: Game.main.interact()
@@ -651,6 +685,10 @@ class TouchPad extends Control:
 			var txt: String = b[2]
 			if k == "use" and use_label != "":
 				txt = "USE"
+			if Game.main and Game.main.forge and Game.main.forge.active:
+				txt = Game.main.forge.button_label(k, txt)
+			elif Game.dev.noclip and k in ["jump", "run"]:
+				txt = "UP" if k == "jump" else "DOWN"
 			draw_string(f, b[0] + Vector2(-b[1], 7), txt, HORIZONTAL_ALIGNMENT_CENTER, b[1] * 2.0, 20, Color(1, 0.9, 0.7, 0.9))
 		if stick_id >= 0:
 			draw_circle(stick_c, 70.0, Color(0, 0, 0, 0.25))

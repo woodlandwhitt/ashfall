@@ -147,7 +147,7 @@ func _process(dt: float) -> void:
 		return
 	main.radio_tick(dt)
 	# the clock always runs (also indoors)
-	Game.time += dt / DAY_LEN
+	Game.time += dt / DAY_LEN * float(Game.dev.dayrate)
 	if Game.time >= 1.0:
 		Game.time -= 1.0
 		Game.day += 1
