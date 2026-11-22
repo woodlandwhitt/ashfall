@@ -661,9 +661,50 @@ func open_title() -> void:
 	_button(box, "JUMP INTO THE VALLEY", func():
 		Game.booted = true
 		close())
+	_update_row(box)
 	var sp2 := Control.new()
 	sp2.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(sp2)
+	var P = get_node_or_null("/root/Patcher")
+	if P and int(P.build) > 0:
+		var bl := _label(body, "Build %d%s" % [int(P.build), "  (updated in game)" if P.patched else ""], 14, DIM)
+		bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+# a newer build on GitHub for this APK: offer it, download it in the background, say when it's ready
+var updater: Updater
+func _update_row(box: VBoxContainer) -> void:
+	if OS.get_cmdline_user_args().size() > 0 and not OS.get_cmdline_user_args().has("--updatetest"):
+		return
+	if updater == null:
+		updater = Updater.new()
+		add_child(updater)
+	var holder := VBoxContainer.new()
+	box.add_child(holder)
+	var show_offer := func(b: int, mb: float):
+		if not is_instance_valid(holder):
+			return
+		for c in holder.get_children():
+			c.queue_free()
+		var st := _label(holder, "", 16, DIM)
+		var btn: Button = _button(holder, "UPDATE TO BUILD %d  (%.0f MB)" % [b, mb], func(): pass)
+		btn.pressed.connect(func():
+			btn.disabled = true
+			st.text = "Downloading..."
+			updater.download())
+		updater.progress.connect(func(f: float):
+			if is_instance_valid(st):
+				st.text = "Downloading build %d: %d%%" % [b, int(f * 100.0)])
+		updater.finished.connect(func(ok: bool, m: String):
+			if is_instance_valid(st):
+				st.text = m
+				st.add_theme_color_override("font_color", Color(0.6, 0.95, 0.6) if ok else Color(0.95, 0.55, 0.45))
+			if is_instance_valid(btn):
+				btn.disabled = ok)
+	if not updater.newest.is_empty():
+		show_offer.call(int(updater.newest.build), float(updater.newest.size) / 1048576.0)
+	else:
+		updater.found.connect(show_offer, CONNECT_ONE_SHOT)
+		updater.check()
 
 func _intro(i: int) -> void:
 	slide_i = i

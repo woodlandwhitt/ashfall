@@ -15,6 +15,7 @@ general/text_to_speech=true
 
 [autoload]
 
+Patcher="*res://scripts/patcher.gd"
 Sfx="*res://scripts/sfx.gd"
 Game="*res://scripts/game.gd"
 
