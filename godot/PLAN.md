@@ -134,5 +134,13 @@ Keep every existing quest and line, then deepen them:
    by IK; melee weapons are modelled and swing. The Pip-Boy is rebuilt in sections (STAT, INV, DATA, RADIO,
    SYS) with deeper pages. Haven 12 has panel ceilings, tiled floors, strip lights, wall ribs, sliding doors and
    a cog door that rolls aside. HUD corners no longer run under the touch buttons.*
-7. **godot-9:** the story overhaul (new beats, factions, companion quests), all endings and epilogues, polish.
+7. **godot-9:** voices, tools and fixes. *Status: shipped. Every scripted line (conversations, companions, radio,
+   the DJ, the intro) is voiced by its own speaker with Piper and the LibriTTS voice (`tools/voice/`), with
+   effects for the radio, the Core and the people of the Hole; unrecorded lines fall back to the device's speech.
+   A developer menu (F1, or DEVELOPER in the pause menu: cheats, player, world, spawning, quests, areas, voices,
+   rendering and a command console) and Forge mode (F2, or FORGE in the pause menu: build walls, floors, ramps,
+   stairs, cover, props, lights, loot, workbenches and enemy spawn points, kept with the save per area, with three
+   portable map slots). Haven 12's walls are painted steel panels; handguns are held out two-handed and the
+   support hand reaches the handguard on long guns.*
+8. **godot-10:** the story overhaul (new beats, factions, companion quests), all endings and epilogues, polish.
    At that point the Godot build replaces the WebView build.

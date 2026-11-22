@@ -10,4 +10,7 @@ All third-party assets are free and need no sign-up.
 - **Guns:** Quaternius "Ultimate Guns", CC0 (same models as the WebView build).
 - **Textures, props, sounds and world models:** exported from the WebView build. Their sources and licences are
   listed in assets/CREDITS.txt at the repository root (Poly Haven CC0, Kenney CC0, ambientCG CC0 and others).
+- **Voices:** generated offline with Piper (github.com/rhasspy/piper, MIT licence) using its "en-us-libritts-high"
+  voice from the Piper GitHub release v0.0.2. That voice was trained on LibriTTS (Zen et al., 2019,
+  openslr.org/60), CC BY 4.0. Each character speaks with one of its 904 speakers. See tools/voice/.
 - **Engine:** Godot Engine 4.5, MIT licence.
