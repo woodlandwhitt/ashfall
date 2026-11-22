@@ -30,6 +30,18 @@ const KIND := {
 	"lab": {"wall": ["modern_bookshelf", "modern_wardrobe", "Shelf_01", "modern_sideboard", "ClassicConsole_01"], "table": ["modern_desk", "WoodenTable_03"], "chair": ["SchoolChair_01", "GreenChair_01"],
 		"clutter": ["Television_01", "book_encyclopedia_set_01", "portable_searchlight", "ceramic_vase_02", "metal_jug"],
 		"decor": ["wall_clock", "industrial_wall_lamp", "vintage_telephone_wall_clock"], "ceil": ["caged_hanging_light", "hanging_industrial_lamp"], "sets": 3},
+	# Haven 12's rooms
+	"quarters": {"wall": ["modern_wardrobe", "ClassicNightstand_01", "Shelf_01", "ArmChair_01", "Sofa_01", "modern_bookshelf"], "table": ["CoffeeTable_01", "WoodenTable_02"],
+		"chair": ["GreenChair_01"], "clutter": ["book_encyclopedia_set_01", "Television_01", "ceramic_vase_02", "vintage_oil_lamp", "chess_set", "jug_01"],
+		"decor": ["fancy_picture_frame_01", "fancy_picture_frame_02", "ornate_mirror_01", "wall_clock"], "ceil": [], "sets": 1},
+	"classroom": {"wall": ["modern_bookshelf", "Shelf_01", "modern_sideboard", "ClassicConsole_01", "ClassicNightstand_01", "ArmChair_01"], "table": ["WoodenTable_03", "WoodenTable_03"], "chair": ["SchoolChair_01"],
+		"clutter": ["book_encyclopedia_set_01", "book_encyclopedia_set_01", "ceramic_vase_02", "chess_set"], "decor": ["wall_clock", "fancy_picture_frame_01"], "ceil": [], "sets": 4},
+	"security": {"wall": ["modern_wardrobe", "Shelf_01", "k:s_box-large", "modern_wardrobe", "k:q_Barrel"], "table": ["modern_desk"], "chair": ["GreenChair_01"],
+		"clutter": ["Television_01", "portable_searchlight", "book_encyclopedia_set_01", "metal_jug"], "decor": ["wall_clock", "vintage_telephone_wall_clock"], "ceil": [], "sets": 1},
+	"hydroponics": {"wall": ["ceramic_pot", "k:q_Barrel", "Shelf_01", "ceramic_pot", "k:s_barrel-open"], "table": ["WoodenTable_03", "WoodenTable_01"], "chair": ["Ottoman_01"],
+		"clutter": ["ceramic_pot", "brass_pot_01", "jug_01", "metal_jug", "wooden_bowl_01"], "decor": ["wall_clock"], "ceil": [], "sets": 3},
+	"cafeteria": {"wall": ["modern_sideboard", "Shelf_01", "ClassicConsole_01", "k:q_Barrel"], "table": ["WoodenTable_01"], "chair": ["SchoolChair_01"],
+		"clutter": ["carved_wooden_plate", "wooden_bowl_01", "jug_01", "brass_pot_01", "brass_pan_01", "metal_jug"], "decor": ["wall_clock", "fancy_picture_frame_01"], "ceil": [], "sets": 2},
 	"storage": {"wall": ["Shelf_01", "Shelf_01", "k:s_box-large", "k:q_Barrel", "k:s_barrel-open", "modern_wardrobe", "k:q_Wheels_Stack", "k:q_Pallet_Broken"], "table": ["WoodenTable_03"], "chair": ["Ottoman_01"],
 		"clutter": ["metal_jug", "brass_pot_01", "ceramic_pot", "Lantern_01", "Drill_01", "portable_searchlight"],
 		"decor": ["industrial_wall_lamp"], "ceil": ["hanging_industrial_lamp"], "sets": 1},
@@ -48,21 +60,53 @@ static func room(parent: Node3D, C: Dictionary) -> Node3D:
 	var f := Furnish.new()
 	return f._build(parent, C)
 
+# Haven 12: its rooms (found from the walls; x, z ranges relative to the vault's origin), what each one is, and the
+# doorway it opens from
+const VAULT_ROOMS := [[-25.75, -2.25, 1.25, 15.75, "quarters", [-3.0, 10]], [-25.75, -2.25, 16.25, 25.75, "quarters", [-3.0, 21]],
+	[-25.75, -2.25, 26.25, 37.75, "classroom", [-3.0, 32]], [-25.75, -2.25, 38.25, 49.75, "clinic", [-3.0, 44]],
+	[-25.75, -2.25, 50.25, 61.75, "office", [-3.0, 56]], [-25.75, -2.25, 62.25, 73.75, "security", [-3.0, 68]],
+	[2.25, 25.75, 1.25, 21.75, "cafeteria", [3.0, 13]], [2.25, 25.75, 22.25, 33.75, "hydroponics", [3.0, 28]],
+	[2.25, 25.75, 34.25, 49.75, "workshop", [3.0, 42]], [2.25, 25.75, 50.25, 61.75, "storage", [3.0, 56]], [2.25, 25.75, 62.25, 73.75, "quarters", [3.0, 68]]]
+
+static func vault(parent: Node3D, origin: Vector3) -> Node3D:
+	var all := Node3D.new()
+	all.name = "VaultFurniture"
+	parent.add_child(all)
+	for i in VAULT_ROOMS.size():
+		var R: Array = VAULT_ROOMS[i]
+		var f := Furnish.new()
+		f.no_lights = true
+		var rr := Rect2(origin.x + float(R[0]), origin.z + float(R[2]), float(R[1]) - float(R[0]), float(R[3]) - float(R[2]))
+		var dp := Vector2(origin.x + float(R[5][0]), origin.z + float(R[5][1]))
+		f._area(all, rr, String(R[4]), origin.y, [dp], "vault%d" % i)
+	return all
+
+var no_lights := false
+
 func _build(parent: Node3D, C: Dictionary) -> Node3D:
-	root = Node3D.new()
-	root.name = "Furnish_%d" % int(C.i)
-	parent.add_child(root)
-	space = parent.get_world_3d().direct_space_state
-	rng.seed = hash("room" + str(C.i))
-	fy = float(Game.L.consts.CELLS.y)
 	var w := float(C.W2)
 	var dd := float(C.D2)
-	rect = Rect2(float(C.ox) - w * 0.5 + 0.2, float(C.oz) - dd * 0.5 + 0.2, w - 0.4, dd - 0.4)
-	var K: Dictionary = KIND.get(String(C.get("kind", "office")), KIND.office)
-	# the way in: around the street door, and a lane from it into the room
+	var doors: Array = []
+	var r0 := Rect2(float(C.ox) - w * 0.5 + 0.2, float(C.oz) - dd * 0.5 + 0.2, w - 0.4, dd - 0.4)
 	for p in Game.W.get("points", []):
-		if String(p.get("id", "")) == "cellout" and rect.grow(1.5).has_point(Vector2(float(p.x), float(p.z))):
-			var dp := Vector2(float(p.x), float(p.z))
+		if String(p.get("id", "")) == "cellout" and r0.grow(1.5).has_point(Vector2(float(p.x), float(p.z))):
+			doors.append(Vector2(float(p.x), float(p.z)))
+	return _area(parent, r0, String(C.get("kind", "office")), float(Game.L.consts.CELLS.y), doors, "room" + str(C.i))
+
+func _area(parent: Node3D, r0: Rect2, kind: String, floor_y: float, doors: Array, key: String) -> Node3D:
+	root = Node3D.new()
+	root.name = "Furnish_" + key
+	parent.add_child(root)
+	space = parent.get_world_3d().direct_space_state
+	rng.seed = hash(key)
+	fy = floor_y
+	rect = r0
+	var C := {"kind": kind}
+	var K: Dictionary = KIND.get(kind, KIND.office)
+	# the way in: around the door, and a lane from it into the room
+	for dp0 in doors:
+		if true:
+			var dp: Vector2 = dp0
 			keep_clear.append(Rect2(dp - Vector2(2.2, 2.2), Vector2(4.4, 4.4)))
 			var into := (rect.get_center() - dp).normalized()
 			for k in 5:
@@ -76,7 +120,8 @@ func _build(parent: Node3D, C: Dictionary) -> Node3D:
 	if String(C.get("kind", "")) in ["storage", "workshop", "store"]:
 		_aisles(K, String(C.get("kind", "")))
 	_tables(K)
-	_junk(String(C.get("kind", "")))
+	if not no_lights or kind in ["storage", "workshop"]:
+		_junk(String(C.get("kind", "")))
 	_decor(K)
 	_ceiling(K)
 	why = {}
@@ -123,7 +168,7 @@ func _free(id: String, pos: Vector2, yaw: float, y: float, clear := true) -> boo
 	return true
 
 func _put(id: String, pos: Vector2, yaw: float, y: float, lit := false) -> Node3D:
-	var n := Furniture.make(id, lit and lights < 3)
+	var n := Furniture.make(id, lit and lights < 3 and not no_lights)
 	if lit and Furniture.LIGHTS.has(id) and lights < 3:
 		lights += 1
 	root.add_child(n)
@@ -161,8 +206,11 @@ func _walls(K: Dictionary) -> void:
 		var L := a.distance_to(b)
 		var dir := (b - a) / L
 		var t := rng.randf_range(0.3, 1.2)
+		var last := ""
 		while t < L - 0.5:
 			var id: String = K.wall[rng.randi() % K.wall.size()]
+			if id == last:
+				id = K.wall[rng.randi() % K.wall.size()]
 			var ab := Furniture.aabb(id)
 			# the piece's front (+Z) faces into the room
 			var yaw := atan2(nrm.x, nrm.y)
@@ -181,7 +229,8 @@ func _walls(K: Dictionary) -> void:
 						var hy: float = fy + [0.42, 0.85, 1.28, 1.7][rng.randi() % 4]
 						c.global_position = Vector3(pos.x + dir.x * rng.randf_range(-0.3, 0.3), hy, pos.y + dir.y * rng.randf_range(-0.3, 0.3))
 						c.rotation.y = rng.randf() * TAU
-				t += along + rng.randf_range(0.08, 0.7)
+				last = id
+				t += along + (rng.randf_range(0.4, 1.8) if no_lights else rng.randf_range(0.08, 0.7))
 			else:
 				t += 0.5
 
@@ -287,7 +336,7 @@ func _decor(K: Dictionary) -> void:
 		if Vector2(hp.x, hp.z).distance_to(p) > 0.5 or absf(Vector2(h.normal.x, h.normal.z).dot(nrm)) < 0.8:
 			continue
 		var id: String = K.decor[rng.randi() % K.decor.size()]
-		var c := Furniture.make(id, id == "industrial_wall_lamp" and lights < 3)
+		var c := Furniture.make(id, id == "industrial_wall_lamp" and lights < 3 and not no_lights)
 		if id == "industrial_wall_lamp":
 			lights += 1
 		root.add_child(c)
@@ -297,14 +346,16 @@ func _decor(K: Dictionary) -> void:
 
 # ---------------------------------------------------------------- hanging from the ceiling
 func _ceiling(K: Dictionary) -> void:
+	if K.ceil.is_empty():
+		return
 	var cols := 1 if rect.size.x < 10.0 else 2
 	var rows := 1 if rect.size.y < 10.0 else 2
 	for i in cols:
 		for j in rows:
 			var p := Vector2(rect.position.x + rect.size.x * (i + 0.5) / cols, rect.position.y + rect.size.y * (j + 0.5) / rows)
 			var id: String = K.ceil[rng.randi() % K.ceil.size()]
-			var c := Furniture.make(id, lights < 4)
+			var c := Furniture.make(id, lights < 4 and not no_lights)
 			lights += 1
 			root.add_child(c)
-			c.global_position = Vector3(p.x, fy + ROOM_H - 0.02, p.y)
+			c.global_position = Vector3(p.x, fy + (3.58 if no_lights else ROOM_H) - 0.02, p.y)
 			c.rotation.y = rng.randf() * TAU

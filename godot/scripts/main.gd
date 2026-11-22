@@ -2271,6 +2271,13 @@ func _environment() -> void:
 		vault_dress = VaultDress.new()
 		add_child(vault_dress)
 		vault_dress.setup(self)
+		_furnish_vault.call_deferred()
+
+# Haven 12's rooms get their furniture once the walls (and their collision) are in
+func _furnish_vault() -> void:
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	Furnish.vault(self, vault_dress.O)
 
 # ---------------------------------------------------------------- terrain: streamed ground meshes, one physics heightfield
 func _terrain() -> void:
