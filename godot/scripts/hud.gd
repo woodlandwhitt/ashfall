@@ -30,6 +30,15 @@ var font: Font
 var fps_acc := 0.0
 var fps_n := 0
 var fps_min := 999.0
+var hitmark: HitMark
+var dmgdir: DmgDir
+var tgt_box: VBoxContainer
+var tgt_name: Label
+var tgt_bar: ProgressBar
+var tgt = null
+var tgt_t := 0.0
+var bot_l: Panel
+var bot_r: Panel
 
 const AMBER := Color(0.95, 0.78, 0.45)
 const PANEL := Color(0.07, 0.055, 0.04, 0.82)
@@ -99,6 +108,21 @@ func _ready() -> void:
 	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(compass)
 
+	# dark backing behind the corner readouts, so text stays legible over bright ground
+	for side in [0, 1]:
+		var bp := Panel.new()
+		var bs := StyleBoxFlat.new()
+		bs.bg_color = Color(0, 0, 0, 0.38)
+		bs.set_corner_radius_all(8)
+		bp.add_theme_stylebox_override("panel", bs)
+		bp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if side == 0:
+			_place(bp, Control.PRESET_BOTTOM_LEFT, 10, -100, 300, 92)
+			bot_l = bp
+		else:
+			_place(bp, Control.PRESET_BOTTOM_RIGHT, -290, -94, 280, 86)
+			bot_r = bp
+		root.add_child(bp)
 	hp_bar = ProgressBar.new()
 	hp_bar.show_percentage = false
 	_place(hp_bar, Control.PRESET_BOTTOM_LEFT, 20, -42, 260, 18)
@@ -120,21 +144,52 @@ func _ready() -> void:
 	ap_bar.add_theme_stylebox_override("fill", afill)
 	ap_bar.add_theme_stylebox_override("background", bg)
 	root.add_child(ap_bar)
-	stat_l = _label(Vector2(20, -70), 17)
-	_place(stat_l, Control.PRESET_BOTTOM_LEFT, 20, -70, 520, 26)
+	stat_l = _label(Vector2(20, -94), 16)
+	_place(stat_l, Control.PRESET_BOTTOM_LEFT, 20, -94, 280, 48)
+	stat_l.autowrap_mode = TextServer.AUTOWRAP_WORD
 
 	ammo_l = _label(Vector2(0, 0), 26)
 	_place(ammo_l, Control.PRESET_BOTTOM_RIGHT, -190, -52, 170, 36)
 	ammo_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	weapon_l = _label(Vector2.ZERO, 17)
-	_place(weapon_l, Control.PRESET_BOTTOM_RIGHT, -330, -80, 310, 26)
+	_place(weapon_l, Control.PRESET_BOTTOM_RIGHT, -284, -86, 264, 26)
 	weapon_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hitmark = HitMark.new()
+	_place(hitmark, Control.PRESET_CENTER, -40, -40, 80, 80)
+	hitmark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(hitmark)
+	dmgdir = DmgDir.new()
+	dmgdir.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dmgdir.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(dmgdir)
+	tgt_box = VBoxContainer.new()
+	_place(tgt_box, Control.PRESET_CENTER_TOP, -150, 52, 300, 40)
+	tgt_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tgt_box.add_theme_constant_override("separation", 2)
+	root.add_child(tgt_box)
+	tgt_name = Label.new()
+	tgt_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tgt_name.add_theme_font_size_override("font_size", 16)
+	tgt_box.add_child(tgt_name)
+	tgt_bar = ProgressBar.new()
+	tgt_bar.show_percentage = false
+	tgt_bar.custom_minimum_size = Vector2(300, 9)
+	var tf := StyleBoxFlat.new()
+	tf.bg_color = Color(0.85, 0.25, 0.15)
+	tf.set_corner_radius_all(2)
+	var tb := StyleBoxFlat.new()
+	tb.bg_color = Color(0, 0, 0, 0.6)
+	tb.set_corner_radius_all(2)
+	tgt_bar.add_theme_stylebox_override("fill", tf)
+	tgt_bar.add_theme_stylebox_override("background", tb)
+	tgt_box.add_child(tgt_bar)
+	tgt_box.visible = false
 	prompt_l = _label(Vector2.ZERO, 22)
 	_place(prompt_l, Control.PRESET_CENTER, -300, 40, 600, 34)
 	prompt_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	touch_on = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile")
+	touch_on = DisplayServer.is_touchscreen_available() or OS.has_feature("mobile") or OS.get_cmdline_user_args().has("--touch")
 	touch = TouchPad.new()
 	touch.set_anchors_preset(Control.PRESET_FULL_RECT)
 	touch.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -278,7 +333,7 @@ func refresh() -> void:
 	ammo_l.text = (str(Game.mag) + " / " + str(Game.reserve)) if it.has("mag") else ""
 	weapon_l.text = Game.iname(Game.weapon)
 	var stims := int(Game.inv.get("stimpak", 0))
-	stat_l.text = "LVL " + str(Game.level) + "   XP " + str(Game.xp) + "   CAPS " + str(Game.caps) + ("   STIMS " + str(stims) if stims > 0 else "") + ("   RAD " + str(int(Game.rad)) if Game.rad >= 1.0 else "")
+	stat_l.text = "LVL %d   XP %d/%d   CAPS %d" % [Game.level, Game.xp, Game.xp_need(), Game.caps] + ("\nSTIMS " + str(stims) if stims > 0 else "\n") + ("   RAD " + str(int(Game.rad)) if Game.rad >= 1.0 else "")
 	var o := Game.current_objective()
 	quest_l.text = (String(o.title).to_upper() + "\n" + String(o.text)) if not o.is_empty() else ""
 
@@ -286,6 +341,33 @@ func set_prompt(t: String) -> void:
 	if not dlg.visible:
 		prompt_l.text = t
 		touch.use_label = t
+
+# combat feedback: a cross at the crosshair for every hit (white), critical or head hit (yellow), kill (red)
+func hit_marker(kind: String) -> void:
+	hitmark.kind = kind
+	hitmark.t = 0.32 if kind != "kill" else 0.5
+	hitmark.queue_redraw()
+
+# a red wedge at the edge of the screen pointing at whatever just hurt you
+func hurt_from(src: Vector3) -> void:
+	dmgdir.add(src)
+
+# the name and health of what you're shooting at (the last thing hit, or what's under the crosshair)
+func track_target(e, hold := 3.5) -> void:
+	tgt = e
+	tgt_t = hold
+
+func _target_tick(d: float) -> void:
+	tgt_t -= d
+	var show: bool = tgt != null and is_instance_valid(tgt) and tgt_t > 0.0 and not tgt.get("dead") and not (pip and pip.visible)
+	tgt_box.visible = show
+	if show:
+		var nm := String(tgt.def.get("name", tgt.type))
+		if nm == nm.to_lower():
+			nm = nm.capitalize()
+		tgt_name.text = nm + ("  (crippled)" if not tgt.crip.is_empty() else "")
+		tgt_bar.max_value = tgt.hp_max
+		tgt_bar.value = tgt.hp
 
 func flash_hurt(a: float) -> void:
 	hurt_rect.color.a = clampf(hurt_rect.color.a + a, 0.0, 0.55)
@@ -368,6 +450,7 @@ func _notification(what: int) -> void:
 			toggle_pause()
 
 func _process(d: float) -> void:
+	_target_tick(d)
 	hurt_rect.color.a = maxf(0.0, hurt_rect.color.a - d * 0.8)
 	ap_bar.max_value = Game.ap_max
 	ap_bar.value = Game.ap
@@ -386,6 +469,59 @@ func _process(d: float) -> void:
 	compass.queue_redraw()
 
 # ---------------------------------------------------------------- compass strip
+class HitMark extends Control:
+	var t := 0.0
+	var kind := "hit"
+	func _process(d: float) -> void:
+		if t > 0.0:
+			t -= d
+			queue_redraw()
+	func _draw() -> void:
+		if t <= 0.0:
+			return
+		var c := Vector2(40, 40)
+		var col := Color(1, 1, 1) if kind == "hit" else (Color(1.0, 0.85, 0.2) if kind == "crit" else Color(1.0, 0.2, 0.15))
+		col.a = clampf(t * 4.0, 0.0, 1.0)
+		var r0 := 9.0
+		var r1 := 18.0 if kind != "kill" else 23.0
+		for a in [PI * 0.25, PI * 0.75, PI * 1.25, PI * 1.75]:
+			var v := Vector2(cos(a), sin(a))
+			draw_line(c + v * r0, c + v * r1, Color(0, 0, 0, col.a * 0.7), 5.0)
+			draw_line(c + v * r0, c + v * r1, col, 2.5)
+
+class DmgDir extends Control:
+	var hits: Array = []   # [world position, time left]
+	func add(src: Vector3) -> void:
+		hits.append([src, 1.3])
+		if hits.size() > 6:
+			hits.pop_front()
+	func _process(d: float) -> void:
+		if hits.is_empty():
+			return
+		for h in hits:
+			h[1] -= d
+		hits = hits.filter(func(h): return h[1] > 0.0)
+		queue_redraw()
+	func _draw() -> void:
+		var cam := get_viewport().get_camera_3d()
+		if cam == null:
+			return
+		var c := size * 0.5
+		var r := minf(size.x, size.y) * 0.36
+		for h in hits:
+			var lp: Vector3 = cam.global_transform.affine_inverse() * (h[0] as Vector3)
+			var ang := atan2(lp.x, -lp.z)   # 0 ahead, + to the right
+			var a := ang - PI / 2.0
+			var col := Color(0.95, 0.1, 0.05, clampf(float(h[1]), 0.0, 1.0) * 0.8)
+			var pts := PackedVector2Array()
+			for k in 9:
+				var aa := a - 0.28 + 0.56 * k / 8.0
+				pts.append(c + Vector2(cos(aa), sin(aa)) * r)
+			for k in range(8, -1, -1):
+				var aa := a - 0.2 + 0.4 * k / 8.0
+				pts.append(c + Vector2(cos(aa), sin(aa)) * (r - 16.0))
+			draw_colored_polygon(pts, col)
+
 class Compass extends Control:
 	func _draw() -> void:
 		if Game.player == null:
@@ -434,7 +570,7 @@ class TouchPad extends Control:
 			"use": [Vector2(s.x - 255, s.y - 120), 48.0, "USE"],
 			"jump": [Vector2(s.x - 110, s.y - 320), 44.0, "JUMP"],
 			"reload": [Vector2(s.x - 240, s.y - 250), 40.0, "RLD"],
-			"run": [Vector2(250, s.y - 90), 38.0, "RUN"],
+			"run": [Vector2(370, s.y - 60), 38.0, "RUN"],
 			"swap": [Vector2(s.x - 360, s.y - 70), 36.0, "SWAP"],
 			"nade": [Vector2(s.x - 255, s.y - 360), 34.0, "NADE"],
 			"focus": [Vector2(s.x - 370, s.y - 200), 38.0, "FOCUS"],

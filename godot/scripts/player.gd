@@ -295,7 +295,18 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 		var c: Object = hit.collider
 		var crit := randf() < 0.03 + (int(Game.stats.luck) - 5) * 0.01
 		if c and c.has_method("hit"):
-			c.hit(dmg * randf_range(0.9, 1.1) * (2.0 if crit else 1.0), hit.position, dir)
+			# a shot to the head of anything on two legs does half again as much
+			var head := false
+			if c.get("quad") == false and c.get("model") != null:
+				head = hit.position.y - c.global_position.y > 1.5 * float(c.model.scale.y)
+			var was_dead: bool = c.get("dead") == true
+			c.hit(dmg * randf_range(0.9, 1.1) * (2.0 if crit else 1.0) * (1.5 if head else 1.0), hit.position, dir)
+			if c.get("hp_max") != null and Game.main and Game.main.hud:
+				var killed: bool = c.get("dead") == true and not was_dead
+				Game.main.hud.hit_marker("kill" if killed else ("crit" if crit or head else "hit"))
+				Game.main.hud.track_target(c)
+				if head and not killed:
+					Sfx.play("k_click", -10.0, 1.6)
 		else:
 			Game.main.impact(hit.position, hit.normal)
 

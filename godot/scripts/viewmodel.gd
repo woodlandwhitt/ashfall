@@ -196,45 +196,169 @@ func setup(gun_scene: PackedScene, fit: Basis, gf: Dictionary = {}) -> void:
 	_place()
 	_align(fit, bb, gf)
 
-# melee: a blade or club (or bare fists) in the right hand
+# melee: a blade or club (or a bare fist) held out in front, right hand pinned to the handle with IK. The weapon and the
+# hand share a pivot at the grip, so a swing (or a jab) moves both together.
+var melee_kind := ""
+var melee_m0 := Transform3D.IDENTITY
+var melee_off := Transform3D.IDENTITY
+var melee_holder: Node3D
+var melee_hand := -1
+
 func setup_melee(armed: bool, id: String) -> void:
 	_make_rig()
-	idle_anim = "Sword_Idle" if armed else "Pistol_Aim_Neutral"
-	attack_anim = "Sword_Attack" if armed else "Punch_Jab"
 	can_reload = false
+	idle_anim = "Pistol_Aim_Neutral"
+	attack_anim = "Pistol_Aim_Neutral"
 	ap.play("Pistol_Aim_Neutral")
 	ap.seek(0.0, true)
-	if armed:
-		var blade := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		var long: bool = id in ["machete", "sledge", "bat"]
-		bm.size = Vector3(0.03, 0.09 if id == "sledge" else 0.03, 0.7 if long else 0.28)
-		blade.mesh = bm
-		var m := StandardMaterial3D.new()
-		m.albedo_color = Color(0.55, 0.42, 0.3) if id in ["bat", "sledge"] else Color(0.7, 0.72, 0.75)
-		m.metallic = 0.0 if id == "bat" else 0.7
-		m.roughness = 0.5
-		blade.material_override = m
-		blade.position = Vector3(0, 0, -bm.size.z * 0.5)
-		var holder := Node3D.new()
-		holder.add_child(blade)
-		var ba := BoneAttachment3D.new()
-		ba.bone_name = "hand_r"
-		skel.add_child(ba)
-		skel.force_update_all_bone_transforms()
-		var hb := skel.get_bone_global_pose(skel.find_bone("hand_r"))
-		holder.transform = Transform3D(hb.basis.inverse() * Basis(Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)), hb.basis.inverse() * Vector3(0, -0.02, 0.06))
-		ba.add_child(holder)
-		_no_shadow(holder)
-		gun = holder
-	muzzle = Node3D.new()
-	(gun if gun else rig).add_child(muzzle)
 	_place()
-	ap.play(idle_anim)
+	rotation = Vector3.ZERO
+	# the aiming pose leaves the shoulders behind the eye; bring the body forward so the arm reaches out in front
+	rig.position += Vector3(0.0, 0.02, -0.2)
+	base_pos = rig.position
+	skel.force_update_all_bone_transforms()
+	var sk := Transform3D.IDENTITY
+	var n: Node = skel
+	while n != rig and n is Node3D:
+		sk = (n as Node3D).transform * sk
+		n = n.get_parent()
+	var vm_from_sk: Transform3D = rig.transform * sk
+	var sk_from_vm := vm_from_sk.affine_inverse()
+	melee_kind = id if armed else "fist"
+	var two := id in ["sledge", "bat"]
+	var grip_vm := Vector3(0.2, -0.24, -0.38) if not two else Vector3(0.17, -0.27, -0.36)
+	kick = Node3D.new()
+	skel.add_child(kick)
+	mount = Node3D.new()
+	kick.add_child(mount)
+	mount.transform = sk_from_vm * Transform3D(Basis(), grip_vm)
+	melee_m0 = mount.transform
+	k_back = sk_from_vm.basis * Vector3(0, 0, 1)
+	k_up = sk_from_vm.basis * Vector3(0, 1, 0)
+	k_right = sk_from_vm.basis * Vector3(1, 0, 0)
+	var to_mount := func(x_vm: Transform3D) -> Transform3D:
+		var w: Transform3D = sk_from_vm * x_vm
+		return mount.transform.affine_inverse() * Transform3D(w.basis.orthonormalized(), w.origin)
+	# the fist round the handle: same hand pose as a pistol grip (fingers along +Y, thumb +Z, palm -X)
+	var hy := Vector3(-0.22, 0.1, -1.0).normalized()
+	var hx := Vector3(1.0, 0.0, -0.15)
+	hx = (hx - hy * hx.dot(hy)).normalized()
+	var hand_vm := Basis(hx, hy, hx.cross(hy).normalized())
+	var rt := Node3D.new()
+	mount.add_child(rt)
+	rt.transform = to_mount.call(Transform3D(hand_vm, grip_vm - hand_vm * Vector3(-0.03, 0.065, 0.0)))
+	var ikr := ArmIK.new()
+	skel.add_child(ikr)
+	ikr.setup(skel, "r", rt)
+	ikr.pin_rotation = true
+	var lt := Node3D.new()
+	skel.add_child(lt)
+	lt.position = sk_from_vm * Vector3(-0.3, -0.75, -0.05)
+	var ikl := ArmIK.new()
+	skel.add_child(ikl)
+	ikl.setup(skel, "l", lt)
+	# the weapon, built along +Y (handle at the origin) and turned so it rises up and forward out of the fist
+	var w := _melee_mesh(melee_kind)
+	var up := Vector3(0.05, 0.78, -0.62).normalized() if not two else Vector3(-0.25, 0.62, -0.75).normalized()
+	var side := Vector3(1, 0, 0)
+	side = (side - up * side.dot(up)).normalized()
+	var wb := Basis(side, up, side.cross(up).normalized())
+	var holder := Node3D.new()
+	mount.add_child(holder)
+	holder.transform = to_mount.call(Transform3D(wb, grip_vm))
+	holder.add_child(w)
+	_no_shadow(holder)
+	# keep the weapon in the fist wherever the arm actually ends up
+	melee_off = rt.transform.affine_inverse() * holder.transform
+	melee_holder = holder
+	melee_hand = skel.find_bone("hand_r")
+	skel.skeleton_updated.connect(_follow_hand)
+	gun = holder
+	muzzle = Node3D.new()
+	holder.add_child(muzzle)
+	muzzle.position = Vector3(0, 0.3, 0)
+	state = "aim"
+
+func _melee_mesh(k: String) -> Node3D:
+	var root := Node3D.new()
+	var metal := StandardMaterial3D.new()
+	metal.albedo_color = Color(0.72, 0.74, 0.77)
+	metal.metallic = 0.8
+	metal.roughness = 0.3
+	var dark := StandardMaterial3D.new()
+	dark.albedo_color = Color(0.12, 0.1, 0.09)
+	dark.roughness = 0.8
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color(0.5, 0.36, 0.22)
+	wood.roughness = 0.75
+	var part := func(mesh: Mesh, mat: Material, pos: Vector3, rot := Vector3.ZERO) -> void:
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.material_override = mat
+		mi.position = pos
+		mi.rotation = rot
+		root.add_child(mi)
+	var bx := func(x: float, y: float, z: float) -> BoxMesh:
+		var b := BoxMesh.new()
+		b.size = Vector3(x, y, z)
+		return b
+	var cy := func(r0: float, r1: float, h: float) -> CylinderMesh:
+		var c := CylinderMesh.new()
+		c.top_radius = r0
+		c.bottom_radius = r1
+		c.height = h
+		c.radial_segments = 10
+		return c
+	match k:
+		"combat_knife", "knife":
+			part.call(bx.call(0.026, 0.12, 0.032), dark, Vector3(0, 0.0, 0))
+			part.call(bx.call(0.03, 0.012, 0.075), metal, Vector3(0, 0.066, 0.006))
+			part.call(bx.call(0.006, 0.15, 0.03), metal, Vector3(0, 0.147, 0.004))
+			var tip := PrismMesh.new()
+			tip.size = Vector3(0.03, 0.045, 0.006)
+			part.call(tip, metal, Vector3(0, 0.244, 0.004), Vector3(0, PI / 2, 0))
+		"machete":
+			part.call(bx.call(0.03, 0.13, 0.035), dark, Vector3.ZERO)
+			part.call(bx.call(0.005, 0.42, 0.055), metal, Vector3(0, 0.275, 0.01))
+			part.call(bx.call(0.005, 0.06, 0.07), metal, Vector3(0, 0.47, 0.018))
+		"bat":
+			part.call(cy.call(0.045, 0.02, 0.8), wood, Vector3(0, 0.3, 0))
+		"sledge":
+			part.call(cy.call(0.018, 0.018, 0.78), wood, Vector3(0, 0.3, 0))
+			part.call(bx.call(0.09, 0.09, 0.2), dark, Vector3(0, 0.68, 0))
+		"piston_fist":
+			part.call(bx.call(0.1, 0.08, 0.12), dark, Vector3(0, 0.02, -0.02))
+			part.call(cy.call(0.02, 0.02, 0.16), metal, Vector3(0.04, 0.02, 0.0), Vector3(PI / 2, 0, 0))
+		_:
+			pass
+	return root
+
+func _melee_swing() -> void:
+	if kick_tw:
+		kick_tw.kill()
+	mount.transform = melee_m0
+	var B0 := melee_m0.basis
+	var O0 := melee_m0.origin
+	var pose := func(rx: float, rz: float, off: Vector3) -> Transform3D:
+		# rotations about camera-space axes, offsets in camera space
+		var r := Basis(Vector3(1, 0, 0), rx) * Basis(Vector3(0, 0, 1), rz)
+		return Transform3D(B0 * r, O0 + B0 * off)
+	kick_tw = create_tween()
+	if melee_kind == "fist" or melee_kind == "piston_fist":
+		kick_tw.tween_property(mount, "transform", pose.call(-0.25, 0.0, Vector3(-0.1, 0.06, -0.22)), 0.07).set_ease(Tween.EASE_OUT)
+		kick_tw.tween_property(mount, "transform", melee_m0, 0.18).set_trans(Tween.TRANS_QUAD)
+		return
+	# a backhand slash: wind up high and right, cut down and across to the left, come back
+	kick_tw.tween_property(mount, "transform", pose.call(0.5, -0.5, Vector3(0.06, 0.1, 0.04)), 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	kick_tw.tween_property(mount, "transform", pose.call(-0.9, 0.9, Vector3(-0.2, -0.06, -0.12)), 0.11).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	kick_tw.tween_property(mount, "transform", melee_m0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 
 var kick_tw: Tween
 
 func shoot() -> void:
+	if melee_kind != "":
+		_melee_swing()
+		return
 	if kick == null:
 		ap.play(attack_anim, 0.03)
 		ap.seek(0.0, true)
@@ -270,8 +394,24 @@ func reload(dur: float) -> void:
 
 var dbg_t := 0
 var ik_tgt: Node3D
+# runs once the skeleton has its final (IK-adjusted) pose for the frame
+func _follow_hand() -> void:
+	if melee_holder and melee_hand >= 0:
+		# hand pose in the mount's space, then the weapon at its fixed offset from it
+		var hb: Transform3D = skel.get_bone_global_pose(melee_hand)
+		var in_mount: Transform3D = (kick.transform * mount.transform).affine_inverse() * hb
+		melee_holder.transform = in_mount * melee_off
+
 func _process(_d: float) -> void:
 	dbg_t += 1
+	if dbg_t == 15 and melee_holder and OS.get_cmdline_user_args().has("--ikdbg"):
+		var hb2 := skel.global_transform * skel.get_bone_global_pose(melee_hand)
+		var ua2 := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("upperarm_r"))
+		var tg: Node3D = null
+		for c in mount.get_children():
+			if c != melee_holder:
+				tg = c
+		print("IKDBG melee tgt ", to_local(tg.global_position), " hand ", to_local(hb2.origin), " shoulder ", to_local(ua2.origin), " reach ", ua2.origin.distance_to(tg.global_position))
 	if dbg_t == 15 and ik_tgt and OS.get_cmdline_user_args().has("--ikdbg"):
 		var hl := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("hand_l"))
 		var ua := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("upperarm_l"))

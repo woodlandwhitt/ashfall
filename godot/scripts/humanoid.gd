@@ -70,6 +70,7 @@ static func build(outfit: String, cloth: Color, skin: Color, quality_lod := true
 	for mi in hskel.find_children("*", "MeshInstance3D", false, false):
 		var m := mi as MeshInstance3D
 		hskel.remove_child(m)
+		m.owner = null
 		skel.add_child(m)
 		m.skeleton = NodePath("..")
 		var nm := String(m.name)
@@ -182,14 +183,18 @@ static func guard_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
 	var half_h := absf(up.dot(bb.size)) * 0.5
 	var t: Array = GRIPS.get(String(gf.get("glb", "")), [])
 	var gfrac: float = t[2] if t.size() > 2 else 0.62
-	return c - fwd * half_len + fwd * half_len * 2.0 * gfrac - up * half_h * 0.1
+	var gdown: float = t[3] if t.size() > 3 else 0.55
+	return c - fwd * half_len + up * half_h + fwd * half_len * 2.0 * gfrac - up * half_h * 2.0 * gdown
 
-# where the hand closes on each gun, as fractions of the model: [from the back towards the muzzle, down from the top,
-# the support hand's spot along the gun]. Tuned by eye with --gungrid.
+# where the hands close on each gun, as fractions of the model: [grip: from the back towards the muzzle, down from
+# the top; support hand: along, down]. Read off side views of every model (tools/gunside.tscn).
 const GRIPS := {
-	"AssaultRifle2_2": [0.34, 0.6, 0.68], "AssaultRifle_3": [0.12, 0.6, 0.66], "Bullpup_1": [0.33, 0.6, 0.86],
-	"Revolver_3": [0.22, 0.62, 0.6], "Rifle_Battle_West": [0.33, 0.68, 0.62], "SMG_Compact_West": [0.57, 0.66, 0.82],
-	"Shotgun_Pump_West": [0.33, 0.62, 0.76], "Sniper_Rifle_West": [0.25, 0.68, 0.6], "SubmachineGun_3": [0.66, 0.62, 0.86],
+	"AssaultRifle2_2": [0.30, 0.56, 0.64, 0.27], "AssaultRifle_3": [0.07, 0.48, 0.63, 0.25], "Bullpup_1": [0.47, 0.68, 0.87, 0.54],
+	"Pistol_4": [0.23, 0.62, 0.5], "Pistol_Compact_West": [0.2, 0.62, 0.5], "Pistol_Full_East": [0.19, 0.59, 0.5],
+	"Revolver_3": [0.13, 0.64, 0.5], "Rifle_Assault_East": [0.34, 0.53, 0.72, 0.3], "Rifle_Battle_West": [0.3, 0.72, 0.67, 0.37],
+	"SMG_Compact_West": [0.54, 0.45, 0.79, 0.26], "Shotgun_Auto_East": [0.33, 0.59, 0.79, 0.29], "Shotgun_Pump_West": [0.175, 0.46, 0.8, 0.48],
+	"Shotgun_SawedOff": [0.13, 0.58, 0.67, 0.4], "SniperRifle_4": [0.235, 0.5, 0.52, 0.5], "Sniper_Rifle_West": [0.26, 0.72, 0.62, 0.43],
+	"SubmachineGun_3": [0.46, 0.59, 0.85, 0.59],
 }
 
 static func grip_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
@@ -225,6 +230,7 @@ static func add_hair(root: Node3D, style: String, col: Color) -> void:
 		return c)
 	for mi in hs.find_children("*", "MeshInstance3D", false, false):
 		hs.remove_child(mi)
+		mi.owner = null
 		skel.add_child(mi)
 		(mi as MeshInstance3D).skeleton = NodePath("..")
 		(mi as MeshInstance3D).material_override = m

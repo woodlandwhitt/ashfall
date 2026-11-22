@@ -19,6 +19,7 @@ var events: RoadEvents
 var atmos: Atmos
 var buggy: Buggy
 var khole: KHole
+var look_t := 0.0
 var vault_dress: VaultDress
 var party: Array = []        # companions travelling with you (one person and Biscuit)
 var dialog_opts: Array = []
@@ -829,8 +830,10 @@ func _khole_test() -> void:
 		Game.use_item("ketarad")
 		Game.use_item("ketarad")
 		out.append("double dose: busy %s kholes %s drug %s" % [kh_busy, str(Game.flags.get("kholes")), str(Game.drugs.keys())])
-		while kh_busy:
+		while kh_busy and is_inside_tree():
 			await get_tree().process_frame
+		if not is_inside_tree() or Game.area != "world":
+			return
 		out.append("blackout: moved %.0f m to %s" % [p0.distance_to(player.global_position), str(player.global_position.snapped(Vector3.ONE))])
 		Game.flags["khRetTest"] = {"x": player.global_position.x, "z": player.global_position.z}
 		out.append("hole start: " + str(khole_start("hole")))
@@ -1730,7 +1733,7 @@ func _bake_nav() -> void:
 	nm.cell_size = 0.5
 	nm.cell_height = 0.25
 	nm.agent_radius = 0.5
-	nm.agent_height = 1.7
+	nm.agent_height = 1.75
 	nm.agent_max_climb = 0.5
 	nm.agent_max_slope = 42.0
 	var R := 90.0
@@ -1750,14 +1753,22 @@ func _bake_nav() -> void:
 			z += step
 		x += step
 	src.add_faces(f, Transform3D.IDENTITY)
-	var box := BoxMesh.new()
 	for s in Game.region.solids:
 		if s[1] < c.x - R or s[0] > c.x + R or s[3] < c.z - R or s[2] > c.z + R:
 			continue
-		var sz := Vector3(maxf(0.05, s[1] - s[0]), maxf(0.05, s[5] - s[4]), maxf(0.05, s[3] - s[2]))
-		src.add_mesh(box, Transform3D(Basis.from_scale(sz), Vector3((s[0] + s[1]) * 0.5, (s[4] + s[5]) * 0.5, (s[2] + s[3]) * 0.5)))
+		src.add_faces(_box_faces(Vector3(s[0], s[4], s[2]), Vector3(s[1], s[5], s[3])), Transform3D.IDENTITY)
 	nav_baking = nm
 	NavigationServer3D.bake_from_source_geometry_data_async(nm, src, _nav_done.bind(nm))
+
+# the twelve triangles of an axis-aligned box, for the navigation baker (no render mesh to read back)
+static func _box_faces(a: Vector3, b: Vector3) -> PackedVector3Array:
+	var v := [Vector3(a.x, a.y, a.z), Vector3(b.x, a.y, a.z), Vector3(b.x, a.y, b.z), Vector3(a.x, a.y, b.z),
+		Vector3(a.x, b.y, a.z), Vector3(b.x, b.y, a.z), Vector3(b.x, b.y, b.z), Vector3(a.x, b.y, b.z)]
+	var out := PackedVector3Array()
+	# wound like the terrain's faces: the top is a floor, the bottom is not
+	for q in [[3, 2, 1, 0], [4, 5, 6, 7], [0, 4, 5, 1], [1, 5, 6, 2], [2, 6, 7, 3], [3, 7, 4, 0]]:
+		out.append_array([v[q[0]], v[q[1]], v[q[2]], v[q[0]], v[q[2]], v[q[3]]])
+	return out
 
 func _nav_done(nm: NavigationMesh) -> void:
 	nav_baking = null
@@ -2049,6 +2060,16 @@ func _process(d: float) -> void:
 			Game.save_game("auto")
 	var t := _best_target()
 	hud.set_prompt("" if t.is_empty() else "[USE] " + String(t.label))
+	# whatever hostile is under the crosshair gets its name and health shown
+	look_t -= d
+	if look_t <= 0.0 and player.cam:
+		look_t = 0.15
+		var cf: Vector3 = player.cam.global_position
+		var q := PhysicsRayQueryParameters3D.create(cf, cf - player.cam.global_basis.z * 80.0, 1 | 2)
+		q.exclude = [player.get_rid()]
+		var h := get_world_3d().direct_space_state.intersect_ray(q)
+		if h and h.collider and h.collider.get("hostile") == true and h.collider.get("hp_max") != null and not h.collider.dead:
+			hud.track_target(h.collider, maxf(hud.tgt_t, 0.6))
 	# gunfire wakes up anything that can hear it
 	if player.flash.light_energy > 5.5:
 		for e in enemies:

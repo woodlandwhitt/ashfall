@@ -457,6 +457,8 @@ func _deal(amount: float) -> void:
 	if foe and is_instance_valid(foe):
 		foe.hurt(amount)
 	else:
+		if Game.main and Game.main.hud:
+			Game.main.hud.hurt_from(global_position + Vector3.UP * 1.2)
 		Game.hurt(amount)
 	if not ranged:
 		Sfx.play_at("o_bark2" if quad else "x_flesh1", global_position + Vector3.UP, 0.0, randf_range(0.9, 1.1))
@@ -492,8 +494,8 @@ func _move_to(p: Vector3, spd: float, d: float) -> float:
 			var aw: Vector3 = global_position - e.global_position
 			aw.y = 0.0
 			var l := aw.length()
-			if l < 1.3 and l > 0.01:
-				v += aw / l * (1.3 - l) * spd * 1.2
+			if l < 1.7 and l > 0.01:
+				v += aw / l * (1.7 - l) * spd * 1.6
 	velocity.x = lerpf(velocity.x, v.x, 1.0 - exp(-8.0 * d))
 	velocity.z = lerpf(velocity.z, v.z, 1.0 - exp(-8.0 * d))
 	face_yaw = lerp_angle(face_yaw, atan2(v.x, v.z), 1.0 - exp(-8.0 * d))

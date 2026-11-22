@@ -17,7 +17,7 @@ func setup(sk: Skeleton3D, side: String, tgt: Node3D) -> void:
 
 func _process_modification_with_delta(_d: float) -> void:
 	var sk := get_skeleton()
-	if sk == null or upper < 0 or lower < 0 or hand < 0 or not is_instance_valid(target):
+	if sk == null or upper < 0 or lower < 0 or hand < 0 or not is_instance_valid(target) or not sk.is_inside_tree() or not target.is_inside_tree():
 		return
 	var ua := sk.get_bone_global_pose(upper)
 	var la := sk.get_bone_global_pose(lower)
