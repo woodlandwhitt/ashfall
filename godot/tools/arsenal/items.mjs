@@ -280,3 +280,32 @@ Object.assign(ITEMS, FOOD);
 (STOCK.halloran ||= []).push(['rad_tea', 3]);
 LOOT.common.push(['canned_beans', 1, 2], ['dust_pops', 1, 1], ['prewar_cola', 1, 1], ['hollow_shrooms', 1, 2], ['iguana_stick', 1, 1]);
 LOOT.uncommon.push(['roast_molerat', 1, 1], ['smoked_fish', 1, 1], ['rad_tea', 1, 1], ['coffee_tin', 1, 1]);
+
+// ---- build 14: power armour, and the new people and machines in the valley
+ITEMS.power_armor = {n: 'Iron Warden Power Armor', t: 'armor', w: 40, v: 2600, dr: 48, radRes: 0.5, carry: 40, spd: 0.9, bonus: {might: 2, agility: -1},
+  desc: 'A walking tank of olive plate and servos, the Iron Wardens\' pride. Enormous protection, half the radiation, +2 Strength and room for 40 more, but slower and clumsier (-1 Agility).'};
+ITEMS.warden_tags = {n: 'Warden Tags', t: 'junk', w: 0.1, v: 30, desc: 'Stamped steel dog tags. The Wardens want these back, and pay for them.'};
+ITEMS.synth_core = {n: 'Synth Component', t: 'junk', w: 0.3, v: 75, desc: 'A palm-sized lattice of glass and gold, still warm. Wick would love to look at it.'};
+// [game.json fields, region etype fields]
+export const ENEMIES = {
+  hillfolk: [{n: 'Hill Folk', hp: 60, spd: 3.4, dmg: 8, ranged: true, range: 28, atk: 1.6, detect: 34, xp: 38, caps: [3, 20], mag: 2, nades: 0.15,
+    loot: [['common', 1]], drops: [['moonshine', 1, 1, 0.4], ['shells', 2, 6, 0.6], ['jerky', 1, 2, 0.4], ['hunter_stew', 1, 1, 0.1]]}, {hp: 60, dmg: 8, speed: 3.4, range: 28, xp: 38, ranged: true}],
+  hill_ma: [{n: 'Ma Tuttle', hp: 170, spd: 3.0, dmg: 12, ranged: true, range: 30, atk: 1.3, detect: 36, xp: 140, caps: [40, 90], mag: 2, nades: 0.3,
+    loot: [['uncommon', 1], ['rare', 0.5]], drops: [['hunter_stew', 1, 2, 1], ['sawed_off', 1, 1, 0.6], ['dynamite', 1, 2, 0.6]]}, {hp: 170, dmg: 12, speed: 3.0, range: 30, xp: 140, ranged: true}],
+  synth: [{n: 'Synth', hp: 85, spd: 3.8, dmg: 9, ranged: true, range: 40, atk: 1.1, detect: 44, xp: 70, caps: [0, 0], robot: true, mag: 12,
+    drops: [['cell', 6, 14, 1], ['synth_core', 1, 1, 0.5], ['laser_pistol', 1, 1, 0.15], ['circuit', 1, 1, 0.4]]}, {hp: 85, dmg: 9, speed: 3.8, range: 40, xp: 70, ranged: true}],
+  guardbot: [{n: 'Guardbot', hp: 140, spd: 3.0, dmg: 11, ranged: true, range: 36, atk: 0.9, detect: 40, xp: 90, caps: [0, 0], robot: true, mag: 20,
+    drops: [['cell', 8, 18, 1], ['circuit', 1, 2, 0.7], ['scrap_metal', 2, 4, 1], ['gears', 1, 2, 0.6]]}, {hp: 140, dmg: 11, speed: 3.0, range: 36, xp: 90, ranged: true}],
+  warden: [{n: 'Iron Warden', hp: 240, spd: 3.0, dmg: 14, ranged: true, range: 42, atk: 1.0, detect: 46, xp: 170, caps: [10, 40], mag: 20,
+    loot: [['rare', 1]], drops: [['power_armor', 1, 1, 0.35], ['warden_tags', 1, 1, 1], ['laser_rifle', 1, 1, 0.2], ['cell', 10, 20, 1], ['stimpak', 1, 2, 0.6]]}, {hp: 240, dmg: 14, speed: 3.0, range: 42, xp: 170, ranged: true}],
+};
+// where they are: a new hollow in the north-west hills, synths round the reactor, robots at the airfield, Wardens at Ironside
+export const LOCS = {holler: {name: 'Hollerback Holler', x: -300, z: 430, r: 26}};
+const S = (type, x, z, name) => ({type, x, z, hostile: true, name});
+export const SPAWNS = [
+  S('hillfolk', -305, 420), S('hillfolk', -292, 436), S('hillfolk', -312, 440), S('hillfolk', -285, 422), S('hillfolk', -318, 428), S('hill_ma', -300, 432, 'Ma Tuttle'),
+  S('synth', 60, -255), S('synth', 72, -246), S('synth', 55, -240), S('synth', 82, -262),
+  S('guardbot', 290, -345), S('guardbot', 312, -322), S('guardbot', 322, -348),
+  S('warden', -320, -288), S('warden', -342, -312),
+];
+

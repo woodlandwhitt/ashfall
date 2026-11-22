@@ -222,7 +222,7 @@ func _physics_process(d: float) -> void:
 	if Game.main.buggy and Game.main.buggy.driving:
 		Game.main.buggy.drive(d, iv)
 		return
-	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 and not crouch else WALK) * float(fxc.speed) * float(Game.dev.speed) * ((0.68 if Game.perks.has("light_step") else 0.5) if crouch else 1.0)
+	var spd: float = (RUN if (running or Input.is_key_pressed(KEY_SHIFT)) and iv.y < 0 and not crouch else WALK) * float(fxc.speed) * float(Game.dev.speed) * float(Game.item(Game.armor).get("spd", 1.0)) * ((0.68 if Game.perks.has("light_step") else 0.5) if crouch else 1.0)
 	# free flight: through walls, wherever you look (forge mode flies this way too)
 	if Game.dev.noclip or (Game.main.forge and Game.main.forge.active):
 		collision_mask = 0

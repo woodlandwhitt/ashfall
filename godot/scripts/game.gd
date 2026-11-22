@@ -136,7 +136,7 @@ func xp_need() -> int:
 	return 60 + level * 70
 
 func carry_max() -> float:
-	return 99999.0 if dev.get("carry", false) else 90.0 + int(stats.might) * 12.0 + (50.0 if perks.has("strong_back") else 0.0)
+	return 99999.0 if dev.get("carry", false) else 90.0 + int(stats.might) * 12.0 + (50.0 if perks.has("strong_back") else 0.0) + float(item(armor).get("carry", 0.0))
 
 func carry_now() -> float:
 	var w := 0.0
@@ -574,6 +574,21 @@ func load_area(a: String) -> void:
 			W.spawns.append(d)
 	if not interior():
 		_merge_spawns()
+	if area == "world":
+		# build 14's people and machines: their kinds, and where they stand
+		for k in ARSENAL.get("enemies", {}):
+			var et: Dictionary = ARSENAL.enemies[k][1].duplicate()
+			et["name"] = k
+			et["quad"] = false
+			et["scale"] = 1
+			region.etypes[k] = et
+		var n := 0
+		for sp in ARSENAL.get("spawns", []):
+			var d: Dictionary = sp.duplicate()
+			d["y"] = height(float(d.x), float(d.z))
+			d["id"] = "a14_%s_%d" % [String(d.type), n]
+			n += 1
+			region.enemies.append(d)
 	_extra_dialogue()
 
 # a character model from this area's folder, or the valley's
@@ -996,8 +1011,14 @@ var DIALOGUE: Dictionary = {}
 
 # ---------------------------------------------------------------- build 13's arsenal (data/arsenal.json, from tools/arsenal)
 # new guns, melee weapons, grenades and chems, how each model sits in the hand, and which traders and loot carry them
+var ARSENAL: Dictionary = {}
 func _merge_arsenal() -> void:
 	var A: Dictionary = _json("res://data/arsenal.json")
+	ARSENAL = A
+	for k in A.get("enemies", {}):
+		DB.enemies[k] = A.enemies[k][0]
+	for k in A.get("locs", {}):
+		DB.locs[k] = A.locs[k]
 	for k in A.get("gunfit", {}):
 		DB.gunfit[k] = A.gunfit[k]
 	for k in A.get("grips", {}):

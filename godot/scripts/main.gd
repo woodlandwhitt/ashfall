@@ -514,7 +514,7 @@ func _spawn_chunk(k: String) -> void:
 			var d: Dictionary = Game.region.enemies[i]
 			if live_enemy.has(i) or Game.dead.has(str(i)) or Game.killed.has(String(d.get("id", "-"))) or not Game.spawn_allowed(d):
 				continue
-			if not ResourceLoader.exists(Game.char_path("enemy_" + d.type + ".glb")) or not Game.region.etypes.has(d.type):
+			if not Game.region.etypes.has(d.type) or not (ResourceLoader.exists(Game.char_path("enemy_" + d.type + ".glb")) or preload("res://scripts/enemy.gd").PEOPLE.has(String(d.type))):
 				continue
 			var e = preload("res://scripts/enemy.gd").new()
 			add_child(e)
