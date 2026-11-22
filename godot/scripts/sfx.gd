@@ -45,6 +45,8 @@ func play_at(name: String, pos: Vector3, vol_db: float = 0.0, pitch: float = 1.0
 	if root == null:
 		return
 	var p: AudioStreamPlayer3D = null
+	# players parented to a scene that's since been swapped out (travel, the K-hole) are gone: drop them
+	pool3 = pool3.filter(func(q): return is_instance_valid(q))
 	for q in pool3:
 		if not q.playing:
 			p = q

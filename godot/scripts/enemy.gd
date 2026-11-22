@@ -39,6 +39,11 @@ var since_hit := 0.0
 var lt: LegTwist          # hips follow the feet when it strafes or backs off
 var aiming := false       # last frame it was aiming: it keeps facing you while it moves     # a provoked townsperson cools off when you stop hitting them and walk away
 var foe = null           # the companion it is fighting, or null for you
+var fly := false         # a vulture: airborne
+var fly_c := Vector3.ZERO     # the point it wheels round
+var fly_a := 0.0
+var fly_mode := "wheel"   # wheel, stoop (diving on you), climb
+var fly_t := 0.0
 var stun := 0.0         # a flashbang: blind and staggering
 var slow := 0.0         # a cryo grenade: frozen to a crawl
 var bleed: Array = []   # [damage per second, seconds left]: nails, burning, a glowing wound
@@ -74,6 +79,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		def = td.duplicate()
 		def["name"] = String(d.name)
 	quad = bool(td.get("quad", false))
+	fly = bool(Game.DB.enemies.get(type, {}).get("fly", false)) or type == "vulture"
 	ranged = (bool(td.get("ranged", false)) or bool(d.get("ranged", false))) and not quad
 	hp_max = float(td.get("hp", 40)) if td.get("hp") != null else 40.0
 	hp = hp_max
@@ -173,10 +179,14 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		ap.play("Idle")
 		ap.seek(randf() * 2.0, true)
 	else:
-		var ps: PackedScene = load(Game.char_path("enemy_" + type + ".glb"))
-		model = ps.instantiate()
-		add_child(model)
-		rig = Rig.new(model, quad)
+		if fly:
+			model = Vulture.model()
+			add_child(model)
+		else:
+			var ps: PackedScene = load(Game.char_path("enemy_" + type + ".glb"))
+			model = ps.instantiate()
+			add_child(model)
+			rig = Rig.new(model, quad)
 	for mi in model.find_children("*", "GeometryInstance3D", true, false):
 		(mi as GeometryInstance3D).visibility_range_end = 150.0
 	slot = float(absi(hash(eid + str(d.x) + str(d.z))) % 6283) / 1000.0
@@ -222,6 +232,89 @@ func _unwedge() -> void:
 	if c != Vector3.INF and c.distance_to(global_position) > 0.01:
 		global_position = c + Vector3.UP * 0.1
 
+# ---------------------------------------------------------------- flying (vultures)
+func _fly(d: float) -> void:
+	var P := Game.player
+	var pp: Vector3 = P.global_position
+	var dist := Vector2(pp.x - global_position.x, pp.z - global_position.z).length()
+	if dist > 140.0 and state != "chase" and fly_c != Vector3.ZERO:
+		return
+	fly_t -= d
+	atk_cd -= d
+	if fly_c == Vector3.ZERO:
+		fly_c = home
+		fly_a = randf() * TAU
+		global_position = home + Vector3.UP * randf_range(9.0, 14.0)
+		collision_mask = 0
+	if hostile and state != "chase" and dist < float(Game.DB.enemies.get(type, {}).get("detect", 42)) and stun <= 0.0:
+		state = "chase"
+		Sfx.play_at("o_creature2", global_position, 2.0, 1.6)
+	var want := Vector3.ZERO
+	var flap := 0.1
+	var spd := 7.5 * (0.4 if slow > 0.0 else 1.0)
+	var centre := fly_c
+	var alt := 12.0
+	var rad := 12.0
+	if state == "chase" and not Game.dev.invis:
+		centre = pp
+		alt = 7.0
+		rad = 9.0
+	match fly_mode:
+		"wheel":
+			fly_a += d * spd / rad
+			var gy: float = Game.height(centre.x + cos(fly_a) * rad, centre.z + sin(fly_a) * rad)
+			want = Vector3(centre.x + cos(fly_a) * rad, maxf(gy, centre.y) + alt + sin(t * 0.4) * 1.2, centre.z + sin(fly_a) * rad)
+			if state == "chase" and fly_t <= 0.0 and atk_cd <= 0.0 and stun <= 0.0:
+				fly_mode = "stoop"
+				fly_t = 4.0
+		"stoop":
+			want = pp + Vector3.UP * 1.2
+			spd = 13.0 * (0.4 if slow > 0.0 else 1.0)
+			flap = 0.0
+			if global_position.distance_to(want) < 1.6:
+				if not Game.dev.invis:
+					Game.main.hud.hurt_from(global_position)
+					Game.hurt(dmg * randf_range(0.8, 1.2))
+					Sfx.play_at("o_bark2", global_position, 0.0, 1.5)
+				atk_cd = float(Game.DB.enemies.get(type, {}).get("atk", 1.4)) + randf_range(2.0, 4.0)
+				fly_mode = "climb"
+				fly_t = 2.2
+			elif fly_t <= 0.0:
+				fly_mode = "climb"
+				fly_t = 2.0
+		"climb":
+			var away := (global_position - pp)
+			away.y = 0
+			away = away.normalized() if away.length() > 0.1 else Vector3.FORWARD
+			want = global_position + away * 6.0 + Vector3.UP * 5.0
+			flap = 1.0
+			if fly_t <= 0.0:
+				fly_mode = "wheel"
+				fly_a = atan2(global_position.z - centre.z, global_position.x - centre.x)
+				fly_t = randf_range(3.0, 7.0)
+	var to := want - global_position
+	var v := to.normalized() * minf(spd, to.length() * 2.0) if to.length() > 0.05 else Vector3.ZERO
+	var prev := velocity
+	velocity = velocity.lerp(v, 1.0 - exp(-2.5 * d))
+	global_position += velocity * d
+	var hv := Vector2(velocity.x, velocity.z)
+	if hv.length() > 0.3:
+		face_yaw = lerp_angle(face_yaw, atan2(velocity.x, velocity.z), 1.0 - exp(-4.0 * d))
+	var turn := wrapf(atan2(velocity.x, velocity.z) - atan2(prev.x, prev.z), -PI, PI) / maxf(d, 0.001)
+	model.rotation.y = face_yaw
+	Vulture.pose(model, t, flap if velocity.y < 1.0 else 1.0, clampf(turn * 0.25, -0.6, 0.6), clampf(atan2(velocity.y, hv.length() + 0.01), -0.9, 0.6))
+
+func _fall_from_sky() -> void:
+	var g: float = Game.height(global_position.x, global_position.z)
+	var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(global_position, global_position + Vector3.DOWN * 60.0, 1))
+	if not hit.is_empty():
+		g = maxf(g, float(hit.position.y))
+	var tw := create_tween()
+	var tt := sqrt(maxf(0.1, global_position.y - g) / 6.0)
+	tw.tween_property(self, "global_position:y", g + 0.15, tt).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(model, "rotation:z", PI * 0.9, tt)
+	Vulture.pose(model, 0.0, 0.0, 0.0, 0.0)
+
 func _twist_setup() -> void:
 	var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
 	if sk:
@@ -265,6 +358,13 @@ func die(dir: Vector3) -> void:
 	if idx >= 0:
 		Game.dead[str(idx)] = true
 	state = "dead"
+	if fly:
+		collision_layer = 0
+		Sfx.play_at("o_creature2", global_position, 0.0, 1.3)
+		_fall_from_sky()
+		Game.on_kill(type, eid)
+		Game.add_xp(int(def.get("xp", 24)) if def.get("xp") != null else 24)
+		return
 	collision_layer = 0
 	Sfx.play_at("o_creature2" if quad else ["o_mdie1", "o_mdie2"][randi() % 2], global_position + Vector3.UP)
 	if ap:
@@ -353,6 +453,9 @@ func _physics_process(d: float) -> void:
 		if float(bleed[1]) <= 0.0:
 			bleed = []
 	slow = maxf(0.0, slow - d)
+	if fly:
+		_fly(d)
+		return
 	if stun > 0.0:
 		# reeling: no shooting, no chasing, a stagger on the spot
 		stun -= d

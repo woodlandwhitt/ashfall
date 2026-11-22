@@ -986,6 +986,16 @@ func _test_hooks() -> void:
 			m.scale = Vector3.ONE * 1.25
 	if args.has("lifelog"):
 		_lifelog()
+	if args.has("raytest"):
+		await _wait(40)
+		for e in enemies:
+			var from: Vector3 = e.global_position + Vector3(4, 1.6, 0)
+			var q := PhysicsRayQueryParameters3D.create(from, e.global_position + Vector3.UP * 1.0, 1 | 2 | 4)
+			var h := get_world_3d().direct_space_state.intersect_ray(q)
+			print("RAY ", e.type, " layer ", e.collision_layer, " shapes ", e.get_child_count(), " hit ", (h.collider.name if h else "nothing"), " pos ", e.global_position)
+		get_tree().quit()
+	if args.has("floatscan"):
+		_floatscan()
 	if args.has("opendoor") and vault_dress:
 		vault_dress.open_great_door()
 	if args.has("topdown"):
@@ -2004,6 +2014,9 @@ func _selftest() -> void:
 				break
 		var dv: Vector3 = tp + Vector3.UP * 1.0 - player.cam.global_position
 		player.pitch = atan2(dv.y, Vector2(dv.x, dv.z).length())
+		# physics frames can outrun drawn ones when the machine is slow: wait for the camera to take the pitch
+		await get_tree().process_frame
+		await get_tree().process_frame
 		await _wait(2)
 		var hp0: float = tgt.hp
 		player.fire_cd = 0.0
@@ -2011,7 +2024,7 @@ func _selftest() -> void:
 		var q := PhysicsRayQueryParameters3D.create(from, from + (-player.cam.global_transform.basis.z) * 60.0, 1 | 2 | 4)
 		q.exclude = [player.get_rid()]
 		var h := get_world_3d().direct_space_state.intersect_ray(q)
-		out.append("aim ray hits " + (str(h.collider.name) + " (" + h.collider.get_class() + ")" if h else "nothing") + " | target %s at %s, me at %s yaw %.2f pitch %.2f dist %.1f" % [tgt.eid, str(tp.snapped(Vector3.ONE * 0.1)), str(player.global_position.snapped(Vector3.ONE * 0.1)), player.yaw, player.pitch, player.global_position.distance_to(tp)])
+		out.append("aim ray hits " + (str(h.collider.name) + " (" + h.collider.get_class() + ")" if h else "nothing") + " | target %s " % tgt.type + "%s at %s, me at %s yaw %.2f pitch %.2f dist %.1f" % [tgt.eid, str(tp.snapped(Vector3.ONE * 0.1)), str(player.global_position.snapped(Vector3.ONE * 0.1)), player.yaw, player.pitch, player.global_position.distance_to(tp)])
 		player.fire()
 		await _wait(2)
 		out.append("shot a %s: hp %.0f -> %.0f, mag %d" % [tgt.type, hp0, tgt.hp, Game.mag])
@@ -2382,6 +2395,51 @@ func _environment() -> void:
 		add_child(vault_dress)
 		vault_dress.setup(self)
 		_furnish_vault.call_deferred()
+
+# every chunk's meshes: wide flat pieces high off the ground with nothing under them (roofs that float)
+func _floatscan() -> void:
+	var found := 0
+	for k in chunks.files:
+		var ps: PackedScene = load(chunks.files[k])
+		if ps == null:
+			continue
+		var n := ps.instantiate() as Node3D
+		var boxes: Array = []
+		for c in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := c as MeshInstance3D
+			var t := Transform3D.IDENTITY
+			var x: Node = mi
+			while x != null and x != n:
+				t = (x as Node3D).transform * t
+				x = x.get_parent()
+			boxes.append([String(mi.name), t * mi.get_aabb()])
+		for b in boxes:
+			var ab: AABB = b[1]
+			if ab.size.y > 1.5 or ab.size.x * ab.size.z < 4.0 or ab.size.x > 30.0 or ab.size.z > 30.0:
+				continue
+			var c := ab.get_center()
+			var gy: float = Game.height(c.x, c.z)
+			if ab.position.y - gy < 1.4:
+				continue
+			var held := false
+			for o in boxes:
+				var ob: AABB = o[1]
+				if ob == ab:
+					continue
+				var top := ob.end.y
+				if top < ab.position.y - 0.7 or ob.position.y > ab.position.y + 0.2:
+					continue
+				var ix := minf(ab.end.x, ob.end.x) - maxf(ab.position.x, ob.position.x)
+				var iz := minf(ab.end.z, ob.end.z) - maxf(ab.position.z, ob.position.z)
+				if ix > 0.0 and iz > 0.0 and ix * iz > ab.size.x * ab.size.z * 0.05:
+					held = true
+					break
+			if not held:
+				found += 1
+				print("FLOAT %s chunk %s at %s size %s gap %.2f" % [b[0], k, str(c.snapped(Vector3.ONE * 0.1)), str(ab.size.snapped(Vector3.ONE * 0.1)), ab.position.y - gy])
+		n.free()
+	print("FLOATSCAN done ", found)
+	get_tree().quit()
 
 func _lifelog() -> void:
 	while true:
