@@ -158,5 +158,14 @@ Keep every existing quest and line, then deepen them:
    leaving for good at -40. Deputy Renn joins as a companion with his quest "Old Colours" (Mags Coyle's bounty, the
    dry wash camp, and who in Saltreach sold the wagon routes). Story layers now stack (`story10.mjs`,
    `story11.mjs`). No grass through the Spur's carpet. Console: casino, approve, loyal, recruit.*
-10. **godot-12:** what's next: more of the valley's people on the road, Biscuit's tricks, the Gulch itself.
+10. **godot-12:** *Status: shipped.* Furnished interiors: every town room and Haven 12's eleven rooms get
+   photoscanned furniture (Poly Haven, CC0) by room type, plus the wasteland kit's crates, barrels and junk, all
+   aged (`furnish.gd`, `furniture.gd`). Weathered props outdoors (`weathering.gd`). Real fires (`fire_fx.gd`).
+   Item models on the ground (`item_models.gd`). Ghouls with rotting skin and rags; everyone dressed from mixed outfit
+   parts and dyes (`Humanoid.mix_spec`). Enemies strafe with hips turned (`leg_twist.gd`), face you to shoot, come
+   at you a few at a time. Terminals with password hacking (`terminal.gd`). Third-person camera (`third_person.gd`).
+   Chem quick button. Intelligence (7th S.P.E.C.I.A.L.). Pip-Boy drag scrolling; pause closes menus; queued
+   messages; pools lie on the ground; provoked townsfolk calm down; no stealing through doors; Forge furniture.
+11. **godot-13:** every gun its own look and grip; 30 more weapons, 10 more grenades, 20 more drugs.
+12. **godot-14+:** the map three times larger, region by region, with new settlements, interiors and longer quests.
    At that point the Godot build replaces the WebView build.

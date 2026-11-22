@@ -206,13 +206,31 @@ func _input(e: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 # ================================================================ BANNER
+# big centre banners take turns: a second one waits for the first to fade
+var banner_q: Array = []
+var banner_busy := false
 func banner(title: String, sub: String) -> void:
-	banner_l.text = title
-	banner_s.text = sub
+	for b in banner_q:
+		if b[0] == title and b[1] == sub:
+			return
+	banner_q.append([title, sub])
+	if not banner_busy:
+		_next_banner()
+
+func _next_banner() -> void:
+	if banner_q.is_empty():
+		banner_busy = false
+		return
+	banner_busy = true
+	var b: Array = banner_q.pop_front()
+	banner_l.text = b[0]
+	banner_s.text = b[1]
 	var tw := banner_box.create_tween()
 	tw.tween_property(banner_box, "modulate:a", 1.0, 0.3)
 	tw.tween_interval(2.6)
 	tw.tween_property(banner_box, "modulate:a", 0.0, 0.8)
+	tw.tween_interval(0.25)
+	tw.tween_callback(_next_banner)
 
 # ================================================================ BARTER
 func open_trade(id: String) -> void:

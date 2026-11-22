@@ -329,19 +329,69 @@ func hide_dialogue() -> void:
 	dlg.visible = false
 	touch.visible = touch_on
 
+# messages queue up and come in one at a time (a burst of pickups and quest updates no longer piles up on top of
+# itself); a repeat of the line just shown counts up instead; at most three at once, always below the objective
+var msg_q: Array = []
+var msg_gap := 0.0
 func add_msg(t: String) -> void:
+	if t.begins_with("♪ "):
+		_radio_note(t.substr(2))
+		return
+	for l in msgs.get_children():
+		if l.get_meta("base", "") == t and is_instance_valid(l):
+			var n: int = l.get_meta("n", 1) + 1
+			l.set_meta("n", n)
+			(l as Label).text = "%s  x%d" % [t, n]
+			(l as Label).modulate.a = 1.0
+			return
+	if msg_q.size() < 12 and not msg_q.has(t):
+		msg_q.append(t)
+
+func _msg_tick(d: float) -> void:
+	# keep the log under the objective text, however many lines that runs to
+	msgs.position.y = quest_l.position.y + maxf(30.0, quest_l.get_minimum_size().y if quest_l.text != "" else 0.0) + 10.0
+	msg_gap -= d
+	if msg_gap > 0.0 or msg_q.is_empty():
+		return
+	msg_gap = 0.45
+	_show_msg(msg_q.pop_front())
+
+func _show_msg(t: String) -> void:
 	var l := Label.new()
 	l.text = t
+	l.set_meta("base", t)
 	l.add_theme_font_size_override("font_size", 18)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD
 	l.custom_minimum_size = Vector2(540, 0)
 	msgs.add_child(l)
-	while msgs.get_child_count() > 4:
+	while msgs.get_child_count() > 3:
 		msgs.get_child(0).free()
 	var tw := l.create_tween()
 	tw.tween_interval(5.0)
 	tw.tween_property(l, "modulate:a", 0.0, 1.2)
 	tw.tween_callback(l.queue_free)
+
+# the radio's song title gets its own line under the compass, so it never mixes with quest news
+var radio_l: Label
+func _radio_note(t: String) -> void:
+	if radio_l == null:
+		radio_l = Label.new()
+		radio_l.add_theme_font_size_override("font_size", 16)
+		radio_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		radio_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		radio_l.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		radio_l.offset_left = -300
+		radio_l.offset_right = 300
+		radio_l.offset_top = 64
+		radio_l.offset_bottom = 88
+		radio_l.add_theme_color_override("font_color", Color(0.95, 0.85, 0.55))
+		radio_l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+		root.add_child(radio_l)
+	radio_l.text = "♪ " + t
+	radio_l.modulate.a = 1.0
+	var tw := radio_l.create_tween()
+	tw.tween_interval(4.5)
+	tw.tween_property(radio_l, "modulate:a", 0.0, 1.0)
 
 func refresh() -> void:
 	hp_bar.max_value = Game.hp_max
@@ -539,6 +589,7 @@ func _notification(what: int) -> void:
 			toggle_pause()
 
 func _process(d: float) -> void:
+	_msg_tick(d)
 	_target_tick(d)
 	_sneak_tick(d)
 	hurt_rect.color.a = maxf(0.0, hurt_rect.color.a - d * 0.8)

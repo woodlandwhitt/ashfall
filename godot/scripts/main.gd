@@ -1823,8 +1823,9 @@ func _selftest() -> void:
 		await _goto(_obj_pos(term) + Vector3(1.2, 0, 0), _obj_pos(term))
 		out.append("at terminal: " + str(_best_target().get("label", "nothing")))
 		interact()
-		out.append("terminal open %s '%s'" % [hud.screens.mode, hud.screens.term_text.substr(0, 50)])
-		hud.screens.close()
+		await _wait(90)
+		out.append("terminal open %s: '%s'" % [str(hud.term.is_open()), hud.term.out.text.substr(0, 60).replace("\n", " / ")])
+		hud.term.close()
 	# containers: a locked one (pick it), then loot
 	var locked = null
 	var bd := 1e9
@@ -2360,6 +2361,9 @@ func _colliders() -> void:
 		bodies[k].add_child(cs)
 
 func _pools() -> void:
+	# wait for the collision to be in, so the pools can lie on concrete pads as well as on the ground
+	await get_tree().physics_frame
+	await get_tree().physics_frame
 	var sh := preload("res://scripts/water.gdshader")
 	for p in Game.region.pools:
 		var y := Game.height(p.x, p.z)
@@ -2368,13 +2372,13 @@ func _pools() -> void:
 			var r := float(p.r) * 0.6
 			y = minf(y, Game.height(p.x + cos(a * TAU / 8.0) * r, p.z + sin(a * TAU / 8.0) * r))
 		var mi := MeshInstance3D.new()
-		var pm := PlaneMesh.new()
-		pm.size = Vector2(p.r * 2.0, p.r * 2.0)
-		mi.mesh = pm
+		# a round sheet laid over whatever it lies on (ground, a concrete pad), a few centimetres up: it pools in the
+		# dips and never hangs in the air over a slope
+		mi.mesh = _pool_mesh(float(p.x), float(p.z), float(p.r), float(p.get("y", y)))
 		var m := ShaderMaterial.new()
 		m.shader = sh
 		mi.material_override = m
-		mi.position = Vector3(p.x, y + 0.25, p.z)
+		mi.position = Vector3(p.x, Game.height(p.x, p.z) + 0.25, p.z)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		var l := OmniLight3D.new()
@@ -2387,6 +2391,37 @@ func _pools() -> void:
 		l.distance_fade_length = 20.0
 		add_child(l)
 		pools.append({"pos": mi.position, "r": float(p.r)})
+
+func _pool_mesh(cx: float, cz: float, r: float, top: float) -> ArrayMesh:
+	var space := get_world_3d().direct_space_state
+	var n := 18
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var base_y := Game.height(cx, cz) + 0.25
+	var ys := {}
+	for i in n + 1:
+		for j in n + 1:
+			var u := float(i) / n
+			var v := float(j) / n
+			var x := (u - 0.5) * 2.0 * r
+			var z := (v - 0.5) * 2.0 * r
+			var gy := Game.height(cx + x, cz + z)
+			var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(cx + x, maxf(top, gy) + 4.0, cz + z), Vector3(cx + x, gy - 2.0, cz + z), 1))
+			if not hit.is_empty():
+				gy = maxf(gy, hit.position.y)
+			ys[Vector2i(i, j)] = gy + 0.05 - base_y
+	for i in n:
+		for j in n:
+			var q := [Vector2i(i, j), Vector2i(i + 1, j), Vector2i(i + 1, j + 1), Vector2i(i, j + 1)]
+			for t in [[0, 1, 2], [0, 2, 3]]:
+				for k in t:
+					var c: Vector2i = q[k]
+					var u := float(c.x) / n
+					var v := float(c.y) / n
+					st.set_uv(Vector2(u, v))
+					st.set_normal(Vector3.UP)
+					st.add_vertex(Vector3((u - 0.5) * 2.0 * r, ys[c], (v - 0.5) * 2.0 * r))
+	return st.commit()
 
 func _lamps() -> void:
 	for l in Game.region.lamps:
@@ -2824,7 +2859,7 @@ func _radio_next(talk: bool) -> void:
 	radio_music.play()
 	radio_state = "music"
 	now_playing = "%s — %s" % [t[1], t[2]]
-	Game.msg("%s: now playing %s" % [String(st.n).to_upper(), now_playing])
+	Game.msg("♪ %s  ·  %s" % [now_playing, String(st.n)])
 
 func radio_tick(dt: float) -> void:
 	if Game.flags.has("radio") and not hud.screens.is_open() and not in_dialog():

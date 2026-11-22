@@ -10,6 +10,9 @@ All third-party assets are free and need no sign-up.
 - **Guns:** Quaternius "Ultimate Guns", CC0 (same models as the WebView build).
 - **Textures, props, sounds and world models:** exported from the WebView build. Their sources and licences are
   listed in assets/CREDITS.txt at the repository root (Poly Haven CC0, Kenney CC0, ambientCG CC0 and others).
+- **Furniture and clutter (props/*.glb):** photoscanned models from Poly Haven (CC0), via
+  github.com/RazorEdge-wyh/unity-nature-pbr-asset-library, converted and reduced for mobile. The wasteland kit
+  (props/wasteland_kit.glb: barrels, crates, pallets, tyres, rubbish) is Quaternius and Kenney (CC0), via the WebView build.
 - **The Silver Spur:** card, chip, dice and shuffle sounds (sfx/k_card*, k_chip*, k_dice, k_shuffle) are Kenney's
   Casino Audio (CC0); the lounge music (sfx/x_lounge*) is Kenney Music Loops (CC0); the room's murmur (sfx/o_crowd)
   is from the Oculus Audio Pack. All via the WebView build; see assets/CREDITS.txt.
