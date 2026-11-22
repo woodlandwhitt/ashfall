@@ -137,7 +137,9 @@ func nextCellSpot():
 func openTrade(id = "") -> void:
 	if Game.main:
 		Game.main.queue_trade(_s(id))
-func casino(g = "", m = null) -> void: Game.msg("The tables at the Spur open in a later build.")
+func casino(g = "", m = null) -> void:
+	if Game.main:
+		Game.main.queue_casino(_s(g), 0 if m == null else int(vm.num(m)))
 func event(k = "") -> void:
 	Game.flags["ev_" + _s(k)] = true
 	if _s(k) == "helped":

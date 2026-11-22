@@ -23,6 +23,7 @@ var touch_on := false
 var pip
 var dev: DevMenu
 var screens: Screens
+var casino: Casino
 var focus: Focus
 var ap_bar: ProgressBar
 var clock_t := 0.0
@@ -224,6 +225,8 @@ func _ready() -> void:
 	root.add_child(focus)
 	screens = Screens.new()
 	root.add_child(screens)
+	casino = Casino.new()
+	root.add_child(casino)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
 	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx],
@@ -432,7 +435,7 @@ func _cycle_gfx() -> void:
 	_gfx_label()
 
 func toggle_pip() -> void:
-	if Game.main.in_dialog() or Game.hp <= 0 or screens.is_open():
+	if Game.main.in_dialog() or Game.hp <= 0 or screens.is_open() or casino.is_open():
 		return
 	pip.at_bench = false
 	if pip.visible:
@@ -457,7 +460,7 @@ func open_craft(bench: bool) -> void:
 
 # the developer menu pauses the game like the Pip-Boy does
 func toggle_dev() -> void:
-	if screens.is_open() or pip.visible:
+	if screens.is_open() or pip.visible or casino.is_open():
 		return
 	if dev.visible:
 		dev.visible = false
@@ -498,7 +501,9 @@ func toggle_pause() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if screens.is_open():
+		if casino.is_open():
+			casino.close()
+		elif screens.is_open():
 			screens.close()
 		elif pip.visible:
 			toggle_pip()

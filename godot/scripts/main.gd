@@ -717,6 +717,14 @@ func nearest_pickup(item: String, fallback: String) -> Variant:
 func queue_trade(id: String) -> void:
 	pending_trade = id
 
+# the Spur's tables open once the dialogue that offered them has closed
+var pending_casino: Array = []
+func queue_casino(g: String, m: int) -> void:
+	if in_dialog():
+		pending_casino = [g, m]
+	else:
+		hud.casino.open(g, m)
+
 # ---------------------------------------------------------------- command-line hooks for automated checks:
 #   -- --shot=/path.png --at=x,z,yaw,pitch   render a few frames from a spot, save a screenshot, quit
 #   -- --selftest                            play the slice's quests through and print the results
@@ -751,6 +759,28 @@ func _test_hooks() -> void:
 		await _story_test()
 	if args.has("forgetest"):
 		await _forge_test()
+	if args.has("casinotest"):
+		await _casino_test()
+	if args.has("casino"):
+		Game.caps = maxi(Game.caps, 800)
+		var cz := String(args.casino).split(":")
+		hud.casino.open(cz[0], int(cz[1]) if cz.size() > 1 else 0)
+		match cz[0]:
+			"blackjack":
+				hud.casino.fast = true
+				await hud.casino.deal()
+				hud.casino.fast = false
+			"roulette":
+				for k in ["17", "RED", "2nd 12", "0"]:
+					hud.casino.place_rl(k)
+				hud.casino.rl.hist = [3, 26, 0, 17, 32, 8]
+				hud.casino.rl.last = 8
+			"dice":
+				hud.casino.place_dc("pass")
+				hud.casino.place_dc("field")
+				hud.casino.dc.point = 6
+				hud.casino.dc.hist = [8, 4, 6]
+				hud.casino._render()
 	if args.has("dev"):
 		hud.toggle_dev()
 		hud.dev.show_page(String(args.dev))
@@ -1153,6 +1183,127 @@ func _gun_grid() -> void:
 	sun.rotation = Vector3(-0.6, 0.0, 0)
 
 # forge: build, pick up and move, delete, undo, save with the game, a map slot, and spawn points going live
+func _casino_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	await _wait(10)
+	var cz: Casino = hud.casino
+	cz.fast = true
+	Game.caps = 5000
+	Game.flags.erase("casinoBan")
+	cz.open("blackjack")
+	out.append("open: %s paused %s game %s" % [str(cz.is_open()), str(get_tree().paused), cz.game])
+	# blackjack: scripted hands from a stacked shoe, listed in the order they are dealt (player, dealer, player, dealer, then hits)
+	var stack := func(seq: Array, filler: String) -> void:
+		cz.shoe = []
+		for i in 80:
+			cz.shoe.append({"r": filler, "s": 0})
+		var rev := seq.duplicate()
+		rev.reverse()
+		for r in rev:
+			cz.shoe.append({"r": String(r), "s": 1})
+	cz.bet = 100
+	stack.call(["K", "10", "7", "9"], "2")
+	var c0 := Game.caps
+	await cz.deal()
+	await cz.stand()
+	out.append("bj 17 v 19: %s, caps %+d" % [cz.bj.hands[0].res, Game.caps - c0])
+	stack.call(["K", "6", "A", "5"], "2")
+	c0 = Game.caps
+	await cz.deal()
+	out.append("bj natural: %s, caps %+d" % [cz.bj.hands[0].res, Game.caps - c0])
+	stack.call(["8", "6", "8", "10", "3", "K"], "9")
+	c0 = Game.caps
+	await cz.deal()
+	await cz.split()
+	out.append("split eights: %d hands, cards %s" % [cz.bj.hands.size(), str(cz.bj.hands.map(func(h): return h.cards.map(func(c): return c.r)))])
+	await cz.stand()
+	await cz.stand()
+	out.append("split result: %s dealer %d, caps %+d" % [str(cz.bj.hands.map(func(h): return h.res)), int(Casino.total(cz.bj.dealer).t), Game.caps - c0])
+	stack.call(["6", "9", "5", "7", "10", "2"], "2")
+	c0 = Game.caps
+	await cz.deal()
+	await cz.dbl()
+	out.append("double on 11: bet %d total %d v dealer %d: %s, caps %+d" % [int(cz.bj.hands[0].bet), int(Casino.total(cz.bj.hands[0].cards).t), int(Casino.total(cz.bj.dealer).t), cz.bj.hands[0].res, Game.caps - c0])
+	# roulette: every bet kind against a forced number
+	cz.game = "roulette"
+	cz._render()
+	cz.bet = 10
+	for k in ["17", "RED", "BLACK", "ODD", "2nd 12", "1-18", "0"]:
+		cz.place_rl(k)
+	var staked := cz._rl_staked()
+	var win := 0
+	for k in cz.rl.bets:
+		if String(k) == "17":
+			win += 360
+		for o in Casino.OUTSIDE:
+			if o[0] == k and Casino.outside_wins(String(k), 17):
+				win += 10 * int(o[1])
+	out.append("roulette on 17: staked %d, would pay %d (17 x36, BLACK, ODD, 2nd 12, 1-18)" % [staked, win])
+	c0 = Game.caps
+	await cz.spin()
+	out.append("spin landed %d, bets cleared %s, caps %+d" % [int(cz.rl.last), str(cz.rl.bets.is_empty()), Game.caps - c0])
+	cz.place_rl("RED")
+	cz.vip()
+	out.append("roulette table limit holds: %s" % str(cz._rl_staked() <= (2000 if cz.vip() else 500)))
+	cz.rl.bets = {}
+	# dice: come-out natural, then a point made, then a seven-out
+	cz.game = "dice"
+	cz._render()
+	c0 = Game.caps
+	cz.place_dc("pass")
+	cz.resolve_roll(5, 6)
+	out.append("dice 11 on come-out: caps %+d, point %d" % [Game.caps - c0, cz.dc.point])
+	c0 = Game.caps
+	cz.place_dc("pass")
+	cz.resolve_roll(4, 4)
+	out.append("dice 8 sets the point: %d" % cz.dc.point)
+	cz.place_dc("field")
+	cz.resolve_roll(1, 1)
+	out.append("field on 2 pays double; still on %d" % cz.dc.point)
+	cz.resolve_roll(5, 3)
+	out.append("point made: caps %+d, point %d, bets %s" % [Game.caps - c0, cz.dc.point, str(cz.dc.bets)])
+	c0 = Game.caps
+	cz.place_dc("dont")
+	cz.resolve_roll(6, 6)
+	out.append("don't pass on 12: push, caps %+d" % [Game.caps - c0])
+	cz.dc.bets = {}
+	# slots: scoring and the governor chip's effect on Old Patsy
+	out.append("score 777 %d, BARBAR? %d, rad rad x %d, 7 anywhere %d, none %d" % [Casino.score([5, 5, 5]), Casino.score([4, 4, 0]), Casino.score([3, 3, 1]), Casino.score([0, 1, 5]), Casino.score([0, 1, 2])])
+	cz.game = "slots"
+	for mood in ["", "fair", "mine"]:
+		Game.flags["patsy"] = mood
+		cz.machine = 0
+		var tot := 0.0
+		for i in 20000:
+			tot += Casino.score([cz.spin_sym(), cz.spin_sym(), cz.spin_sym()])
+		out.append("Old Patsy (%s) payback %.2f" % [cz.mood(), tot / 20000.0])
+	Game.flags.erase("patsy")
+	c0 = Game.caps
+	await cz.pull()
+	out.append("pull: reels %s, caps %+d" % [str(cz.sl.reels.map(func(r): return r[1])), Game.caps - c0])
+	# the house limit: a big night gets you walked out
+	Game.flags["casinoNet"] = {"day": Game.day, "net": cz.limit() - 50}
+	cz.game = "roulette"
+	cz.rl.bets = {}
+	cz.place_rl("RED")
+	cz.rl.bets = {}
+	cz.payout(100)
+	await cz.check_limit()
+	out.append("past the limit: banned %s, open %s" % [str(Game.flags.get("casinoBan") == Game.day), str(cz.is_open())])
+	cz.open("dice")
+	out.append("banned tonight: opens %s" % str(cz.is_open()))
+	out.append("high roller net tonight: %d" % int(Game.flags.casinoNet.net))
+	Game.flags.erase("casinoBan")
+	# through the dialogue, like Vex offers it
+	Game.G.casino("roulette")
+	out.append("gapi casino opens: %s %s" % [str(cz.is_open()), cz.game])
+	cz.close()
+	out.append("closed: paused %s" % str(get_tree().paused))
+	for l in out:
+		print("TEST ", l)
+	get_tree().quit()
+
 func _forge_test() -> void:
 	var out: Array = []
 	Game.booted = true
@@ -2161,7 +2312,7 @@ func _best_target() -> Dictionary:
 	return best
 
 func interact() -> void:
-	if in_dialog() or Game.hp <= 0 or hud.screens.is_open():
+	if in_dialog() or Game.hp <= 0 or hud.screens.is_open() or hud.casino.is_open():
 		return
 	if buggy and buggy.driving:
 		buggy.exit()
@@ -2245,6 +2396,12 @@ func choose(i: int) -> void:
 		pending_trade = ""
 		end_dialog()
 		hud.screens.open_trade(v)
+		return
+	if not pending_casino.is_empty():
+		var cz := pending_casino
+		pending_casino = []
+		end_dialog()
+		hud.casino.open(String(cz[0]), int(cz[1]))
 		return
 	if dialog_npc == null or dialog_id != at or hud.screens.is_open():
 		if dialog_npc != null:

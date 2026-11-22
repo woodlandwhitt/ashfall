@@ -451,8 +451,11 @@ func point_use(o: Dictionary) -> void:
 			o[k] = p[k]
 		Game.check_quests()
 		return
-	if id in ["blackjack", "roulette", "dice"] or id.begins_with("slots"):
-		Game.msg("The Spur's tables open in a later build.")
+	if id in ["blackjack", "roulette", "dice"]:
+		main.hud.casino.open(id)
+		return
+	if id.begins_with("slots"):
+		main.hud.casino.open("slots", int(id.substr(5)))
 		return
 	if id == "patsyPanel":
 		if int(Game.stats.agility) < 5 and not G.has("gears"):

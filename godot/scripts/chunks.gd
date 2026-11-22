@@ -106,6 +106,14 @@ func _ground(i: int, j: int, step: int) -> ArrayMesh:
 	st.generate_tangents()
 	return st.commit()
 
+# rooms that sit in the open map with a floor of their own (the Silver Spur's sunken hall): no grass through the carpet
+const NO_GRASS := [[2.6, 21.4, 59.1, 72.9]]
+static func _no_grass(x: float, z: float) -> bool:
+	for r in NO_GRASS:
+		if x > r[0] and x < r[1] and z > r[2] and z < r[3]:
+			return true
+	return false
+
 func _grass(i: int, j: int) -> MultiMeshInstance3D:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = i * 7919 + j * 104729
@@ -116,6 +124,8 @@ func _grass(i: int, j: int) -> MultiMeshInstance3D:
 		var z := Game.z0 + j * SIZE + rng.randf() * SIZE
 		var mk := mask_img.get_pixel(clampi(int(x - Game.x0), 0, mask_img.get_width() - 1), clampi(int(z - Game.z0), 0, mask_img.get_height() - 1))
 		if mk.r > 0.15 or mk.g > 0.5:
+			continue
+		if _no_grass(x, z):
 			continue
 		var clump := sin(x * 0.13) * cos(z * 0.11) + sin(x * 0.041 + z * 0.037)
 		if clump < -0.2 + rng.randf() * 0.6:
