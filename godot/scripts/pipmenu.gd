@@ -154,6 +154,13 @@ func _section_of(page: String) -> String:
 
 func show_tab(t: String) -> void:
 	t = ALIAS.get(t, t)
+	# re-showing the same page (picking an item, spending a point) keeps every list where you had scrolled it
+	var keep: Array = []
+	if t == current:
+		for sc in body.find_children("*", "ScrollContainer", true, false):
+			keep.append((sc as ScrollContainer).scroll_vertical)
+	if not keep.is_empty():
+		_restore_scroll.call_deferred(keep)
 	if _section_of(t) == "STAT" and not t in SECTIONS.STAT:
 		t = "STATUS"
 	current = t
@@ -251,6 +258,40 @@ func _bar(v: float, mx: float, col: Color, w := 160.0) -> ProgressBar:
 	pb.add_theme_stylebox_override("fill", f)
 	return pb
 
+func _restore_scroll(keep: Array) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var scs := body.find_children("*", "ScrollContainer", true, false)
+	for i in mini(keep.size(), scs.size()):
+		(scs[i] as ScrollContainer).scroll_vertical = int(keep[i])
+
+# drag anywhere on a list to scroll it, buttons included (a drag never counts as a tap)
+var drag_sc: ScrollContainer
+var drag_total := 0.0
+var drag_end := 0
+func _input(e: InputEvent) -> void:
+	if not visible:
+		return
+	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		if e.pressed:
+			drag_sc = null
+			drag_total = 0.0
+			for sc in body.find_children("*", "ScrollContainer", true, false):
+				var s := sc as ScrollContainer
+				if s.is_visible_in_tree() and s.get_global_rect().has_point(e.position) and s.get_v_scroll_bar().max_value > s.size.y + 2.0:
+					drag_sc = s
+		else:
+			if drag_total > 12.0:
+				drag_end = Time.get_ticks_msec()
+			drag_sc = null
+	elif e is InputEventMouseMotion and drag_sc and (e.button_mask & MOUSE_BUTTON_MASK_LEFT):
+		drag_total += absf(e.relative.y)
+		if drag_total > 12.0:
+			drag_sc.scroll_vertical -= int(e.relative.y)
+
+func _tap_ok() -> bool:
+	return Time.get_ticks_msec() - drag_end > 150 and drag_total <= 12.0
+
 func _scroll(parent: Node = null) -> VBoxContainer:
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -309,7 +350,9 @@ func _button(parent: Node, t: String, f: Callable, w := 0.0, disabled := false) 
 	b.text = t
 	b.custom_minimum_size = Vector2(w, 46)
 	b.disabled = disabled
-	b.pressed.connect(f)
+	b.pressed.connect(func():
+		if _tap_ok():
+			f.call())
 	parent.add_child(b)
 	return b
 
@@ -321,7 +364,9 @@ func _list_button(parent: Node, t: String, on: bool, f: Callable) -> Button:
 	b.clip_text = true
 	if on:
 		b.add_theme_color_override("font_color", AMBERC)
-	b.pressed.connect(f)
+	b.pressed.connect(func():
+		if _tap_ok():
+			f.call())
 	parent.add_child(b)
 	return b
 

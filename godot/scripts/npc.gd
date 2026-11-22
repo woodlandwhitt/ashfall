@@ -10,6 +10,7 @@ var id := ""
 var display_name := ""
 var model: Node3D
 var ap: AnimationPlayer
+var lt: LegTwist
 var rig: Rig
 var home := Vector3.ZERO
 var wander_r := 0.0
@@ -76,6 +77,11 @@ func setup(d: Dictionary) -> void:
 			role = "robe"
 		model = Humanoid.person(look, hash(id), role)
 		ap = model.get_node("AnimationPlayer")
+		var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
+		if sk:
+			lt = LegTwist.new()
+			sk.add_child(lt)
+			lt.setup(sk)
 		idle_anim = Humanoid.IDLES[absi(hash(id + "i")) % Humanoid.IDLES.size()]
 	add_child(model)
 	for mi in model.find_children("*", "GeometryInstance3D", true, false):
@@ -301,7 +307,9 @@ func _companion(d: float) -> void:
 			a = "Walk"
 		elif aiming:
 			a = "Pistol_Aim_Neutral"
-		Humanoid.play(ap, a)
+		# keeping pace sideways or backing off while it shoots: hips follow the feet, chest stays on the target
+		var sgn := LegTwist.drive(lt, face_yaw, velocity if spd > 0.3 else Vector3.ZERO)
+		Humanoid.play(ap, a, sgn)
 	elif rig:
 		rig.animate(d, spd, t)
 

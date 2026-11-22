@@ -49,6 +49,9 @@ var map_slot := "1"
 func setup(m) -> void:
 	main = m
 	kinds = KINDS.keys()
+	for f in Furniture.CAT:
+		if Furniture.scene(f):
+			kinds.append("f_" + f)
 	for et in Game.region.etypes:
 		kinds.append("spawn_" + et)
 	ghost_mat = StandardMaterial3D.new()
@@ -129,6 +132,8 @@ func _collide(root: Node3D, sh: Shape3D, size: Vector3, at: Vector3, rot_x: floa
 
 # build one object, origin at the bottom centre, facing +Z
 func build(k: String, mi: int) -> Node3D:
+	if k.begins_with("f_"):
+		return Furniture.make(k.substr(2), true, 1)
 	var root := Node3D.new()
 	var m := _material(mi if mi >= 0 else int(KINDS.get(k, ["", "", 0])[2]))
 	match k:
@@ -250,6 +255,8 @@ func build(k: String, mi: int) -> Node3D:
 func name_of(k: String) -> String:
 	if KINDS.has(k):
 		return String(KINDS[k][0])
+	if k.begins_with("f_"):
+		return String(Furniture.CAT.get(k.substr(2), [k])[0])
 	if k.begins_with("spawn_"):
 		return "Spawn: " + String(Game.region.etypes.get(k.trim_prefix("spawn_"), {}).get("name", k.trim_prefix("spawn_"))).capitalize()
 	return k
@@ -583,6 +590,18 @@ func _make_ui() -> void:
 		var g := [0.0, 0.25, 0.5, 1.0, 2.0]
 		grid = g[(g.find(grid) + 1) % g.size()])
 	b.call("TURN 15°", func(): turn(PI / 12.0))
+	b.call("TURN 90°", func(): turn(PI / 2.0))
+	b.call("COPY AIMED", func():
+		var a = _aimed()
+		if a:
+			cur = maxi(0, kinds.find(a.k))
+			rot = float(a.get("r", 0.0))
+			scl = float(a.get("s", 1.0))
+			mat = int(a.get("m", -1))
+			_make_ghost()
+			Game.msg("Copied: " + name_of(String(a.k))))
+	b.call("PREV", func(): cycle(-1))
+	b.call("NEXT", func(): cycle(1))
 	b.call("LIFT +", func(): lift += 0.25)
 	b.call("LIFT -", func(): lift -= 0.25)
 	b.call("SCALE +", func(): scl = minf(4.0, scl + 0.25))
@@ -627,7 +646,7 @@ func toggle_palette() -> void:
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.add_child(v)
-	for cat in ["BUILD", "PROPS", "GAMEPLAY", "SPAWN POINTS"]:
+	for cat in ["BUILD", "PROPS", "FURNITURE: TABLES", "FURNITURE: SEATS", "FURNITURE: STORAGE", "FURNITURE: CLUTTER", "FURNITURE: WALLS", "FURNITURE: LIGHTS", "GAMEPLAY", "SPAWN POINTS"]:
 		var l := Label.new()
 		l.text = cat
 		l.add_theme_color_override("font_color", Color(0.75, 0.95, 1.0))
@@ -639,7 +658,7 @@ func toggle_palette() -> void:
 		v.add_child(g)
 		for i in kinds.size():
 			var k: String = kinds[i]
-			var c := "SPAWN POINTS" if k.begins_with("spawn_") else String(KINDS.get(k, ["", ""])[1])
+			var c := "SPAWN POINTS" if k.begins_with("spawn_") else ("FURNITURE: " + String(Furniture.CAT.get(k.substr(2), ["", ""])[1]).to_upper() if k.begins_with("f_") else String(KINDS.get(k, ["", ""])[1]))
 			if c != cat:
 				continue
 			var b := Button.new()

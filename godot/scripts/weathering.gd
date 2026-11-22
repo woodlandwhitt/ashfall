@@ -12,6 +12,8 @@ uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable
 uniform vec4 tint : source_color = vec4(1.0);
 uniform float wear = 1.0;
 uniform bool vcol = false;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform bool has_normal = false;
 varying vec3 wp;
 varying vec3 wn;
 float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -39,12 +41,13 @@ void fragment(){
 	float up = smoothstep(0.35, 0.9, wn.y);
 	c = mix(c, vec3(0.6, 0.51, 0.39), up * smoothstep(0.25, 0.75, fbm(wp.xz * 2.5)) * 0.55 * wear);
 	ALBEDO = c;
+	if (has_normal) { NORMAL_MAP = texture(normal_tex, UV).rgb; }
 	ROUGHNESS = 0.88;
 	SPECULAR = 0.25;
 }"""
 
 # a weathered stand-in for a palette-painted material, or the original if it isn't one
-static func material_for(src: Material, wear := 1.0) -> Material:
+static func material_for(src: Material, wear := 1.0, palettes_only := false, any_texture := false) -> Material:
 	if not src is StandardMaterial3D:
 		return src
 	var sm := src as StandardMaterial3D
@@ -52,8 +55,8 @@ static func material_for(src: Material, wear := 1.0) -> Material:
 		return src
 	var nm := String(sm.resource_name).to_lower()
 	# small props batched with their colours in the vertices (cones, crates, barrels, signs)
-	var by_vertex := sm.vertex_color_use_as_albedo
-	if not by_vertex and (sm.albedo_texture == null or not (nm.begins_with("atlas") or nm.begins_with("colormap") or nm.begins_with("q_") or nm.contains("palette"))):
+	var by_vertex := sm.vertex_color_use_as_albedo and not palettes_only
+	if not by_vertex and not any_texture and (sm.albedo_texture == null or not (nm.begins_with("atlas") or nm.begins_with("colormap") or nm.begins_with("q_") or nm.contains("palette"))):
 		return src
 	var key := str(sm.get_instance_id()) + ":" + str(wear)
 	if cache.has(key):
@@ -65,6 +68,9 @@ static func material_for(src: Material, wear := 1.0) -> Material:
 	m.shader = shader
 	m.set_shader_parameter("albedo_tex", sm.albedo_texture if sm.albedo_texture else _white())
 	m.set_shader_parameter("vcol", by_vertex)
+	if sm.normal_enabled and sm.normal_texture:
+		m.set_shader_parameter("normal_tex", sm.normal_texture)
+		m.set_shader_parameter("has_normal", true)
 	m.set_shader_parameter("tint", sm.albedo_color)
 	m.set_shader_parameter("wear", wear)
 	cache[key] = m
@@ -79,7 +85,7 @@ static func _white() -> Texture2D:
 	return white_tex
 
 # weather every palette-painted surface under a node
-static func apply(root: Node, wear := 1.0) -> void:
+static func apply(root: Node, wear := 1.0, palettes_only := false, any_texture := false) -> void:
 	for c in root.find_children("*", "MeshInstance3D", true, false):
 		var mi := c as MeshInstance3D
 		if mi.mesh == null or mi.material_override != null:
@@ -88,6 +94,6 @@ static func apply(root: Node, wear := 1.0) -> void:
 			var src: Material = mi.get_surface_override_material(i)
 			if src == null:
 				src = mi.mesh.surface_get_material(i)
-			var w := material_for(src, wear)
+			var w := material_for(src, wear, palettes_only, any_texture)
 			if w != src:
 				mi.set_surface_override_material(i, w)

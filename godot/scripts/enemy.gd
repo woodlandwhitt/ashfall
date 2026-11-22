@@ -35,7 +35,9 @@ var group := ""        # neutral groups (Kess's crew, the herd) turn on you toge
 var loot = null          # what the body holds once searched
 var npc = null           # a townsperson you provoked
 var essential := false   # they yield instead of dying
-var since_hit := 0.0     # a provoked townsperson cools off when you stop hitting them and walk away
+var since_hit := 0.0
+var lt: LegTwist          # hips follow the feet when it strafes or backs off
+var aiming := false       # last frame it was aiming: it keeps facing you while it moves     # a provoked townsperson cools off when you stop hitting them and walk away
 var foe = null           # the companion it is fighting, or null for you
 var crip := {}           # FOCUS hits: crippled legs slow it, crippled arms spoil its aim
 # tactics: what it is doing inside a fight
@@ -99,6 +101,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		model = Humanoid.person(d.look, hash(String(d.get("npc", ""))), "guard" if type == "townguard" else "")
 		add_child(model)
 		ap = model.get_node("AnimationPlayer")
+		_twist_setup()
 		if ranged:
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
@@ -137,6 +140,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		model.scale = Vector3.ONE * hh * (1.12 if type == "heavy" else 1.0)
 		add_child(model)
 		ap = model.get_node("AnimationPlayer")
+		_twist_setup()
 		if ranged:
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
@@ -157,6 +161,13 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 	agent.radius = 0.5
 	add_child(agent)
 	target = home
+
+func _twist_setup() -> void:
+	var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if sk:
+		lt = LegTwist.new()
+		sk.add_child(lt)
+		lt.setup(sk)
 
 func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 	if dead:
@@ -223,11 +234,44 @@ func can_see(p: Vector3, from := Vector3.INF) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
 # a shout brings the rest of its group (or anything hostile close by) into the fight
+# the shout carries, but not everyone drops what they're doing at once: the nearest come first, the rest a beat
+# later, and anything far off only if it can actually hear
 func alert() -> void:
 	for e in Game.main.enemies:
-		if e != self and is_instance_valid(e) and not e.dead and e.hostile and e.state != "chase" and e.global_position.distance_to(global_position) < 22.0:
-			e.state = "chase"
-			e.tac = "advance"
+		if e != self and is_instance_valid(e) and not e.dead and e.hostile and e.state != "chase":
+			var dd: float = e.global_position.distance_to(global_position)
+			if dd < 18.0:
+				e._join_later(0.2 + dd * 0.12 + randf() * 1.2)
+
+var joining := false
+func _join_later(delay: float) -> void:
+	if joining:
+		return
+	joining = true
+	await get_tree().create_timer(delay, false).timeout
+	joining = false
+	if is_instance_valid(self) and not dead and state != "chase":
+		state = "chase"
+		tac = "advance"
+
+# only a few can be on you at once: the others hang back in a loose ring, waiting for a gap, as a real pack or gang
+# would (and the gunmen take turns rather than all firing together)
+static func _closers(pp: Vector3, me) -> int:
+	var n := 0
+	for e in Game.main.enemies:
+		if e != me and is_instance_valid(e) and not e.dead and e.hostile and e.state == "chase" and not e.ranged and e.global_position.distance_to(pp) < 4.5:
+			n += 1
+	return n
+
+static var shots: Array = []   # recent shot times, all gunmen together
+static func _may_fire() -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	while not shots.is_empty() and now - float(shots[0]) > 1.2:
+		shots.pop_front()
+	return shots.size() < 4
+
+func _fired() -> void:
+	shots.append(Time.get_ticks_msec() / 1000.0)
 
 func _physics_process(d: float) -> void:
 	if Game.dev.noai and not dead:
@@ -266,6 +310,7 @@ func _physics_process(d: float) -> void:
 		state = "idle"
 	match state:
 		"idle":
+			aiming = false
 			wait -= d
 			if wait <= 0.0:
 				var a := randf() * TAU
@@ -313,7 +358,8 @@ func _physics_process(d: float) -> void:
 					a = "Pistol_Aim_Neutral"
 				elif ranged:
 					a = "Pistol_Idle"
-				Humanoid.play(ap, a, clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0)
+				var sgn := LegTwist.drive(lt, face_yaw, velocity) if spd > 0.3 else LegTwist.drive(lt, face_yaw, Vector3.ZERO)
+				Humanoid.play(ap, a, (clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0) * sgn)
 		else:
 			rig.animate(d, spd, t, aim)
 
@@ -339,6 +385,7 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 		tac = "flee"
 		tac_t = randf_range(4.0, 7.0)
 	if tac == "flee":
+		aiming = false
 		if tac_t <= 0.0:
 			tac = "advance"
 		else:
@@ -357,12 +404,19 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 				strafe = 1.0 if randf() < 0.5 else -1.0
 		return [0.0, false]
 	if not ranged:
+		aiming = false
 		var reach := 1.9 if quad else 2.0
 		if tac == "circle" and tac_t > 0.0:
 			# back off a little and circle, then come again
 			var ring := pp - dirv * 3.2 + side * strafe * 2.5
 			return [_move_to(ring, speed * 0.8 * leg, d), false]
 		tac = "advance"
+		var crowd := _closers(pp, self)
+		if dist > reach and dist < 7.5 and crowd >= (3 if quad else 2):
+			# too many already on you: hold a loose ring, edge round, wait for a gap
+			var ring2 := pp - dirv * randf_range(5.0, 6.0) + side * sin(t * 0.7 + slot) * 2.5
+			_face(pp, d)
+			return [_move_to(ring2, speed * 0.45 * leg, d), false]
 		if dist > reach:
 			# from far away, straight in; close up, come round to its own side of you
 			var goal := pp
@@ -440,14 +494,17 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 				aim = true
 			if spd < 0.5:
 				_face(pp, d)
-	if aim and sees and dist < 28.0:
-		face_yaw = lerp_angle(face_yaw, atan2(to.x, to.z), 1.0 - exp(-10.0 * d))
-		# it takes a moment to find you, then fires in bursts
-		if atk_cd <= 0.0 and seen_t > 0.35:
+	aiming = aim and sees and dist < 28.0
+	if aiming:
+		face_yaw = lerp_angle(face_yaw, atan2(to.x, to.z), 1.0 - exp(-12.0 * d))
+		# it takes a moment to find you, then fires in bursts, and only down the barrel: never over its shoulder
+		var off := absf(wrapf(atan2(to.x, to.z) - face_yaw, -PI, PI))
+		if atk_cd <= 0.0 and seen_t > 0.35 and off < 0.35 and (burst > 0 or _may_fire()):
 			if burst <= 0:
 				burst = 2 + randi() % 2
 			burst -= 1
 			atk_cd = 0.35 if burst > 0 else randf_range(1.5, 2.3)
+			_fired()
 			_attack(dist, spd)
 	return [spd, aim]
 
@@ -517,7 +574,8 @@ func _move_to(p: Vector3, spd: float, d: float) -> float:
 				v += aw / l * (1.7 - l) * spd * 1.6
 	velocity.x = lerpf(velocity.x, v.x, 1.0 - exp(-8.0 * d))
 	velocity.z = lerpf(velocity.z, v.z, 1.0 - exp(-8.0 * d))
-	face_yaw = lerp_angle(face_yaw, atan2(v.x, v.z), 1.0 - exp(-8.0 * d))
+	if not aiming:
+		face_yaw = lerp_angle(face_yaw, atan2(v.x, v.z), 1.0 - exp(-8.0 * d))
 	return Vector2(velocity.x, velocity.z).length()
 
 func _attack(dist: float, moving := 0.0) -> void:

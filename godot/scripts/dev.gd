@@ -171,6 +171,10 @@ func _cheats() -> void:
 	_toggle("One-hit kills", "Everything drops to a single hit", "onehit")
 	_toggle("Invisible", "Nothing can see you", "invis")
 	_toggle("Freeze AI", "Enemies stand where they are", "noai")
+	_toggle("Unlimited carry weight", "Never over-encumbered", "carry")
+	_toggle("Open every lock", "Locks, safes and locked terminals open on their own", "locks")
+	_toggle("Pass every check", "Strength, Charisma, Intelligence... checks in conversation always pass", "checks")
+	_toggle("Show the HUD", "Turn off for clean screenshots", "hud", func(): Game.main.hud.set_hud_visible(Game.dev.hud))
 	var g := _row("Move speed", "x%s" % str(Game.dev.speed))
 	for s in [0.5, 1.0, 2.0, 4.0]:
 		_btn(g, "x" + str(s), func(): Game.dev.speed = s, is_equal_approx(float(Game.dev.speed), s))
@@ -186,12 +190,26 @@ func _player() -> void:
 	_btn(g, "MAX STATS", func(): run("set all 10"))
 	_btn(g, "CLEAR RADS", func(): Game.rad = 0.0)
 	_btn(g, "CLEAN BLOOD", func(): run("clean"))
+	g = _row("S.P.E.C.I.A.L.", "  ".join(Game.SPECIAL.map(func(k): return "%s %d" % [String(Game.DB.statinfo[k][0]).substr(0, 3), int(Game.stats.get(k, 5))])))
+	for k in Game.SPECIAL:
+		_btn(g, String(Game.DB.statinfo[k][0]).substr(0, 3) + " +", func(): Game.stats[k] = mini(10, int(Game.stats.get(k, 5)) + 1); Game.stats_changed.emit())
+		_btn(g, String(Game.DB.statinfo[k][0]).substr(0, 3) + " −", func(): Game.stats[k] = maxi(1, int(Game.stats.get(k, 5)) - 1); Game.stats_changed.emit())
+	g = _row("Companion approval", "Tap to add 10; long walks not required")
+	for k in Game.L.get("companions", {}):
+		if not Game.L.companions[k].get("dog", false):
+			_btn(g, "%s %+d" % [String(Game.L.companions[k].n).split(" ")[0].to_upper(), Game.approval(k)], func(): Game.approve(k, 10, "console"))
+			_btn(g, "LOYAL " + String(Game.L.companions[k].n).split(" ")[0].to_upper(), func(): Game.make_loyal(k))
 	g = _row("Karma", "%d — %s" % [Game.karma, Game.karma_title(Game.karma)])
 	for k in [-100, -40, 0, 40, 100]:
 		_btn(g, str(k), func(): Game.karma = k)
 	g = _row("Give a kit", "Straight into your pack")
 	for k in ["guns", "ammo", "meds", "chems", "armor", "mats", "nades", "keys"]:
 		_btn(g, k.to_upper(), func(): run("kit " + k))
+	for cat in [["aid", "Give aid and chems"], ["junk", "Give junk"], ["quest", "Give quest items and keys"], ["armor", "Give armor"]]:
+		g = _row(String(cat[1]), "")
+		for k in Game.DB.items:
+			if String(Game.DB.items[k].get("t", "")) == cat[0]:
+				_btn(g, Game.iname(k), func(): run("give " + k))
 	g = _row("Give one weapon", "")
 	for k in Game.DB.items:
 		if String(Game.DB.items[k].get("t", "")) == "weapon":
@@ -220,6 +238,15 @@ func _world() -> void:
 			if not Game.main.events.start(k):
 				Game.msg("No room for that event here."))
 	g = _row("World", "")
+	_btn(g, "TO QUEST MARKER", func():
+		var qt = Game.main.quest_target()
+		if qt is Dictionary and qt.has("x"):
+			run("tp %s %s" % [str(qt.x), str(qt.z)]))
+	_btn(g, "THE SILVER SPUR'S TABLES", func(): Game.main.hud.toggle_dev(); run("casino blackjack"))
+	_btn(g, "CALM EVERYONE", func():
+		for e in Game.main.enemies.duplicate():
+			if is_instance_valid(e) and e.get("npc") != null and not e.dead:
+				Game.main._calm(e))
 	_btn(g, "KILL NEARBY HOSTILES", func(): run("killall"))
 	_btn(g, "REVEAL MAP", func(): run("reveal"))
 	_btn(g, "RESTOCK SHOPS", func(): Game.shops = {})
@@ -423,7 +450,7 @@ const HELP := {
 	"clean": "clear chems, crashes and addictions", "clear": "clear the console",
 }
 const KITS := {"meds": [["stimpak", 10], ["super_stim", 5], ["radaway", 6], ["rad_tabs", 4]], "mats": [["scrap_metal", 30], ["duct_tape", 20], ["circuit", 12], ["gears", 12]],
-	"keys": [["buggy_key", 1]]}
+	"keys": [["keycard", 1], ["buggy_key", 1], ["lattice_key", 1], ["vip_marker", 1], ["bobby_pin", 20]]}
 
 func _find(dict: Dictionary, q: String) -> String:
 	q = q.to_lower()

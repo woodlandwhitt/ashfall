@@ -229,8 +229,11 @@ func _build(k: String, ps: PackedScene) -> void:
 		on_enter.call(k)
 
 func _tune(n: Node) -> void:
-	if Game.area in ["world", "cells"]:
+	if Game.area == "world":
 		Weathering.apply(n)
+	elif Game.area == "cells":
+		# indoors only the painted props age; floors and walls have their own finish
+		Weathering.apply(n, 0.6, true)
 	for c in n.find_children("*", "MeshInstance3D", true, false):
 		var mi := c as MeshInstance3D
 		if mi.name == "Ground":

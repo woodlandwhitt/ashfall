@@ -697,6 +697,8 @@ func _forgive_tick(d: float) -> void:
 	if _forgive_t > 0.0:
 		return
 	_forgive_t = 1.0
+	_unstick()
+	_furnish_tick()
 	for e in enemies.duplicate():
 		if not is_instance_valid(e) or e.dead or e.get("npc") == null:
 			continue
@@ -707,6 +709,34 @@ func _forgive_tick(d: float) -> void:
 			_calm(e)
 			Game.msg(nm + " has calmed down.")
 			Game.flags["forgiven_" + String(e.get("npc_id") if e.get("npc_id") else nm)] = Game.day
+
+# the room you're standing in gets its furniture (and the one you left gives it back)
+var furnished := -1
+var furnish_node: Node3D
+func _furnish_tick() -> void:
+	if Game.area != "cells":
+		return
+	var c := Game.cell_at(player.global_position.x, player.global_position.z)
+	if c == furnished or c < 0:
+		return
+	if furnish_node and is_instance_valid(furnish_node):
+		furnish_node.queue_free()
+	furnished = c
+	furnish_node = Furnish.room(self, Game.CELLS[c])
+
+# wedged inside a solid (a wall you slipped through, a tank you spawned into)? step out of its nearest side
+func _unstick() -> void:
+	if Game.dev.get("noclip", false) or (buggy and buggy.driving) or Game.area != "world":
+		return
+	var p: Vector3 = player.global_position + Vector3.UP * 0.9
+	for s in Game.region.solids:
+		if p.x > float(s[0]) + 0.05 and p.x < float(s[1]) - 0.05 and p.z > float(s[2]) + 0.05 and p.z < float(s[3]) - 0.05 and p.y > float(s[4]) and p.y < float(s[5]) - 0.2:
+			var opts := [[p.x - float(s[0]), Vector3(float(s[0]) - 0.6, 0, p.z)], [float(s[1]) - p.x, Vector3(float(s[1]) + 0.6, 0, p.z)],
+				[p.z - float(s[2]), Vector3(p.x, 0, float(s[2]) - 0.6)], [float(s[3]) - p.z, Vector3(p.x, 0, float(s[3]) + 0.6)]]
+			opts.sort_custom(func(a, b): return a[0] < b[0])
+			var o: Vector3 = opts[0][1]
+			player.global_position = Vector3(o.x, Game.height(o.x, o.z) + 0.2, o.z)
+			return
 
 func _calm(o) -> void:
 	var m = o.npc
@@ -814,6 +844,17 @@ func _test_hooks() -> void:
 		await _story_test()
 	if args.has("forgetest"):
 		await _forge_test()
+	if args.has("topdown"):
+		# an overhead orthographic view (checking a room's layout), ceilings hidden by the near plane
+		var v := String(args.topdown).split(",")
+		var tc := Camera3D.new()
+		add_child(tc)
+		tc.projection = Camera3D.PROJECTION_ORTHOGONAL
+		tc.size = float(v[3]) if v.size() > 3 else 24.0
+		tc.global_position = Vector3(float(v[0]), float(v[2]), float(v[1]))
+		tc.rotation = Vector3(-PI / 2.0, 0, 0)
+		tc.near = 0.6
+		tc.current = true
 	if args.has("matdump"):
 		# list the meshes and materials around a spot (finding which exported material a prop uses)
 		var v := String(args.matdump).split(",")
@@ -2261,9 +2302,19 @@ func _colliders() -> void:
 			bodies[k] = nb
 		var cs := CollisionShape3D.new()
 		var b := BoxShape3D.new()
-		b.size = Vector3(maxf(0.05, s[1] - s[0]), maxf(0.05, s[5] - s[4]), maxf(0.05, s[3] - s[2]))
+		var y0 := float(s[4])
+		# anything standing on the ground reaches all the way down to it, even where the ground falls away
+		# (otherwise there's a gap to crawl under and into the building, where nothing can follow you)
+		if y0 > -900.0 and Game.area == "world":
+			var hmin := 1e9
+			for gx in [s[0], (s[0] + s[1]) * 0.5, s[1]]:
+				for gz in [s[2], (s[2] + s[3]) * 0.5, s[3]]:
+					hmin = minf(hmin, Game.height(float(gx), float(gz)))
+			if y0 - hmin > 0.0 and y0 - hmin < 3.0:
+				y0 = hmin - 0.3
+		b.size = Vector3(maxf(0.05, s[1] - s[0]), maxf(0.05, s[5] - y0), maxf(0.05, s[3] - s[2]))
 		cs.shape = b
-		cs.position = Vector3((s[0] + s[1]) * 0.5, (s[4] + s[5]) * 0.5, (s[2] + s[3]) * 0.5)
+		cs.position = Vector3((s[0] + s[1]) * 0.5, (y0 + s[5]) * 0.5, (s[2] + s[3]) * 0.5)
 		bodies[k].add_child(cs)
 
 func _pools() -> void:

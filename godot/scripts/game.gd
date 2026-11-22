@@ -121,7 +121,7 @@ func xp_need() -> int:
 	return 60 + level * 70
 
 func carry_max() -> float:
-	return 90.0 + int(stats.might) * 12.0
+	return 99999.0 if dev.get("carry", false) else 90.0 + int(stats.might) * 12.0
 
 func carry_now() -> float:
 	var w := 0.0
@@ -403,7 +403,7 @@ var pending_pos = null
 var CELLS: Array = []
 # developer switches (the DEV menu and console)
 var dev := {"god": false, "noclip": false, "ammo": false, "ap": false, "onehit": false, "invis": false, "noai": false, "speed": 1.0,
-	"dayrate": 1.0, "perf": false, "timescale": 1.0}        # building interiors: room origin and size, sign, street door
+	"dayrate": 1.0, "perf": false, "timescale": 1.0, "carry": false, "locks": false, "checks": false, "nodetect": false, "hud": true}        # building interiors: room origin and size, sign, street door
 
 # a new resident of Haven 12: the name and aptitudes from the registration screen, waking in their quarters
 func new_game(nm: String, st: Dictionary, pts: int) -> void:
@@ -825,7 +825,7 @@ func dlg_options(id: String, node: String) -> Array:
 		if o.has("check"):
 			var st := String(o.check[0])
 			var need := int(o.check[1])
-			var have := int(stats.get(st, 5))
+			var have := 10 if dev.get("checks", false) else int(stats.get(st, 5))
 			var nm := String(DB.statinfo.get(st, [st.to_upper()])[0])
 			t = "[" + nm + " " + str(need) + ("" if have >= need else " — you have " + str(have)) + "] " + t
 			off = have < need

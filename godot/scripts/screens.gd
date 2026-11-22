@@ -429,6 +429,11 @@ func _render_loot() -> void:
 # returns false (with a message) when you can't even try
 func open_lock(level: int, label: String, done: Callable) -> bool:
 	level = clampi(level, 0, 3)
+	if Game.dev.get("locks", false):
+		# developer: every lock simply opens
+		Sfx.play("o_unlock", -4.0)
+		done.call(true)
+		return true
 	var L: Dictionary = LOCKS[level]
 	var ag := int(Game.stats.agility)
 	var smith := Game.perks.has("locksmith")

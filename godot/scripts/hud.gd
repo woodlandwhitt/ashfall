@@ -435,7 +435,7 @@ func _cycle_gfx() -> void:
 	_gfx_label()
 
 func toggle_pip() -> void:
-	if Game.main.in_dialog() or Game.hp <= 0 or screens.is_open() or casino.is_open():
+	if Game.main.in_dialog() or Game.hp <= 0 or screens.is_open() or casino.is_open() or pause_panel.visible:
 		return
 	pip.at_bench = false
 	if pip.visible:
@@ -491,7 +491,26 @@ func swap_weapon() -> void:
 	var i := list.find(Game.weapon)
 	Game.equip(list[(i + 1) % list.size()])
 
+# developer: hide the play HUD (not the menus) for clean screenshots
+func set_hud_visible(on: bool) -> void:
+	for c in root.get_children():
+		if c is CanvasItem and not c in [screens, pip, dev, casino, pause_panel, dead_panel]:
+			(c as CanvasItem).modulate.a = 1.0 if on else 0.0
+
 func toggle_pause() -> void:
+	# pausing puts away whatever else is open, so the pause menu is never on top of (or under) the Pip-Boy
+	if not pause_panel.visible:
+		if pip.visible:
+			pip.visible = false
+		if dev.visible:
+			dev.visible = false
+		if casino.is_open():
+			casino.close()
+		if screens.is_open() and not screens.mode in ["title", "intro", "create"]:
+			screens.close()
+		if Game.main.in_dialog():
+			Game.main.end_dialog()
+		Game.paused = false
 	Game.paused = not Game.paused
 	get_tree().paused = Game.paused
 	pause_panel.visible = Game.paused
