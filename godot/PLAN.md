@@ -125,5 +125,14 @@ Keep every existing quest and line, then deepen them:
    `data/khole/`, drawn by `scripts/khole.gd`); and the 21 building interiors (`data/cells/`, entered through
    their street doors). Also in this build: townsfolk look different from each other, guns sit in the hands
    properly, and townsfolk can be shot (essential people yield, guards join in).*
-6. **godot-8:** the story overhaul (new beats, factions, companion quests), all endings and epilogues, polish.
+6. **godot-8:** a fixes-and-feel build from play-testing godot-7. *Status: shipped. Enemies see and hurt you
+   again (their line of sight was hitting your own body) and fight with tactics: gunmen keep their distance,
+   strafe, fire in bursts, take cover when hurt and run when nearly dead; animals and brawlers spread out,
+   circle and wind up their blows. Hit markers (white, yellow for criticals and head hits, red for kills), a
+   red wedge showing where a hit came from, the target's name and health, head hits for half again. Every gun
+   is held by its own grip and handguard (measured off side views, `tools/gunside.tscn`) with the hands pinned
+   by IK; melee weapons are modelled and swing. The Pip-Boy is rebuilt in sections (STAT, INV, DATA, RADIO,
+   SYS) with deeper pages. Haven 12 has panel ceilings, tiled floors, strip lights, wall ribs, sliding doors and
+   a cog door that rolls aside. HUD corners no longer run under the touch buttons.*
+7. **godot-9:** the story overhaul (new beats, factions, companion quests), all endings and epilogues, polish.
    At that point the Godot build replaces the WebView build.

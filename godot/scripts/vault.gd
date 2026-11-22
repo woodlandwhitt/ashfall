@@ -17,6 +17,7 @@ func setup(m) -> void:
 	_ceilings()
 	_lights()
 	_doors()
+	_walls()
 	_great_door()
 
 func P(x: float, y: float, z: float) -> Vector3:
@@ -151,6 +152,27 @@ func _doors() -> void:
 			box(Vector3(0.1, 0.5, 0.06), Vector3(0, 1.2, -s * 0.37), dark, h)
 			halves.append(h)
 		doors.append({"l": halves[0], "r": halves[1], "c": c, "open": 0.0})
+
+# steel ribs down the corridor walls between the doors, and up the atrium's tall sides
+func _walls() -> void:
+	var steel := mat(Color(0.5, 0.53, 0.55), 0.55, 0.45)
+	var cap := mat(Color(0.2, 0.42, 0.42), 0.3, 0.55)
+	var z := 4.0
+	while z <= 72.0:
+		for sx in [-1.0, 1.0]:
+			var clear := true
+			for d in DOORWAYS:
+				if signf(float(d[0])) == sx and absf(z - float(d[1])) < 1.3:
+					clear = false
+			if clear:
+				box(Vector3(0.12, WH - 0.05, 0.22), P(sx * 1.93, (WH - 0.05) * 0.5, z), steel)
+				box(Vector3(0.16, 0.14, 0.26), P(sx * 1.91, 0.07, z), cap)
+		z += 3.0
+	for sx in [-1.0, 1.0]:
+		var az := 76.0
+		while az <= 91.0:
+			box(Vector3(0.16, 7.1, 0.3), P(sx * 12.1, 3.55, az), steel)
+			az += 2.5
 
 func _process(dt: float) -> void:
 	var who: Array = [Game.player] + main.npcs

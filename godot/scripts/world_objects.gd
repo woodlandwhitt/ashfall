@@ -133,6 +133,11 @@ func best(pp: Vector3, fwd: Vector3, bd: float) -> Dictionary:
 				var to := Vector3(x - pp.x, 0, z - pp.z)
 				var d := to.length()
 				var prio := 0.9 if o.has("prio") else 0.0
+				# street doors give way to anyone standing near them (a bartender by the saloon door)
+				# (unless you're looking straight at the door)
+				if o._k == "point" and String(o.id) in ["cellin", "cellout"]:
+					r = minf(r, 2.4)
+					prio = 0.3 if d > 0.01 and fwd.dot(to / d) > 0.93 else -1.0
 				if d > r or d - prio >= bd:
 					continue
 				if d > 1.2 and fwd.dot(to / d) < 0.45:
