@@ -106,8 +106,8 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		if ranged:
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
-			Humanoid.hold_gun(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121))
-		ap.play("Pistol_Idle" if ranged else "Idle")
+			_arm(d)
+		ap.play("Idle")
 	elif PEOPLE.has(type) and not quad:
 		var p: Array = PEOPLE[type]
 		# every raider his own: cut, dye, skin, hair, beard, headgear
@@ -165,8 +165,8 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		if ranged:
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
-			Humanoid.hold_gun(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121))
-		ap.play("Pistol_Idle" if ranged else "Idle")
+			_arm(d)
+		ap.play("Idle")
 		ap.seek(randf() * 2.0, true)
 	else:
 		var ps: PackedScene = load(Game.char_path("enemy_" + type + ".glb"))
@@ -182,6 +182,28 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 	agent.radius = 0.5
 	add_child(agent)
 	target = home
+
+# a gun of their own (a handgun: the aiming pose is one-handed), and the arms held on it in a fight
+const SIDEARMS := {"raider": ["Pistol_4", "lp_pistol", "lp_machine_pistol", "Revolver_3", "lp_derringer"], "warlord": ["lp_revolver"],
+	"hired": ["lp_pistol", "Pistol_4"], "townguard": ["lp_revolver", "Revolver_3"], "townsfolk": ["lp_pistol", "Pistol_4"],
+	"marauder": ["lp_machine_pistol", "Pistol_4"], "tollking": ["lp_revolver"], "sniper": ["lp_pistol"], "hunter": ["Revolver_3"]}
+var aim_hold: AimHold
+func _arm(d: Dictionary) -> void:
+	var list: Array = SIDEARMS.get(type, ["Pistol_4"])
+	var glb: String = list[absi(hash(String(d.get("id", "")) + str(d.x))) % list.size()]
+	var f: Dictionary = Game.DB.gunfit.get(glb, {})
+	var fit := Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(preload("res://scripts/player.gd")._kv(f) if f.has("k") else Vector3.ONE)
+	var gf := f.duplicate()
+	gf["glb"] = glb
+	if type == "warlord" or type == "tollking":
+		gf["finish"] = "gold"
+	Humanoid.hold_gun(model, load("res://guns/" + glb + ".glb"), fit, gf)
+	var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if sk:
+		sk.force_update_all_bone_transforms()
+		aim_hold = AimHold.new()
+		sk.add_child(aim_hold)
+		aim_hold.capture(sk)
 
 func _twist_setup() -> void:
 	var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
@@ -380,10 +402,15 @@ func _physics_process(d: float) -> void:
 					a = "Zombie_Idle"
 				elif aim:
 					a = "Pistol_Aim_Neutral"
-				elif ranged:
-					a = "Pistol_Idle"
 				var sgn := LegTwist.drive(lt, face_yaw, velocity) if spd > 0.3 else LegTwist.drive(lt, face_yaw, Vector3.ZERO)
 				Humanoid.play(ap, a, (clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0) * sgn)
+			if aim_hold:
+				# in a fight the gun stays up and on you, whatever the legs are doing
+				var fighting: bool = hostile and state == "chase"
+				aim_hold.target_w = 1.0 if fighting and act_t <= 0.0 else 0.0
+				var tp: Vector3 = (foe.global_position if foe else Game.player.global_position) + Vector3.UP * 1.2
+				var fp := global_position + Vector3.UP * 1.4
+				aim_hold.pitch = atan2(tp.y - fp.y, Vector2(tp.x - fp.x, tp.z - fp.z).length()) if fighting else 0.0
 		else:
 			rig.animate(d, spd, t, aim)
 

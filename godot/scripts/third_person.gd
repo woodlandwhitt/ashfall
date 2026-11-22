@@ -94,7 +94,7 @@ func update(d: float) -> void:
 	elif hs > 0.4:
 		a = "Walk"
 	elif armed:
-		a = "Pistol_Aim_Neutral" if p.trigger or p.fire_cd > 0.0 else "Pistol_Idle"
+		a = "Pistol_Aim_Neutral" if p.trigger or p.fire_cd > 0.0 else "Idle"
 	if not ap.has_animation(a):
 		a = a + "_Loop" if ap.has_animation(a + "_Loop") else "Idle"
 	# body faces where you aim; moving sideways or back turns the hips (or plays the walk backwards)

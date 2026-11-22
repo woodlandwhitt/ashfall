@@ -34,6 +34,7 @@ var think := 0.0
 var bark_t := 0.0
 var los := false
 var held: Node3D = null
+var aim_hold: AimHold
 var idle_anim := "Idle"
 # a day's routine (TownLife): home -> walking to a spot -> sitting or working there -> back home
 var agent: NavigationAgent3D
@@ -312,7 +313,15 @@ func join(c: Dictionary, st: String) -> void:
 	wander_r = 0.0
 	collision_layer = 0
 	if ap and c.get("ranged", false) and held == null:
-		held = Humanoid.hold_gun(model, load("res://guns/Pistol_4.glb"), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.121))
+		ap.play("Pistol_Aim_Neutral")
+		ap.seek(0.0, true)
+		held = Humanoid.hold_gun(model, load("res://guns/lp_revolver.glb"), Basis.IDENTITY, {"glb": "lp_revolver", "pistol": 1})
+		var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
+		if sk and aim_hold == null:
+			sk.force_update_all_bone_transforms()
+			aim_hold = AimHold.new()
+			sk.add_child(aim_hold)
+			aim_hold.capture(sk)
 
 func leave() -> void:
 	follow = false
@@ -324,6 +333,9 @@ func leave() -> void:
 	if held:
 		held.queue_free()
 		held = null
+	if aim_hold:
+		aim_hold.queue_free()
+		aim_hold = null
 
 func say(kind: String) -> void:
 	bark_t = 0.0
@@ -459,6 +471,11 @@ func _companion(d: float) -> void:
 		# keeping pace sideways or backing off while it shoots: hips follow the feet, chest stays on the target
 		var sgn := LegTwist.drive(lt, face_yaw, velocity if spd > 0.3 else Vector3.ZERO)
 		Humanoid.play(ap, a, sgn)
+		if aim_hold:
+			aim_hold.target_w = 1.0 if aiming else 0.0
+			if aiming and tgt:
+				var tp: Vector3 = tgt.global_position + Vector3.UP * 1.0
+				aim_hold.pitch = atan2(tp.y - global_position.y - 1.4, Vector2(tp.x - global_position.x, tp.z - global_position.z).length())
 	elif rig:
 		rig.animate(d, spd, t)
 
