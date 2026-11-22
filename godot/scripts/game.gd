@@ -276,7 +276,7 @@ func _end_drug(k: String) -> void:
 # the combined effect of everything in the bloodstream: speed, ap, reload, dr, regen, rad, spread, melee, the look
 func fx() -> Dictionary:
 	var f := {"speed": 1.0, "ap": 1.0, "reload": 1.0, "dr": 0.0, "regen": 0.0, "rad": 0.0, "spread": 1.0, "melee": 1.0, "fov": 1.0,
-		"sat": 1.0, "con": 1.0, "exposure": 0.0, "tr": 1.0, "tg": 1.0, "tb": 1.0, "warp": 0.0, "heart": 0.0, "night": 0.0}
+		"sat": 1.0, "con": 1.0, "exposure": 0.0, "tr": 1.0, "tg": 1.0, "tb": 1.0, "warp": 0.0, "heart": 0.0, "night": 0.0, "stealth": 0.0}
 	const MUL := ["speed", "ap", "reload", "spread", "melee", "fov", "sat", "con", "tr", "tg", "tb"]
 	for k in drugs:
 		var d: Dictionary = drugs[k]
@@ -296,6 +296,8 @@ func fx() -> Dictionary:
 			a = 1.0
 		if a <= 0.0:
 			continue
+		if D.get("stealth") and not d.crash:
+			f.stealth = maxf(f.stealth, float(D.stealth) * a)
 		for p in src:
 			if not f.has(p):
 				continue
@@ -344,6 +346,8 @@ func body_tick(dt: float) -> void:
 		hp = minf(hp_max, hp + f.regen * dt)
 	if f.rad > 0.0:
 		add_rad(f.rad * dt)
+	elif f.rad < 0.0:
+		rad = maxf(0.0, rad + f.rad * dt)
 	if rad >= 100.0:
 		hurt(7.5 * dt)
 

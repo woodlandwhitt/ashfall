@@ -422,6 +422,21 @@ func hit_marker(kind: String) -> void:
 	hitmark.queue_redraw()
 
 # a red wedge at the edge of the screen pointing at whatever just hurt you
+# a flashbang going off in front of you: the screen whites out and comes back slowly
+var _white: ColorRect
+func white_flash(secs: float) -> void:
+	if _white == null:
+		_white = ColorRect.new()
+		_white.color = Color(1, 1, 0.97, 0)
+		_white.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_white.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_white)
+	_white.color.a = 1.0
+	var tw := _white.create_tween()
+	tw.tween_interval(secs * 0.35)
+	tw.tween_property(_white, "color:a", 0.0, secs * 0.65)
+	Sfx.play("heart", -4.0)
+
 func hurt_from(src: Vector3) -> void:
 	dmgdir.add(src)
 

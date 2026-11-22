@@ -306,6 +306,8 @@ func visibility() -> float:
 		v = 1.2
 	if Game.dev.invis:
 		v = 0.0
+	# Ghostweed: you fade at the edges
+	v *= 1.0 - 0.5 * float(fxc.get("stealth", 0.0))
 	return v * (0.8 if Game.time < 0.25 or Game.time > 0.8 else 1.0)
 
 func jump() -> void:
@@ -376,6 +378,12 @@ func fire() -> void:
 	Game.stats_changed.emit()
 	fire_cd = cd
 	shot_fx(kind)
+	if String(it.get("proj", "")) == "rocket":
+		var aim := -cam.global_basis.z
+		Nade.launch(vm.muzzle_pos() + aim * 0.3, aim, weapon_damage(), float(it.get("r", 6.0)))
+		if Game.mag == 0:
+			reload()
+		return
 	var pel := int(it.get("pellets", 1))
 	var dmg := weapon_damage() * (0.75 if pel > 1 else 1.0)
 	var moving := 1.5 if Vector2(velocity.x, velocity.z).length() > 1.0 else 1.0
@@ -406,8 +414,11 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 	var q := PhysicsRayQueryParameters3D.create(from, from + dir * rng, 1 | 2 | 4)
 	q.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	var it := Game.item(Game.weapon)
 	if energy:
-		Game.main.tracer(vm.muzzle_pos(), hit.position if hit else from + dir * rng, Color(0.4, 0.85, 1.0))
+		Game.main.tracer(vm.muzzle_pos(), hit.position if hit else from + dir * rng, Color(String(it.beam)) if it.has("beam") else Color(0.4, 0.85, 1.0))
+	if hit and it.has("splash"):
+		_splash(hit.position, float(it.splash), dmg * 0.45, Color(String(it.get("beam", "#88ff88"))))
 	if hit:
 		var c: Object = hit.collider
 		var crit := randf() < 0.03 + (int(Game.stats.luck) - 5) * 0.01
@@ -422,7 +433,10 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 			if sneak:
 				dmg *= 3.0 if String(Game.item(Game.weapon).get("kind", "")) == "melee" or Game.weapon == "" else 2.0
 				Game.msg("Sneak attack!")
-			c.hit(dmg * randf_range(0.9, 1.1) * (2.0 if crit else 1.0) * (1.5 if head else 1.0), hit.position, dir)
+			var ion := float(it.get("ion", 1.0)) if c.get("def") is Dictionary and c.def.get("robot", false) else 1.0
+			c.hit(dmg * ion * randf_range(0.9, 1.1) * (2.0 if crit else 1.0) * (1.5 if head else 1.0), hit.position, dir)
+			if it.has("burn") and c.get("bleed") != null and c.get("dead") == false:
+				c.bleed = [float(it.burn[0]), float(it.burn[1])]
 			if c.get("hp_max") != null and Game.main and Game.main.hud:
 				var killed: bool = c.get("dead") == true and not was_dead
 				Game.main.hud.hit_marker("kill" if killed else ("crit" if crit or head or sneak else "hit"))
@@ -431,6 +445,24 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 					Sfx.play("k_click", -10.0, 1.6)
 		else:
 			Game.main.impact(hit.position, hit.normal)
+
+# a plasma bolt bursting where it lands: a little blast that catches anyone close by
+func _splash(at: Vector3, r: float, dmg: float, col: Color) -> void:
+	for e in Game.main.enemies.duplicate():
+		if is_instance_valid(e) and not e.dead:
+			var dd: float = e.global_position.distance_to(at)
+			if dd < r + 0.4:
+				e.hit(dmg * (1.0 - dd / (r + 0.4) * 0.5), e.global_position + Vector3.UP, (e.global_position - at).normalized())
+	var l := OmniLight3D.new()
+	l.light_color = col
+	l.light_energy = 3.0
+	l.omni_range = r * 3.0
+	Game.main.add_child(l)
+	l.global_position = at + Vector3.UP * 0.3
+	var tw := l.create_tween()
+	tw.tween_property(l, "light_energy", 0.0, 0.3)
+	tw.tween_callback(l.queue_free)
+	Game.main._puff(at, Vector3.UP, Color(col.r, col.g, col.b, 0.9), 14, r)
 
 func hurt_fx(d: float) -> void:
 	hurt_shake = minf(1.0, hurt_shake + d * 0.05)

@@ -39,6 +39,9 @@ var since_hit := 0.0
 var lt: LegTwist          # hips follow the feet when it strafes or backs off
 var aiming := false       # last frame it was aiming: it keeps facing you while it moves     # a provoked townsperson cools off when you stop hitting them and walk away
 var foe = null           # the companion it is fighting, or null for you
+var stun := 0.0         # a flashbang: blind and staggering
+var slow := 0.0         # a cryo grenade: frozen to a crawl
+var bleed: Array = []   # [damage per second, seconds left]: nails, burning, a glowing wound
 var crip := {}           # FOCUS hits: crippled legs slow it, crippled arms spoil its aim
 # tactics: what it is doing inside a fight
 var tac := "advance"     # advance, strafe, cover, peek, flee, circle
@@ -286,6 +289,8 @@ func can_see(p: Vector3, from := Vector3.INF) -> bool:
 	if Game.dev.invis:
 		return false
 	var a := (global_position if from == Vector3.INF else from) + Vector3.UP * 1.2
+	if Nade.Cloud.blocks(a, p + Vector3.UP * 1.3):
+		return false
 	var q := PhysicsRayQueryParameters3D.create(a, p + Vector3.UP * 1.3, 1)
 	q.exclude = [get_rid(), Game.player.get_rid()]
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
@@ -338,6 +343,27 @@ func _physics_process(d: float) -> void:
 	if flash > 0.0:
 		flash -= d
 	if dead:
+		return
+	if not bleed.is_empty():
+		bleed[1] = float(bleed[1]) - d
+		hp -= float(bleed[0]) * d
+		if hp <= 0.0:
+			die(Vector3.UP)
+			return
+		if float(bleed[1]) <= 0.0:
+			bleed = []
+	slow = maxf(0.0, slow - d)
+	if stun > 0.0:
+		# reeling: no shooting, no chasing, a stagger on the spot
+		stun -= d
+		velocity.x = lerpf(velocity.x, 0.0, 1.0 - exp(-6.0 * d))
+		velocity.z = lerpf(velocity.z, 0.0, 1.0 - exp(-6.0 * d))
+		velocity.y = -6.0 if not is_on_floor() else -0.5
+		move_and_slide()
+		if ap:
+			Humanoid.play(ap, "Hit_Head" if ap.has_animation("Hit_Head") else "Idle", 0.6)
+		if aim_hold:
+			aim_hold.target_w = 0.0
 		return
 	var P := Game.player
 	var pp := P.global_position
@@ -438,7 +464,7 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 	tac_t -= d
 	var sees := can_see(pp)
 	seen_t = seen_t + d if sees else 0.0
-	var leg := 0.55 if crip.has("legs") else 1.0
+	var leg := (0.55 if crip.has("legs") else 1.0) * (0.35 if slow > 0.0 else 1.0)
 	var to := pp - global_position
 	to.y = 0.0
 	var dirv := to.normalized() if to.length() > 0.01 else Vector3.FORWARD
