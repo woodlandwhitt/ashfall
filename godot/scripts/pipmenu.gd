@@ -737,7 +737,8 @@ func _quests() -> void:
 	if done.is_empty():
 		_label(L, "None yet.", 16, DIM)
 	for q in done:
-		var b := _list_button(L, String(Game.qdef(q).get("t", q)), q == sel_quest, func():
+		var failed: bool = Game.quests[q].get("failed", false)
+		var b := _list_button(L, String(Game.qdef(q).get("t", q)) + ("  [FAILED]" if failed else ""), q == sel_quest, func():
 			sel_quest = q
 			show_tab("QUESTS"))
 		if q != sel_quest:
@@ -760,7 +761,9 @@ func _quests() -> void:
 		var txt := Game.subst(Game.vm.to_str(Game.vm.val(stages[i].get("txt", ""), [Game.G])))
 		var now: bool = i == cur and not finished
 		_label(R, ("► " if now else "✓ ") + txt, 17, BRIGHT if now else DIM)
-	if finished:
+	if finished and Game.quests[sel_quest].get("failed", false):
+		_label(R, "✗ Failed.", 17, Color(0.9, 0.4, 0.3))
+	elif finished:
 		_label(R, "✓ Done.", 17, AMBERC)
 	var rw: Dictionary = d.get("reward", {})
 	if not rw.is_empty():
@@ -784,6 +787,7 @@ func _quests() -> void:
 			var qq := sel_quest
 			_button(R, "TRACK THIS QUEST", func():
 				Game.flags["track"] = qq
+				Game.flags["track_manual"] = true
 				Game.quest_changed.emit()
 				show_tab("QUESTS"))
 		else:

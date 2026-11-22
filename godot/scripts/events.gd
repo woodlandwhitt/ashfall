@@ -28,7 +28,8 @@ func _physics_process(dt: float) -> void:
 				"caravan":
 					Game.msg("Gunfire ahead: raiders are hitting a caravan!")
 					Game.start("caravan_rescue")
-					Game.flags["track"] = "caravan_rescue"
+					if not Game.flags.get("track_manual", false):
+						Game.flags["track"] = "caravan_rescue"
 				"trader": Game.msg("A trader's cart sits by the road, ox dozing in the traces.")
 				"stranger": Game.msg("Someone is waving at you from beside a burnt-out cart.")
 				"scav": Game.msg("Vultures circle over something ahead.")

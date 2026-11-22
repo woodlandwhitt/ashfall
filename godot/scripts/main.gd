@@ -848,6 +848,7 @@ func npc_died(e) -> void:
 	if not (String(n.id) in GUARDS):
 		Game.add_karma(-10, "Murdered " + String(n.display_name))
 	Game.msg(String(n.display_name) + " is dead.")
+	Game.npc_lost(String(n.id))
 	npcs.erase(n)
 	for i in live_npc.keys():
 		if live_npc[i] == n:

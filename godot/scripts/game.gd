@@ -610,11 +610,21 @@ func start(q: String) -> void:
 			return
 		quests.erase(q)
 	quests[q] = {"stage": 0, "done": false}
-	msg("New quest: " + String(d.t))
 	Sfx.play("o_quest")
+	# the quest you're following stays followed: a new one only takes over when you aren't following anything, when
+	# it carries straight on from the one you just finished, or when it's the main story and you didn't pick the
+	# side quest yourself
 	var tr = flags.get("track")
-	if tr == null or stage(String(tr)) < 0 or (d.get("main", false) and not qdef(tr).get("main", false)):
+	var takes: bool = tr == null or stage(String(tr)) < 0 or flags.get("track_next") == q
+	if not takes and d.get("main", false) and not qdef(String(tr)).get("main", false) and not flags.get("track_manual", false):
+		takes = true
+	flags.erase("track_next")
+	if takes:
 		flags["track"] = q
+		flags["track_manual"] = false
+		msg("New quest: " + String(d.t))
+	else:
+		msg("New quest: " + String(d.t) + "  (in the Pip-Boy)")
 	if main:
 		main.refresh_spawns()
 	quest_changed.emit()
@@ -661,17 +671,78 @@ func complete(q: String) -> void:
 		flags["radio"] = d.radio
 	if flags.get("track") == q:
 		flags["track"] = null
-		for k in quests:
-			if not quests[k].done:
-				flags["track"] = k
-				if qdef(k).get("main", false):
-					break
+		flags["track_manual"] = false
+		if d.get("then"):
+			flags["track_next"] = String(d.then)
+		else:
+			_track_next()
 	if d.get("then"):
 		start(String(d.then))
 	if main:
 		main.refresh_spawns()
 	quest_changed.emit()
 	stats_changed.emit()
+
+# after the followed quest ends: the main story first, else the most recently started
+func _track_next() -> void:
+	var pick = null
+	for k in quests:
+		if quests[k].done:
+			continue
+		if qdef(k).get("main", false):
+			pick = k
+			break
+		pick = k
+	flags["track"] = pick
+
+# ---------------------------------------------------------------- quests that die with the people they're for
+# who gives which quest, read once from every conversation's start(...) calls
+var _givers := {}
+func quest_givers() -> Dictionary:
+	if not _givers.is_empty():
+		return _givers
+	for npc in DIALOGUE:
+		_find_starts(DIALOGUE[npc], String(npc))
+	return _givers
+
+func _find_starts(o, npc: String) -> void:
+	if o is Dictionary:
+		if o.get("type") == "CallExpression":
+			var c = o.get("callee", {})
+			if c is Dictionary and c.get("type") == "MemberExpression" and c.get("property", {}).get("name") == "start":
+				for a in o.get("arguments", []):
+					if a is Dictionary and a.get("type") == "Literal":
+						if not _givers.has(String(a.value)):
+							_givers[String(a.value)] = []
+						if not npc in _givers[String(a.value)]:
+							_givers[String(a.value)].append(npc)
+		for v in o.values():
+			_find_starts(v, npc)
+	elif o is Array:
+		for v in o:
+			_find_starts(v, npc)
+
+# someone died: the side quests they gave you, still open, can't be finished now (the main story never fails)
+func npc_lost(id: String) -> void:
+	var G := quest_givers()
+	for q in quests.keys():
+		if quests[q].done or qdef(q).get("main", false) or qdef(q).get("nofail", false):
+			continue
+		if id in G.get(q, []):
+			fail(q, id)
+
+func fail(q: String, why := "") -> void:
+	if not quests.has(q) or quests[q].done:
+		return
+	quests[q].done = true
+	quests[q]["failed"] = true
+	var who := String(DIALOGUE[why].name) if why != "" and DIALOGUE.has(why) else ""
+	banner("QUEST FAILED", String(qdef(q).get("t", q)) + ("  (" + who + " is dead)" if who != "" else ""))
+	Sfx.play("o_quest")
+	if flags.get("track") == q:
+		flags["track_manual"] = false
+		_track_next()
+	quest_changed.emit()
 
 # stages that finish themselves when their condition becomes true (the original's checkQuests)
 func check_quests() -> void:
