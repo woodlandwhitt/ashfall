@@ -203,7 +203,7 @@ export {DRUGS};
 export const STOCK = {
   brannock: [['derringer', 1], ['ridgeback', 1], ['long_silence', 1], ['fire_axe', 1], ['bowie', 1], ['sticky', 2], ['dynamite', 3], ['nail_bomb', 3], ['prox_mine', 2], ['flashbang', 2]],
   duggan: [['claw_hammer', 1], ['lead_pipe', 1], ['shovel', 1], ['smoke', 2], ['hush', 2], ['stitch_gel', 2], ['grit', 2]],
-  wick: [['laser_pistol', 1], ['tesla_pistol', 1], ['static_pistol', 1], ['pulse_carbine', 1], ['capacitor_rifle', 1], ['beamer', 1], ['cryo', 2], ['plasma_nade', 1]],
+  wick: [['disintegrator', 1], ['laser_pistol', 1], ['tesla_pistol', 1], ['static_pistol', 1], ['pulse_carbine', 1], ['capacitor_rifle', 1], ['beamer', 1], ['cryo', 2], ['plasma_nade', 1]],
   finch: [['gantry_bullpup', 1], ['laser_rifle', 1], ['photon_smg', 1], ['ammo_rocket', 4], ['rocket_tube', 1], ['incendiary', 2], ['overclock', 1], ['ironhide', 1]],
   kess: [['stinger', 1], ['cleaver', 1], ['pickaxe', 1], ['redline', 3], ['bullshot', 2], ['ashsnuff', 4], ['nail_bomb', 3], ['dynamite', 2], ['molotov', 2]],
   halloran: [['hush', 3], ['stitch_gel', 3], ['bloodpack', 3], ['purge', 2], ['lucid', 1], ['nightjar', 1]],
@@ -230,4 +230,4 @@ export const LOOT = {
     ['sticky', 1, 2], ['cryo', 1, 2], ['rad_nade', 1, 2], ['plasma_nade', 1, 1], ['prox_mine', 1, 2],
     ['lucid', 1, 1], ['ironhide', 1, 1], ['nightjar', 1, 1], ['overclock', 1, 1], ['clover', 1, 1], ['slowburn', 1, 1], ['viper', 1, 1], ['ghostweed', 1, 1]],
 };
-// the two one-offs: a Rocket Tube and the Disintegrator are placed in the world by the story layer (story13.mjs)
+// one of a kind: Wick keeps the Disintegrator behind the counter, priced to match

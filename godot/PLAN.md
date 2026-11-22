@@ -166,6 +166,22 @@ Keep every existing quest and line, then deepen them:
    at you a few at a time. Terminals with password hacking (`terminal.gd`). Third-person camera (`third_person.gd`).
    Chem quick button. Intelligence (7th S.P.E.C.I.A.L.). Pip-Boy drag scrolling; pause closes menus; queued
    messages; pools lie on the ground; provoked townsfolk calm down; no stealing through doors; Forge furniture.
-11. **godot-13:** every gun its own look and grip; 30 more weapons, 10 more grenades, 20 more drugs.
-12. **godot-14+:** the map three times larger, region by region, with new settlements, interiors and longer quests.
-   At that point the Godot build replaces the WebView build.
+11. **godot-13:** *Status: shipped.* The arsenal (`data/arsenal.json` from `tools/arsenal/`): every gun its own
+   model (zee-dot-weapons' kitbashed low-poly guns and Kenney blasters, CC0), repainted in worn finishes
+   (`gun_paint.gd`), with grips read off side views (`tools/gunside.tscn`, `tools/fpall.tscn`); 30 new weapons
+   (rocket tube, energy guns with beam colours, ion, splash and burn; modelled melee tools), 10 grenades (sticky,
+   incendiary, smoke that blocks sight, flashbang stun, cryo slow, rad cloud, plasma, nail bleed, proximity mine,
+   dynamite) and 20 chems. Town life (`town_life.gd`): baked navmeshes, people walk to chairs, desks, shelves and
+   benches near home and sit or work there; you can sit too. Gunmen hold their aim while moving (`aim_hold.gd`) with
+   their own sidearms. Flying vultures (`vulture.gd`). Haven 12's atrium walls, the tunnel behind the great door,
+   decor set on real surfaces (`Furniture.surfaces`), signs kept clear, thinner rooms, desks under floating
+   terminals; fires settle out of rocks; bodies step out of solids (`clear_spot.gd`). Save from the pause menu, a
+   Settings panel with on-screen DEV/FORGE buttons. Quest tracking stays on what you follow; side quests fail
+   when their giver dies. **In-app updates** (`patcher.gd`, `updater.gd`): each release carries a patch pack cut
+   against the base build's full pack (`godot/patch_base.txt`; "self" makes a build the new base), downloaded from
+   the title screen and mounted at the next start.
+12. **godot-14:** a fuller graphics settings menu, more perks, power armour, more synths and robots, hillbillies,
+   food, the weapon builder. Voice inflection by mood.
+13. **godot-15+:** the map three times larger, region by region: roads, forests, unique terrain and buildings, tribes,
+   new settlements and interiors, more complex quests and deeper dialogue. At that point the Godot build replaces
+   the WebView build.

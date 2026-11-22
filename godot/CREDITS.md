@@ -7,7 +7,11 @@ All third-party assets are free and need no sign-up.
   Mesh2Motion/mesh2motion-assets, dtrajko/MoravaEngine, glanderness/BeefTV and dramaclaw/dramaclaw.
   See chars/LICENSE_Quaternius.txt. The extra outfits (Noble, Wizard, Knight cloth), hair styles and the
   second animation library (UAL2) are the same Quaternius CC0 packs, obtained via kirbycope/godot-npc-village.
-- **Guns:** Quaternius "Ultimate Guns", CC0 (same models as the WebView build).
+- **Guns:** Quaternius "Ultimate Guns", CC0 (same models as the WebView build). Build 13's guns (guns/lp_*.glb)
+  are the "low-poly guns" from zees-games/zee-dot-weapons, kitbashed from Quaternius's Ultimate Low Poly Guns
+  Pack, CC0 (guns/LICENSE-zee-low-poly-guns.txt). The energy weapons and two grenades (guns/bl/) are Kenney's
+  Blaster Kit, CC0; the melee tools and blades (guns/ml/) are Kenney's Survival Kit and Weapon Pack, CC0 (licence
+  files alongside), both via the same repository. All are repainted in game.
 - **Textures, props, sounds and world models:** exported from the WebView build. Their sources and licences are
   listed in assets/CREDITS.txt at the repository root (Poly Haven CC0, Kenney CC0, ambientCG CC0 and others).
 - **Furniture and clutter (props/*.glb):** photoscanned models from Poly Haven (CC0), via
