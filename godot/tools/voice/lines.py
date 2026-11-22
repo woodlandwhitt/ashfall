@@ -51,7 +51,10 @@ if os.path.exists(SP):
     for k, r in S.get("radio", {}).items():
         if "t" in r:
             add("overseer", r["t"])
-for who, c in L.get("companions", {}).items():
+COMP = dict(L.get("companions", {}))
+if os.path.exists(SP):
+    COMP.update(json.load(open(SP)).get("companions", {}))
+for who, c in COMP.items():
     for k, v in c.get("barks", {}).items():
         for x in ([v] if isinstance(v, str) else v):
             add(who, x)

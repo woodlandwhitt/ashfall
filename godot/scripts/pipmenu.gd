@@ -15,7 +15,7 @@ const DIM := Color(0.35, 0.7, 0.42)
 const AMBERC := Color(1.0, 0.9, 0.55)
 const BAD := Color(1.0, 0.5, 0.4)
 const SECTIONS := {"STAT": ["STATUS", "S.P.E.C.I.A.L.", "PERKS", "GENERAL"], "INV": ["WEAPONS", "APPAREL", "AID", "AMMO", "MISC", "QUEST"],
-	"DATA": ["QUESTS", "MAP", "FACTIONS", "NOTES", "CRAFT"], "RADIO": ["RADIO"], "SYS": ["SYSTEM"]}
+	"DATA": ["QUESTS", "MAP", "FACTIONS", "PARTY", "NOTES", "CRAFT"], "RADIO": ["RADIO"], "SYS": ["SYSTEM"]}
 const INV_CAT := {"WEAPONS": "weapon", "APPAREL": "armor", "AID": "aid", "AMMO": "ammo", "MISC": "junk", "QUEST": "quest"}
 # the old single-word page names still open the right place
 const ALIAS := {"STATS": "STATUS", "ITEMS": "WEAPONS", "SPECIAL": "S.P.E.C.I.A.L."}
@@ -194,6 +194,7 @@ func show_tab(t: String) -> void:
 		"MAP": _map()
 		"NOTES": _notes()
 		"FACTIONS": _factions()
+		"PARTY": _party()
 		"CRAFT": _craft()
 		"RADIO": _radio()
 		"SYSTEM": _system()
@@ -783,6 +784,64 @@ func _factions() -> void:
 	if not effects.is_empty():
 		_label(R, "\n".join(effects), 15, DIM)
 	_label(R, "Work done for them raises your standing; so do the promises you keep.", 15, DIM)
+
+# ---------------------------------------------------------------- DATA: PARTY (companions and what they think of you)
+const COMP_INFO := {
+	"jory": ["Likes decency, keeping your word, Finch. Hates cruelty and anyone hurt who wasn't shooting.", "Loyal: hits 30% harder, 25% tougher, stays whatever your karma.", "jory_wagon"],
+	"sable": ["Likes trouble, taking what you want, the Spur's tables. Hates sermons and saints.", "Loyal: hits 30% harder, 25% tougher, stays whatever your karma.", "sable_ledger"],
+	"renn2": ["Likes a second chance given, Saltreach, honest work. Hates bribes, raiders and the Gulch.", "Loyal: hits 30% harder, 25% tougher, stays whatever your karma.", "old_colours"],
+	"biscuit": ["Likes you. Likes everything about you. Also bones.", "A good dog. Already loyal.", "good_boy"],
+}
+var sel_comp := ""
+func _party() -> void:
+	var known: Array = []
+	for id in COMP_INFO:
+		if Game.main and Game.main.party.any(func(p): return p.id == id):
+			known.append(id)
+		elif Game.flags.has("appr_" + id) or Game.flags.has("left_" + id) or (id == "biscuit" and Game.flags.has("biscuit")):
+			known.append(id)
+	if known.is_empty():
+		_label(body, "Nobody's walking with you yet. Jory Vance hires out at the Dry Overpass; Sable is bored at Gantry Yard; and Saltreach might lend you a deputy once it trusts one.", 17, DIM)
+		return
+	var lr := _split(0.9)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
+	if not known.has(sel_comp):
+		sel_comp = known[0]
+	for id in known:
+		var row := HBoxContainer.new()
+		L.add_child(row)
+		var nm := String(Game.L.companions.get(id, {}).get("n", id))
+		var b := _list_button(row, nm, id == sel_comp, func():
+			sel_comp = id
+			show_tab("PARTY"))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var a := Game.approval(id)
+		var t := _label(row, "Loyal" if Game.is_loyal(id) or id == "biscuit" else Game.approval_title(a), 16, AMBERC if Game.is_loyal(id) or id == "biscuit" else (BAD if a <= -15 else (GREEN if a >= 15 else DIM)))
+		t.custom_minimum_size = Vector2(120, 0)
+	var c: Dictionary = Game.L.companions.get(sel_comp, {})
+	_title(R, String(c.get("n", sel_comp)))
+	var with_me: bool = Game.main != null and Game.main.party.any(func(p): return p.id == sel_comp)
+	var st := "Travelling with you" if with_me else ("Left you" if Game.flags.has("left_" + sel_comp) else "Back home")
+	if with_me and Game.main.party_state(sel_comp) == "wait":
+		st = "Waiting where you left them"
+	_row(R, "Status", st)
+	if sel_comp != "biscuit":
+		var a := Game.approval(sel_comp)
+		var hb := HBoxContainer.new()
+		R.add_child(hb)
+		_label(hb, "Approval: %s (%+d)" % ["Loyal" if Game.is_loyal(sel_comp) else Game.approval_title(a), a], 17, AMBERC).custom_minimum_size = Vector2(250, 0)
+		hb.add_child(_bar(float(a + 100), 200.0, BAD if a < 0 else GREEN, 200))
+	var info: Array = COMP_INFO[sel_comp]
+	_label(R, String(info[0]), 16)
+	_label(R, String(info[1]), 16, AMBERC if Game.is_loyal(sel_comp) or sel_comp == "biscuit" else DIM)
+	var q := String(info[2])
+	if Game.quests.has(q):
+		_row(R, "Their quest", String(Game.qdef(q).get("t", q)) + ("  (done)" if Game.quests[q].done else "  (active)"))
+	elif sel_comp != "biscuit":
+		_label(R, "They have something on their mind. Ask them, out on the road.", 15, DIM)
+	if sel_comp != "biscuit" and not Game.is_loyal(sel_comp):
+		_label(R, "At 30 approval they'll open up about themselves. Talk to them.", 15, DIM)
 
 # ---------------------------------------------------------------- DATA: NOTES
 func _notes() -> void:

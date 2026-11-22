@@ -214,7 +214,7 @@ func _companion(d: float) -> void:
 			Game.msg(String(comp.n) + " is back on their feet.")
 		return
 	# your karma crossed their line
-	if not comp.get("dog", false) and ((comp.has("minKarma") and Game.karma < int(comp.minKarma)) or (comp.has("maxKarma") and Game.karma > int(comp.maxKarma))):
+	if not comp.get("dog", false) and not comp.get("loyal", false) and ((comp.has("minKarma") and Game.karma < int(comp.minKarma)) or (comp.has("maxKarma") and Game.karma > int(comp.maxKarma))):
 		say("leave")
 		Game.main.dismiss(id, true)
 		return

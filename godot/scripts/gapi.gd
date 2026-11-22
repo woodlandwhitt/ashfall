@@ -164,6 +164,10 @@ func recruit(id = "") -> void:
 func dismiss(id = "") -> void:
 	if Game.main:
 		Game.main.dismiss(_s(id))
+func approve(id = "", n = 0, why = "") -> void: Game.approve(_s(id), int(vm.num(n)), "" if why == null else _s(why))
+func approval(id = "") -> int: return Game.approval(_s(id))
+func loyal(id = "") -> bool: return Game.is_loyal(_s(id))
+func makeLoyal(id = "") -> void: Game.make_loyal(_s(id))
 func inParty(id = "") -> bool:
 	return Game.main != null and Game.main.party_state(_s(id)) != null
 func partyState(id = ""):

@@ -192,6 +192,7 @@ func celebrate(won: int, staked: int) -> void:
 		return
 	win_amt = won
 	win_t = 0.01 if fast else 2.4
+	Game.party_react("casino")
 	Sfx.play("o_levelup", -4.0, 1.1)
 
 func check_limit() -> bool:
@@ -381,9 +382,8 @@ func _btn(label: String, fn: Callable, main := false, on := true) -> Button:
 
 func _table_input(e: InputEvent) -> void:
 	var p := Vector2.INF
+	# taps arrive as emulated mouse clicks (touch events too, on some devices: take only one kind, or a tap bets twice)
 	if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-		p = e.position
-	elif e is InputEventScreenTouch and e.pressed:
 		p = e.position
 	if p == Vector2.INF:
 		return

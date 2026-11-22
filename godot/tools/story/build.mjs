@@ -11,7 +11,22 @@ for (const base of [here, '/home/claude/godot/tools', process.cwd()]) {
   try { acorn = createRequire(path.join(base, 'x.js'))('acorn'); break; } catch (e) {}
 }
 const OUT = process.argv[2] || path.join(here, '../../data/story.json');
-const S = await import(path.join(here, 'story10.mjs'));
+// every build's layer, oldest first: objects merge key by key (a dialogue's nodes merge too), arrays join end to end
+const S = {};
+for (const f of ['story10.mjs', 'story11.mjs']) {
+  const M = await import(path.join(here, f));
+  for (const k of Object.keys(M)) {
+    const v = M[k];
+    if (Array.isArray(v)) S[k] = (S[k] || []).concat(v);
+    else if (v && typeof v === 'object') {
+      S[k] = S[k] || {};
+      for (const kk of Object.keys(v)) {
+        if (k === 'DIALOGUE' && S[k][kk]) S[k][kk] = {...S[k][kk], nodes: {...S[k][kk].nodes, ...v[kk].nodes}};
+        else S[k][kk] = v[kk];
+      }
+    } else S[k] = v;
+  }
+}
 const DROP = new Set(['start', 'end', 'raw', 'sourceType', 'loc', 'range', 'generator', 'async', 'directive']);
 function trim(n) {
   if (Array.isArray(n)) return n.map(trim);

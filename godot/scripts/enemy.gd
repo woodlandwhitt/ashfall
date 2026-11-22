@@ -62,6 +62,9 @@ const PEOPLE := {
 func setup(d: Dictionary, td: Dictionary) -> void:
 	type = d.type
 	def = td
+	if d.get("name") != null:
+		def = td.duplicate()
+		def["name"] = String(d.name)
 	quad = bool(td.get("quad", false))
 	ranged = (bool(td.get("ranged", false)) or bool(d.get("ranged", false))) and not quad
 	hp_max = float(td.get("hp", 40)) if td.get("hp") != null else 40.0

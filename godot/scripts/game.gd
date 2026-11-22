@@ -621,6 +621,8 @@ func complete(q: String) -> void:
 		flags["rep"] = int(flags.get("rep", 0)) + int(d.rep)
 	for f in STORY.get("quest_rep", {}).get(q, {}):
 		rep(f, int(STORY.quest_rep[q][f]))
+	if not d.get("main", false):
+		party_react("quest")
 	if d.get("karma"):
 		add_karma(int(d.karma), "")
 	if d.get("radio"):
@@ -763,6 +765,7 @@ func add_karma(n: int, why: String) -> void:
 	karma = clampi(karma + n, -100, 100)
 	msg(("Karma +" if n > 0 else "Karma ") + str(n) + (" — " + why if why != "" else ""))
 	Sfx.play("o_karmaup" if n > 0 else "o_karmadown", -4.0)
+	_karma_react(n)
 	var after := karma_title(karma)
 	if after != before:
 		banner("KARMA", "You are now known as " + after)
@@ -873,7 +876,7 @@ func _merge_spawns() -> void:
 			if not region.etypes.has(t):
 				continue
 		region.enemies.append({"type": t, "x": sp.x, "z": sp.z, "y": sp.y, "hostile": not sp.get("neutral", false), "id": id,
-			"req": sp.get("req"), "onStart": sp.get("onStart")})
+			"req": sp.get("req"), "onStart": sp.get("onStart"), "name": sp.get("name")})
 
 func spawn_allowed(e: Dictionary) -> bool:
 	if e.get("req") != null and not is_done(String(e.req)):
@@ -919,6 +922,13 @@ func _merge_story() -> void:
 		L.points[k] = STORY.points[k]
 	for k in STORY.get("items", {}):
 		DB.items[k] = STORY.items[k]
+	if not L.has("companions"):
+		L["companions"] = {}
+	for k in STORY.get("companions", {}):
+		L.companions[k] = STORY.companions[k]
+	for npc in STORY.get("entry", {}):
+		if L.dialogue.has(npc):
+			L.dialogue[npc]["entry"] = STORY.entry[npc]
 
 var _trig := false
 func _story_triggers() -> void:
@@ -955,6 +965,71 @@ static func rep_title(r: int) -> String:
 	if r <= 5: return "Liked"
 	if r <= 9: return "Respected"
 	return "Idolised"
+
+# ---------------------------------------------------------------- what your companions think of you (build 11)
+# -100..100 per companion. Karma moves it by each one's taste (Jory and Renn like decency, Sable likes a bit of
+# larceny), so do stealing, the Spur's tables and their own quests. Talk to them past 30 for their personal
+# conversation and loyalty (tougher, deadlier, and they won't walk over karma); at -40 they leave and won't come back.
+const APPROVAL_TASTE := {"jory": 1.5, "sable": -1.2, "renn2": 1.0}
+const REACT := {"steal": {"jory": -3, "renn2": -2, "sable": 3}, "caught": {"jory": -5, "renn2": -4, "sable": -2},
+	"casino": {"sable": 2, "jory": -1}, "quest": {"jory": 3, "renn2": 3, "sable": 2}, "sneak_kill": {"sable": 1}, "murder": {"jory": -15, "renn2": -15, "sable": -4}}
+func approval(id: String) -> int:
+	return int(flags.get("appr_" + id, 0))
+
+func approval_title(a: int) -> String:
+	if a <= -40: return "Done with you"
+	if a <= -15: return "Wary"
+	if a < 15: return "Neutral"
+	if a < 40: return "Friendly"
+	return "Loyal"
+
+func approve(id: String, n: int, why := "") -> void:
+	if n == 0 or not L.get("companions", {}).has(id) or L.companions[id].get("dog", false):
+		return
+	var before := approval(id)
+	var v := clampi(before + n, -100, 100)
+	flags["appr_" + id] = v
+	var nm := String(L.companions[id].n).split(" ")[0]
+	msg("%s %s%s" % [nm, ("approves" if n > 0 else "disapproves") if absi(n) < 8 else ("really likes that" if n > 0 else "hated that"), (". " + why) if why != "" else "."])
+	if v <= -40 and before > -40 and main and main.party.any(func(p): return p.id == id):
+		flags["left_" + id] = 1
+		for p in main.party:
+			if p.id == id:
+				p.say("leave")
+		main.dismiss(id, true)
+		msg(nm + " has had enough of you, and leaves.")
+
+func is_loyal(id: String) -> bool:
+	return bool(flags.get("loyal_" + id, false))
+
+func make_loyal(id: String) -> void:
+	if is_loyal(id):
+		return
+	flags["loyal_" + id] = 1
+	flags["appr_" + id] = maxi(approval(id), 40)
+	banner("LOYALTY", String(L.companions.get(id, {}).get("n", id)) + " is loyal to you")
+	Sfx.play("o_levelup", -6.0, 1.2)
+	if main:
+		main.refresh_party()
+
+# everyone in the party with an opinion reacts (REACT kinds, or karma by taste)
+func party_react(kind: String, why := "") -> void:
+	if main == null:
+		return
+	for p in main.party.duplicate():
+		var id := String(p.id)
+		var n := int(REACT.get(kind, {}).get(id, 0))
+		if n != 0:
+			approve(id, n, why)
+
+func _karma_react(n: int) -> void:
+	if main == null:
+		return
+	for p in main.party.duplicate():
+		var t := float(APPROVAL_TASTE.get(String(p.id), 0.0))
+		var a := int(round(n * t))
+		if a != 0:
+			approve(String(p.id), a)
 
 # everyone with a conversation in the original speaks it (data/logic.json)
 func _extra_dialogue() -> void:

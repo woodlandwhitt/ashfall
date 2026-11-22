@@ -409,6 +409,8 @@ func _process(_d: float) -> void:
 
 # ---------------------------------------------------------------- console commands
 const HELP := {
+	"casino": "casino [blackjack|roulette|dice|slots]: open the Spur's tables", "approve": "approve <companion> <n>: change approval",
+	"loyal": "loyal <companion>: make them loyal", "recruit": "recruit <jory|sable|renn2|biscuit>",
 	"help": "list the commands", "god": "toggle invulnerability", "noclip": "toggle free flight", "ammo": "toggle infinite ammo",
 	"ai": "ai [on|off]: freeze or resume enemies", "give": "give <item> [n]", "kit": "kit <guns|ammo|meds|chems|armor|mats|nades|keys>",
 	"items": "items [filter]: list item ids", "caps": "caps <n>", "xp": "xp <n>", "level": "level <n>", "heal": "full health and AP, no rads",
@@ -447,6 +449,20 @@ func run(line: String) -> String:
 			var ks: Array = HELP.keys()
 			ks.sort()
 			return "\n".join(ks.map(func(k): return "%-10s %s" % [k, HELP[k]]))
+		"casino":
+			Game.flags.erase("casinoBan")
+			visible = false
+			Game.main.hud.casino.open(arg.call(1, "blackjack"))
+			return "the Spur's tables" + ("" if Game.main.hud.casino.is_open() else " (could not open)")
+		"approve":
+			Game.approve(arg.call(1, "jory"), int(arg.call(2, "10")), "console")
+			return "%s approval %d" % [arg.call(1, "jory"), Game.approval(arg.call(1, "jory"))]
+		"loyal":
+			Game.make_loyal(arg.call(1, "jory"))
+			return arg.call(1, "jory") + " is loyal"
+		"recruit":
+			Game.main.recruit(arg.call(1, "jory"))
+			return "party: " + str(Game.main.party.map(func(p): return p.id))
 		"god", "noclip", "ammo":
 			Game.dev[c] = not Game.dev[c]
 			return "%s %s" % [c, "ON" if Game.dev[c] else "OFF"]

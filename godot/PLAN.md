@@ -149,5 +149,14 @@ Keep every existing quest and line, then deepen them:
    paragraphs. Sneaking (detection, sneak attacks), stealing (owned things and containers; seen or unseen),
    two raised fists, a darker Haven 12 and wallpapered town interiors, walls drawn both ways, the security
    locker, full-resolution near terrain (props no longer float), two radio stations with music and more DJ.*
-9. **godot-11:** more of the valley: the Silver Spur's tables, more companion quests, polish.
+9. **godot-11:** more of the valley. *Status: shipped. The Silver Spur's tables (`scripts/casino.gd`): blackjack
+   (six-deck shoe, 3:2, double, split), single-zero roulette with inside and outside bets, dice (pass, don't pass,
+   field) and four slot machines, Old Patsy paying by what you did about her governor chip; a nightly house limit
+   (win too much and Knuckles walks you out until tomorrow), VIP chips, the High Roller tally. Companion approval
+   (Jory and Renn like decency, Sable likes larceny; karma, quests and the tables move it; Pip DATA > PARTY),
+   personal conversations at 30 that make them loyal (tougher, harder-hitting, they stay whatever your karma),
+   leaving for good at -40. Deputy Renn joins as a companion with his quest "Old Colours" (Mags Coyle's bounty, the
+   dry wash camp, and who in Saltreach sold the wagon routes). Story layers now stack (`story10.mjs`,
+   `story11.mjs`). No grass through the Spur's carpet. Console: casino, approve, loyal, recruit.*
+10. **godot-12:** what's next: more of the valley's people on the road, Biscuit's tricks, the Gulch itself.
    At that point the Godot build replaces the WebView build.

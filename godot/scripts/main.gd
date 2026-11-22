@@ -87,6 +87,14 @@ func _ready() -> void:
 				w.rotation.y = float(pr.get("rot", 0.0))
 	forge = Forge.new()
 	add_child(forge)
+	# story scenery built from the forge's pieces (Coyle's camp)
+	if Game.area == "world":
+		for pr in Game.STORY.get("props", []):
+			if Forge.KINDS.has(String(pr.kind)):
+				var pn: Node3D = forge.build(String(pr.kind), -1)
+				add_child(pn)
+				pn.global_position = Vector3(float(pr.x), Game.height(float(pr.x), float(pr.z)), float(pr.z))
+				pn.rotation.y = float(pr.get("rot", 0.0))
 	forge.setup.call_deferred(self)
 	chunks.on_enter = _spawn_chunk
 	chunks.on_leave = _despawn_chunk
@@ -556,7 +564,9 @@ func recruit(id: String, silent := false) -> void:
 	if not Game.flags.has("party") or not (Game.flags.party is Dictionary):
 		Game.flags["party"] = {}
 	var st: String = Game.flags.party.get(id, {}).get("state", "follow")
-	n.join(c, st)
+	n.join(_comp_stats(id, c), st)
+	if not c.get("dog", false) and not Game.flags.has("appr_" + id):
+		Game.flags["appr_" + id] = 0
 	party.append(n)
 	Game.flags.party[id] = {"state": st}
 	if id == "biscuit":
@@ -567,6 +577,24 @@ func recruit(id: String, silent := false) -> void:
 		Game.banner("COMPANION", String(c.n) + " joins you")
 		Sfx.play("o_quest")
 	Game.check_quests()
+
+# loyal companions hit harder and take more punishment
+func _comp_stats(id: String, c: Dictionary) -> Dictionary:
+	if not Game.is_loyal(id) or c.get("dog", false):
+		return c
+	var d := c.duplicate(true)
+	d["dmg"] = float(c.get("dmg", 12)) * 1.3
+	d["hp"] = float(c.get("hp", 150)) * 1.25
+	d["loyal"] = true
+	return d
+
+func refresh_party() -> void:
+	for p in party:
+		var c: Dictionary = Game.L.companions.get(String(p.id), {})
+		if not c.is_empty():
+			var frac: float = p.hp / maxf(1.0, p.maxhp)
+			p.join(_comp_stats(String(p.id), c), p.cstate)
+			p.hp = p.maxhp * frac
 
 func dismiss(id: String, quiet := false) -> void:
 	for p in party:
@@ -1444,6 +1472,49 @@ func _story_test() -> void:
 		objects.point_use(led)
 	out.append(_dlg_t("sable", ["The ledger", "Burn it"]))
 	out.append("sable_ledger done %s, ledger %s" % [str(Game.is_done("sable_ledger")), str(Game.flags.get("ledger"))])
+	# build 11: approval and loyalty
+	out.append("sable approval after the ledger: %d (%s)" % [Game.approval("sable"), Game.approval_title(Game.approval("sable"))])
+	var a0 := Game.approval("sable")
+	Game.add_karma(-5, "test")
+	out.append("karma -5 -> sable approval %d -> %d" % [a0, Game.approval("sable")])
+	Game.add_karma(5, "test")
+	Game.flags["appr_sable"] = 35
+	out.append(_dlg_t("sable", ["Still bored", "Your secret"]))
+	var sb_n = party.filter(func(p): return p.id == "sable")
+	out.append("sable loyal %s, dmg %s, hp %s" % [str(Game.is_loyal("sable")), str(sb_n[0].comp.get("dmg")) if sb_n.size() else "-", str(sb_n[0].maxhp) if sb_n.size() else "-"])
+	# Renn: recruit, Old Colours, the choice, loyalty
+	Game.flags["rennSafe"] = 1
+	out.append(_dlg_t("renn2", ["Could Saltreach spare", "Welcome aboard"]))
+	out.append("party: %s, renn approval %d" % [str(party.map(func(p): return p.id)), Game.approval("renn2")])
+	out.append(_dlg_t("renn2", ["Something's eating", "Then we go", "Let's move"]))
+	out.append("old_colours stage %d" % Game.stage("old_colours"))
+	player.global_position = Vector3(-330, Game.height(-330, 246) + 0.3, 246)
+	chunks.load_now(player.global_position)
+	await _wait(30)
+	var oc: Array = enemies.filter(func(e): return String(e.eid).begins_with("oc_"))
+	out.append("Coyle's crew: %d (%s)" % [oc.size(), str(oc.map(func(e): return String(e.def.get("name", e.type))))])
+	for e in oc:
+		if not e.dead:
+			e.hit(9999.0, e.global_position, Vector3.FORWARD)
+	await _wait(5)
+	Game.check_quests()
+	out.append("crew down: stage %d" % Game.stage("old_colours"))
+	var sat = _obj_point("oc_satchel")
+	out.append("satchel %s label %s" % [str(sat != null), str(objects.point_label(sat)) if sat else "-"])
+	if sat:
+		objects.point_use(sat)
+	out.append("routes %d, stage %d" % [Game.count("route_list"), Game.stage("old_colours")])
+	out.append(_dlg_t("renn2", ["Coyle had a list", "We take this to Ines", "Let's go"]))
+	out.append(_dlg_t("ines", ["Someone in Saltreach sold", "Fair."]))
+	out.append("old_colours done %s, oc %s, renn approval %d, saltreach %d" % [str(Game.is_done("old_colours")), str(Game.flags.get("oc")), Game.approval("renn2"), Game.rep_of("saltreach")])
+	Game.flags["appr_renn2"] = 32
+	out.append(_dlg_t("renn2", ["You've changed", "Thank you"]))
+	out.append("renn loyal %s, badge %d" % [str(Game.is_loyal("renn2")), Game.count("deputy_star")])
+	# walking out: approval far enough down and they leave for good
+	Game.flags.erase("loyal_renn2")
+	Game.approve("renn2", -150, "test")
+	out.append("renn after -150: in party %s, left %s, entry %s" % [str(party.any(func(p): return p.id == "renn2")), str(Game.flags.get("left_renn2")), str(Game.vm.val(Game.DIALOGUE.renn2.entry, [Game.G]))])
+	Game.flags["loyal_renn2"] = 1
 	# the ending and its epilogue (lamplight: matches a Saltreach pledge)
 	Game.flags["ending"] = "lamplight"
 	var lines: Array = []
@@ -2712,9 +2783,45 @@ func npc_pos(id: String) -> Variant:
 func quest_target() -> Variant:
 	return Game.quest_target()
 
+# the Silver Spur's hall: lounge music and a room full of people, fading in as you go down into it
+var spur_music: AudioStreamPlayer
+var spur_crowd: AudioStreamPlayer
+var spur_mix := 0.0
+func _spur_ambience(d: float) -> void:
+	var pp: Vector3 = player.global_position
+	var inside := Game.area == "world" and pp.y < 0.5 and pp.x > -2.0 and pp.x < 26.0 and pp.z > 55.0 and pp.z < 77.0
+	spur_mix = move_toward(spur_mix, 1.0 if inside else 0.0, d * 0.7)
+	if spur_mix <= 0.001:
+		if spur_music and spur_music.playing:
+			spur_music.stop()
+			spur_crowd.stop()
+		return
+	if spur_music == null:
+		spur_music = AudioStreamPlayer.new()
+		spur_crowd = AudioStreamPlayer.new()
+		for pl in [spur_music, spur_crowd]:
+			pl.process_mode = Node.PROCESS_MODE_ALWAYS
+			add_child(pl)
+		var m: AudioStream = Sfx.stream("x_lounge")
+		var c: AudioStream = Sfx.stream("o_crowd")
+		if m is AudioStreamOggVorbis:
+			m.loop = true
+		if c is AudioStreamOggVorbis:
+			c.loop = true
+		spur_music.stream = m
+		spur_crowd.stream = c
+	if not spur_music.playing and spur_music.stream:
+		spur_music.play()
+	if not spur_crowd.playing and spur_crowd.stream:
+		spur_crowd.play()
+	var duck := 0.35 if radio_on else 1.0
+	spur_music.volume_db = linear_to_db(maxf(0.0001, spur_mix * 0.32 * duck))
+	spur_crowd.volume_db = linear_to_db(maxf(0.0001, spur_mix * 0.22))
+
 func _process(d: float) -> void:
 	if player == null or hud == null:
 		return
+	_spur_ambience(d)
 	_bake_nav()
 	disc_t -= d
 	if disc_t <= 0.0:
