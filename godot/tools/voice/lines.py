@@ -40,10 +40,12 @@ for who, c in L.get("companions", {}).items():
 for k, r in L.get("radio", {}).items():
     if "t" in r:
         add("overseer", r["t"])
-        add("radio", r["t"].split("\n\n")[-1])
+        paras = [x for x in r["t"].split("\n\n") if not x.strip().startswith(">")]
+        if paras:
+            add("radio", paras[-1])
 def consts(path, name):
     src = open(os.path.join(G, path)).read()
-    m = re.search(r"const %s := \[(.*?)\n\]" % name, src, re.S)
+    m = re.search(r"const %s := \[(.*?)\]\n" % name, src, re.S)
     return re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1)) if m else []
 for x in consts("scripts/main.gd", "DJ"):
     add("radio", x)

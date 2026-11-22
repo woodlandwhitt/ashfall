@@ -1087,6 +1087,16 @@ func _forge_test() -> void:
 	out.append("console: " + hud.dev.run("tp saltreach"))
 	out.append("console: " + hud.dev.run("nonsense"))
 	out.append("voice key: " + voice_key("Hal and Benny. Good boys, too young for it, {name}."))
+	speak(DJ[0], "radio")
+	out.append("radio voice: %s %s" % [str(voice_player.playing), voice_player.stream.resource_path if voice_player.stream else "none"])
+	var vn := 0
+	var vt := 0
+	for id in Game.DIALOGUE:
+		for nk in Game.DIALOGUE[id].get("nodes", {}):
+			vt += 1
+			if ResourceLoader.exists(voice_path(Game.subst(Game.dlg_say(id, nk)), id)):
+				vn += 1
+	out.append("conversation lines with a recorded voice (current state): %d of %d" % [vn, vt])
 	for l in out:
 		print("TEST ", l)
 	get_tree().quit()
@@ -1876,6 +1886,7 @@ func _exit_tree() -> void:
 
 # ---------------------------------------------------------------- interaction
 func _best_target() -> Dictionary:
+	var npc_dot := 0.0
 	var pp: Vector3 = player.global_position
 	var fwd := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
 	var best := {}
@@ -1887,6 +1898,7 @@ func _best_target() -> Dictionary:
 		if d < 3.2 and (d < 1.2 or fwd.dot(to / d) > 0.5) and d < bd:
 			bd = d
 			best = {"k": "npc", "o": n, "label": "Talk: " + String(n.display_name)}
+			npc_dot = fwd.dot(to / d) if d > 0.01 else 1.0
 	for e in enemies:
 		var d: float = e.global_position.distance_to(pp)
 		if d >= bd:
@@ -1899,7 +1911,9 @@ func _best_target() -> Dictionary:
 			bd = d
 			best = {"k": "talk", "o": e, "label": "Talk: " + String(Game.DB.enemies.get(e.type, {}).get("n", e.type))}
 	var ob := objects.best(pp, fwd, bd)
-	if not ob.is_empty():
+	# someone standing in a doorway is talked to when you're facing them; turn away from them to use the door
+	var door_behind: bool = not ob.is_empty() and ob.o.get("_k") == "point" and String(ob.o.get("id", "")) in ["cellin", "cellout"] and best.get("k") == "npc" and npc_dot > 0.8
+	if not ob.is_empty() and not door_behind:
 		best = ob
 		bd = float(ob.d)
 	if buggy and not buggy.driving:
@@ -2064,7 +2078,9 @@ func radio_tick(dt: float) -> void:
 			for k in Game.flags.get("heard", []):
 				var r: Dictionary = Game.L.radio.get(k, {})
 				if r.has("t"):
-					lines.append(String(r.t).split("\n\n")[-1])
+					var paras: Array = Array(String(r.t).split("\n\n")).filter(func(x): return not String(x).strip_edges().begins_with(">"))
+					if not paras.is_empty():
+						lines.append(String(paras[-1]))
 			var line: String = lines[randi() % lines.size()]
 			Game.msg("RADIO: " + line)
 			speak(line, "radio")
