@@ -632,6 +632,15 @@ func _test_hooks() -> void:
 		Game.discover("dustwell")
 		Game.give("magnum", 1)
 		Game.give("combat_knife", 1)
+		Game.give("ketarad", 1)
+		Game.give("stimpak", 3)
+		Game.start("caravan_rescue")
+		Game.on_kill("raider")
+		Game.on_kill("raider")
+		Game.on_kill("hound")
+		Game.flags["read_sheriff"] = 1
+		Game.rad = 18.0
+		Game.buffs["dr"] = {"amt": 10.0, "t": 60.0}
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
 	if args.has("tod"):

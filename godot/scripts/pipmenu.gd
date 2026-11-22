@@ -1,280 +1,759 @@
-# The Pip menu: STATS (levels, the six stats, spending points, perks), ITEMS (everything you carry, by category,
-# with equip / use / drop), QUESTS (track one), CRAFT (recipes and upgrades at a workbench), MAP (discovered places, fast travel) and SYSTEM (three save slots, the
-# autosave, graphics). The game pauses while it is open.
+# The Pip-Boy. Five sections, each with its own pages, styled like a green phosphor screen with a status header:
+#   STAT   status (condition, radiation, chems, party), S.P.E.C.I.A.L. (stats, what they do, spending points),
+#          perks (yours and the ones you can take), general (the record of your travels)
+#   INV    weapons, apparel, aid, ammo, misc and quest items; sortable, with a full card for the selected item
+#          (compared against what you have equipped) and equip / use / drop
+#   DATA   quests (log of every stage, rewards, track), map (discovered places, fast travel), notes (terminal
+#          entries you've read) and the workbench
+#   RADIO  and SYS (saves, graphics)
+# The game pauses while it is open.
 extends PanelContainer
 
 const GREEN := Color(0.55, 1.0, 0.6)
+const BRIGHT := Color(0.85, 1.0, 0.85)
 const DIM := Color(0.35, 0.7, 0.42)
-var tabs: HBoxContainer
+const AMBERC := Color(1.0, 0.9, 0.55)
+const BAD := Color(1.0, 0.5, 0.4)
+const SECTIONS := {"STAT": ["STATUS", "S.P.E.C.I.A.L.", "PERKS", "GENERAL"], "INV": ["WEAPONS", "APPAREL", "AID", "AMMO", "MISC", "QUEST"],
+	"DATA": ["QUESTS", "MAP", "NOTES", "CRAFT"], "RADIO": ["RADIO"], "SYS": ["SYSTEM"]}
+const INV_CAT := {"WEAPONS": "weapon", "APPAREL": "armor", "AID": "aid", "AMMO": "ammo", "MISC": "junk", "QUEST": "quest"}
+# the old single-word page names still open the right place
+const ALIAS := {"STATS": "STATUS", "ITEMS": "WEAPONS", "SPECIAL": "S.P.E.C.I.A.L."}
+var section_bar: HBoxContainer
+var page_bar: HBoxContainer
+var header: Label
+var header_bars: HBoxContainer
+var footer: Label
 var body: Control
-var current := "STATS"
+var section := "STAT"
+var current := "STATUS"
+var last_page := {}
 var item_cat := "weapon"
 var selected := ""
+var sel_quest := ""
+var sel_note := ""
+var sel_perk := ""
+var sort_by := "name"
 var map_tex: ImageTexture
 var at_bench := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	offset_left = 24
-	offset_top = 18
-	offset_right = -24
-	offset_bottom = -18
+	offset_left = 20
+	offset_top = 14
+	offset_right = -20
+	offset_bottom = -14
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.02, 0.06, 0.03, 0.96)
+	sb.bg_color = Color(0.015, 0.05, 0.025, 1.0)
 	sb.border_color = Color(0.3, 0.8, 0.4)
 	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(10)
-	sb.set_content_margin_all(14)
+	sb.set_corner_radius_all(12)
+	sb.set_content_margin_all(12)
 	add_theme_stylebox_override("panel", sb)
 	var th := Theme.new()
 	th.set_color("font_color", "Label", GREEN)
 	th.set_color("font_color", "Button", GREEN)
-	th.set_color("font_hover_color", "Button", Color(0.85, 1.0, 0.85))
+	th.set_color("font_hover_color", "Button", BRIGHT)
 	th.set_color("font_pressed_color", "Button", Color(0.02, 0.1, 0.04))
+	th.set_color("font_disabled_color", "Button", Color(0.25, 0.45, 0.3))
 	var bn := StyleBoxFlat.new()
-	bn.bg_color = Color(0.05, 0.16, 0.08)
+	bn.bg_color = Color(0.04, 0.14, 0.07)
+	bn.border_color = Color(0.2, 0.5, 0.28)
+	bn.set_border_width_all(1)
 	bn.set_corner_radius_all(4)
-	bn.set_content_margin_all(8)
+	bn.set_content_margin_all(7)
 	var bp := bn.duplicate()
 	bp.bg_color = Color(0.45, 0.9, 0.5)
+	var bd := bn.duplicate()
+	bd.bg_color = Color(0.03, 0.08, 0.04)
 	th.set_stylebox("normal", "Button", bn)
 	th.set_stylebox("hover", "Button", bn)
 	th.set_stylebox("pressed", "Button", bp)
+	th.set_stylebox("disabled", "Button", bd)
 	th.set_stylebox("focus", "Button", StyleBoxEmpty.new())
-	th.set_font_size("font_size", "Button", 20)
-	th.set_font_size("font_size", "Label", 19)
+	th.set_font_size("font_size", "Button", 19)
+	th.set_font_size("font_size", "Label", 18)
+	var pf := StyleBoxFlat.new()
+	pf.bg_color = GREEN
+	pf.set_corner_radius_all(2)
+	var pb := StyleBoxFlat.new()
+	pb.bg_color = Color(0.05, 0.16, 0.08)
+	pb.set_corner_radius_all(2)
+	th.set_stylebox("fill", "ProgressBar", pf)
+	th.set_stylebox("background", "ProgressBar", pb)
 	theme = th
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 6)
 	add_child(v)
-	tabs = HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 8)
-	v.add_child(tabs)
-	for t in ["STATS", "ITEMS", "QUESTS", "CRAFT", "MAP", "RADIO", "SYSTEM"]:
-		var b := Button.new()
-		b.text = t
-		b.custom_minimum_size = Vector2(0, 50)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.pressed.connect(func(): show_tab(t))
-		tabs.add_child(b)
+	# header: who you are and how you're doing
+	var hrow := HBoxContainer.new()
+	hrow.add_theme_constant_override("separation", 12)
+	v.add_child(hrow)
+	header = Label.new()
+	header.add_theme_font_size_override("font_size", 17)
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hrow.add_child(header)
+	header_bars = HBoxContainer.new()
+	header_bars.add_theme_constant_override("separation", 10)
+	hrow.add_child(header_bars)
 	var close := Button.new()
 	close.text = "X"
-	close.custom_minimum_size = Vector2(60, 50)
+	close.custom_minimum_size = Vector2(56, 40)
 	close.pressed.connect(func(): Game.main.hud.toggle_pip())
-	tabs.add_child(close)
+	hrow.add_child(close)
+	section_bar = HBoxContainer.new()
+	section_bar.add_theme_constant_override("separation", 6)
+	v.add_child(section_bar)
+	for sname in SECTIONS:
+		var b := Button.new()
+		b.text = sname
+		b.custom_minimum_size = Vector2(0, 46)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 21)
+		b.pressed.connect(func(): _open_section(sname))
+		section_bar.add_child(b)
+	page_bar = HBoxContainer.new()
+	page_bar.add_theme_constant_override("separation", 6)
+	v.add_child(page_bar)
+	var rule := ColorRect.new()
+	rule.color = Color(0.3, 0.8, 0.4, 0.6)
+	rule.custom_minimum_size = Vector2(0, 2)
+	v.add_child(rule)
 	body = MarginContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(body)
+	footer = Label.new()
+	footer.add_theme_font_size_override("font_size", 15)
+	footer.add_theme_color_override("font_color", DIM)
+	v.add_child(footer)
+	# scanlines over everything
+	var scan := ColorRect.new()
+	scan.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scan.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sm := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = "shader_type canvas_item;\nvoid fragment(){float l=step(.5,fract(FRAGCOORD.y*.5));COLOR=vec4(0.,0.,0.,l*.10+.02*sin(TIME*2.+FRAGCOORD.y*.01));}"
+	sm.shader = sh
+	scan.material = sm
+	add_child(scan)
 	visible = false
 
 func open() -> void:
 	visible = true
 	show_tab(current)
 
+func _open_section(sname: String) -> void:
+	show_tab(last_page.get(sname, SECTIONS[sname][0]))
+
+func _section_of(page: String) -> String:
+	for sname in SECTIONS:
+		if page in SECTIONS[sname]:
+			return sname
+	return "STAT"
+
 func show_tab(t: String) -> void:
+	t = ALIAS.get(t, t)
+	if _section_of(t) == "STAT" and not t in SECTIONS.STAT:
+		t = "STATUS"
 	current = t
-	for b in tabs.get_children():
-		(b as Button).modulate = Color(1, 1, 1) if (b as Button).text == t else Color(0.6, 0.6, 0.6)
+	section = _section_of(t)
+	last_page[section] = t
+	if INV_CAT.has(t):
+		if item_cat != INV_CAT[t]:
+			selected = ""
+		item_cat = INV_CAT[t]
+	for b in section_bar.get_children():
+		(b as Button).modulate = Color(1, 1, 1) if (b as Button).text == section else Color(0.55, 0.55, 0.55)
+	for c in page_bar.get_children():
+		c.queue_free()
+	var pages: Array = SECTIONS[section]
+	if pages.size() > 1:
+		for pg in pages:
+			var b := Button.new()
+			var n := ""
+			if INV_CAT.has(pg):
+				var k: int = Game.inv.keys().filter(func(x): return String(Game.item(x).get("t", "junk")) == INV_CAT[pg]).size()
+				n = " (%d)" % k
+			b.text = pg + n
+			b.flat = pg != t
+			b.add_theme_font_size_override("font_size", 16)
+			b.custom_minimum_size = Vector2(0, 36)
+			b.pressed.connect(func(): show_tab(pg))
+			page_bar.add_child(b)
+	_refresh_header()
 	for c in body.get_children():
 		c.queue_free()
 	match t:
-		"STATS": _stats()
-		"ITEMS": _items()
+		"STATUS": _status()
+		"S.P.E.C.I.A.L.": _special()
+		"PERKS": _perks()
+		"GENERAL": _general()
+		"WEAPONS", "APPAREL", "AID", "AMMO", "MISC", "QUEST": _items()
 		"QUESTS": _quests()
+		"MAP": _map()
+		"NOTES": _notes()
 		"CRAFT": _craft()
 		"RADIO": _radio()
-		"MAP": _map()
 		"SYSTEM": _system()
 
-func _scroll() -> VBoxContainer:
+func _refresh_header() -> void:
+	header.text = "%s   LVL %d   CAPS %d   DAY %d  %s" % [Game.player_name.to_upper(), Game.level, Game.caps, Game.day, _clock()]
+	for c in header_bars.get_children():
+		c.queue_free()
+	for b in [["HP", Game.hp, Game.hp_max, GREEN], ["AP", Game.ap, Game.ap_max, Color(0.5, 0.9, 1.0)], ["XP", Game.xp, Game.xp_need(), AMBERC]]:
+		var box := HBoxContainer.new()
+		box.add_theme_constant_override("separation", 4)
+		header_bars.add_child(box)
+		var l := Label.new()
+		l.text = "%s %d/%d" % [b[0], int(b[1]), int(b[2])]
+		l.add_theme_font_size_override("font_size", 15)
+		box.add_child(l)
+		box.add_child(_bar(float(b[1]), float(b[2]), b[3], 70))
+	var place := _where()
+	footer.text = "WEIGHT %.0f / %.0f    %s    %s" % [Game.carry_now(), Game.carry_max(), place, "RADIO ON" if Game.main.radio_on else ""]
+
+func _clock() -> String:
+	var tod := float(Game.time) * 24.0
+	return "%02d:%02d" % [int(tod) % 24, int(fmod(tod, 1.0) * 60.0)]
+
+func _where() -> String:
+	if Game.area == "vault":
+		return "HAVEN 12"
+	if Game.area == "khole":
+		return "???"
+	if Game.area == "cells":
+		var i := Game.cell_at(Game.player.global_position.x, Game.player.global_position.z)
+		return Game.cell_name(i).to_upper() if i >= 0 else "INDOORS"
+	var best := ""
+	var bd := 1e9
+	var pp: Vector3 = Game.player.global_position
+	for k in Game.DB.locs:
+		var L: Dictionary = Game.DB.locs[k]
+		var d := Vector2(float(L.x) - pp.x, float(L.z) - pp.z).length()
+		if d < bd:
+			bd = d
+			best = String(L.name)
+	return ("NEAR " if bd > 60.0 else "") + best.to_upper()
+
+func _bar(v: float, mx: float, col: Color, w := 160.0) -> ProgressBar:
+	var pb := ProgressBar.new()
+	pb.show_percentage = false
+	pb.max_value = maxf(mx, 0.001)
+	pb.value = v
+	pb.custom_minimum_size = Vector2(w, 12)
+	pb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var f := StyleBoxFlat.new()
+	f.bg_color = col
+	f.set_corner_radius_all(2)
+	pb.add_theme_stylebox_override("fill", f)
+	return pb
+
+func _scroll(parent: Node = null) -> VBoxContainer:
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	body.add_child(sc)
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	(parent if parent else body).add_child(sc)
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_theme_constant_override("separation", 6)
 	sc.add_child(v)
 	return v
 
-func _label(parent: Node, t: String, size := 19, col := GREEN) -> Label:
+# a list on the left, a detail pane on the right
+func _split(ratio := 1.0) -> Array:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 16)
+	body.add_child(h)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_stretch_ratio = ratio
+	h.add_child(left)
+	var sep := ColorRect.new()
+	sep.color = Color(0.3, 0.8, 0.4, 0.35)
+	sep.custom_minimum_size = Vector2(2, 0)
+	h.add_child(sep)
+	var right := _scroll(h)
+	return [left, right]
+
+func _label(parent: Node, t: String, size := 18, col := GREEN) -> Label:
 	var l := Label.new()
 	l.text = t
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	parent.add_child(l)
 	return l
 
-# ---------------------------------------------------------------- STATS
-func _stats() -> void:
-	var v := _scroll()
-	_label(v, "%s     LEVEL %d     XP %d / %d     HP %d / %d     AP %d / %d" % [Game.player_name.to_upper(), Game.level, Game.xp, Game.xp_need(), Game.hp, Game.hp_max, Game.ap, Game.ap_max], 21)
-	_label(v, "CHITS %d     KARMA %d — %s     DAY %d" % [Game.caps, Game.karma, Game.karma_title(Game.karma), Game.day], 19, Color(1.0, 0.9, 0.6))
-	if not Game.main.party.is_empty():
-		_label(v, "With you: " + ", ".join(Game.main.party.map(func(p): return String(p.comp.n) + ("" if p.down <= 0.0 else " (down)") + (" (waiting)" if p.cstate == "wait" else ""))), 18)
-	_label(v, "Carrying %.0f / %.0f lbs" % [Game.carry_now(), Game.carry_max()], 18, DIM)
+func _title(parent: Node, t: String) -> void:
+	var l := _label(parent, t, 20, BRIGHT)
+	l.uppercase = true
+
+func _row(parent: Node, k: String, v: String, col := GREEN) -> HBoxContainer:
+	var r := HBoxContainer.new()
+	parent.add_child(r)
+	var a := _label(r, k, 17, DIM)
+	a.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	a.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var b := _label(r, v, 17, col)
+	b.autowrap_mode = TextServer.AUTOWRAP_OFF
+	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	return r
+
+func _button(parent: Node, t: String, f: Callable, w := 0.0, disabled := false) -> Button:
+	var b := Button.new()
+	b.text = t
+	b.custom_minimum_size = Vector2(w, 46)
+	b.disabled = disabled
+	b.pressed.connect(f)
+	parent.add_child(b)
+	return b
+
+func _list_button(parent: Node, t: String, on: bool, f: Callable) -> Button:
+	var b := Button.new()
+	b.text = ("> " if on else "  ") + t
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(0, 42)
+	b.clip_text = true
+	if on:
+		b.add_theme_color_override("font_color", AMBERC)
+	b.pressed.connect(f)
+	parent.add_child(b)
+	return b
+
+# ---------------------------------------------------------------- STAT: STATUS
+func _status() -> void:
+	var lr := _split(1.0)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
+	_title(L, "Condition")
+	var hb := HBoxContainer.new()
+	L.add_child(hb)
+	_label(hb, "HEALTH  %d / %d" % [Game.hp, Game.hp_max], 18).custom_minimum_size = Vector2(190, 0)
+	hb.add_child(_bar(Game.hp, Game.hp_max, GREEN, 200))
+	var ab := HBoxContainer.new()
+	L.add_child(ab)
+	_label(ab, "ACTION  %d / %d" % [Game.ap, Game.ap_max], 18).custom_minimum_size = Vector2(190, 0)
+	ab.add_child(_bar(Game.ap, Game.ap_max, Color(0.5, 0.9, 1.0), 200))
+	var rb := HBoxContainer.new()
+	L.add_child(rb)
+	var rlvl := "none" if Game.rad < 1 else ("minor" if Game.rad < 25 else ("advanced" if Game.rad < 60 else "critical"))
+	_label(rb, "RADS  %d  (%s)" % [Game.rad, rlvl], 18, GREEN if Game.rad < 25 else (AMBERC if Game.rad < 60 else BAD)).custom_minimum_size = Vector2(190, 0)
+	rb.add_child(_bar(Game.rad, 100.0, Color(0.9, 0.85, 0.2), 200))
+	if Game.rad >= 1.0:
+		_label(L, "Radiation is costing you %d maximum health. Rad Flush clears it; a roof keeps the storms off." % floori(Game.rad * 0.4), 16, DIM)
+	_row(L, "Damage resistance", "%d" % int(Game.armor_dr() + float(Game.fx().dr)))
+	_row(L, "Carrying", "%.0f / %.0f lbs" % [Game.carry_now(), Game.carry_max()], GREEN if Game.carry_now() <= Game.carry_max() else BAD)
+	_title(L, "Equipped")
+	var wi := Game.item(Game.weapon)
+	_row(L, "Weapon", Game.iname(Game.weapon) if Game.weapon != "" else "Fists")
+	if wi.has("dmg"):
+		_row(L, "  Damage per hit", "%.0f" % Game.player.weapon_damage())
+		if wi.has("mag"):
+			_row(L, "  Rounds", "%d in the gun, %d carried" % [Game.mag, Game.reserve])
+	_row(L, "Apparel", Game.iname(Game.armor) if Game.armor != "" else "Nothing")
+	_title(R, "Effects")
+	var any := false
+	var bnames := {"dr": "Numb (damage resistance)", "rad": "Lead Tabs (radiation)", "melee": "Rotgut (melee)", "luck": "Lucky Sour (luck)", "ap": "Prickly Pop (action points)"}
+	for k in Game.buffs:
+		any = true
+		_row(R, bnames.get(k, k), "%ds left" % int(Game.buffs[k].t), AMBERC)
+	var DR: Dictionary = Game.L.get("consts", {}).get("DRUGS", {})
+	for k in Game.drugs:
+		any = true
+		var d: Dictionary = Game.drugs[k]
+		var D: Dictionary = DR.get(k, {})
+		var left := (float(D.get("crash", {}).get("dur", 0)) if d.crash else float(D.get("dur", 0))) - float(d.age)
+		_row(R, String(D.get("n", k)) + (" (crash)" if d.crash else ""), "%ds" % maxi(0, int(left)), BAD if d.crash else AMBERC)
+		if D.has("stats") and not d.crash:
+			var parts := []
+			for st in D.stats:
+				parts.append("%s %+d" % [String(Game.DB.statinfo.get(st, [st])[0]), int(D.stats[st])])
+			_label(R, "   " + ", ".join(parts), 15, DIM)
+	for k in Game.addict:
+		any = true
+		_row(R, "Addicted: " + String(DR.get(k, {}).get("n", k)), "slower, shakier" if not Game.drugs.has(k) else "fed", BAD)
+	if not any:
+		_label(R, "Nothing in your system. Clean as a whistle.", 16, DIM)
+	_title(R, "Companions")
+	if Game.main.party.is_empty():
+		_label(R, "You travel alone.", 16, DIM)
+	for pm in Game.main.party:
+		var box := VBoxContainer.new()
+		R.add_child(box)
+		var top := HBoxContainer.new()
+		box.add_child(top)
+		var nl := _label(top, String(pm.comp.get("n", pm.id)) + ("  — DOWN" if pm.down > 0.0 else ("  — waiting" if pm.cstate == "wait" else "  — following")), 18, BRIGHT)
+		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		top.add_child(_bar(pm.hp, float(pm.comp.get("hp", 100)), GREEN, 120))
+		var cmds := HBoxContainer.new()
+		box.add_child(cmds)
+		var pid := String(pm.id)
+		_button(cmds, "FOLLOW" if pm.cstate == "wait" else "WAIT HERE", func():
+			Game.main.party_cmd(pid, "follow" if pm.cstate == "wait" else "wait")
+			show_tab("STATUS"), 150)
+		_button(cmds, "PART WAYS", func():
+			Game.main.dismiss(pid)
+			show_tab("STATUS"), 150)
+
+# ---------------------------------------------------------------- STAT: S.P.E.C.I.A.L.
+func _special() -> void:
+	var lr := _split(1.15)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
 	if Game.points > 0:
-		_label(v, "You have %d stat point%s to spend." % [Game.points, "s" if Game.points > 1 else ""], 20, Color(1, 0.9, 0.5))
+		_label(L, "%d point%s to spend" % [Game.points, "s" if Game.points > 1 else ""], 19, AMBERC)
+	var derived := {
+		"might": "Carry %.0f lbs, melee damage %+d%%" % [Game.carry_max(), (int(Game.stats.might) - 5) * 7],
+		"agility": "%d action points" % int(Game.ap_max),
+		"endurance": "%d maximum health" % int(Game.hp_max),
+		"aim": "Firearm damage %+d%%" % ((int(Game.stats.aim) - 5) * 5),
+		"luck": "%d%% chance of a critical hit" % maxi(0, 3 + int(Game.stats.luck) - 5),
+		"charm": "Better prices from traders; new things to say",
+	}
 	for k in ["might", "agility", "endurance", "aim", "luck", "charm"]:
-		var row := HBoxContainer.new()
-		v.add_child(row)
 		var info: Array = Game.DB.statinfo.get(k, [k.to_upper(), ""])
-		var l := _label(row, "%-10s %2d   %s" % [info[0], int(Game.stats[k]), info[1]], 19)
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		L.add_child(row)
+		var b := Button.new()
+		b.text = String(info[0])
+		b.custom_minimum_size = Vector2(170, 42)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.pressed.connect(func():
+			sel_perk = k
+			show_tab("S.P.E.C.I.A.L."))
+		row.add_child(b)
+		var pips := HBoxContainer.new()
+		pips.add_theme_constant_override("separation", 3)
+		pips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(pips)
+		for i in 10:
+			var r := ColorRect.new()
+			r.custom_minimum_size = Vector2(14, 20)
+			r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			r.color = GREEN if i < int(Game.stats[k]) else Color(0.08, 0.2, 0.1)
+			pips.add_child(r)
+		_label(row, str(int(Game.stats[k])), 20, BRIGHT).custom_minimum_size = Vector2(28, 0)
 		if Game.points > 0 and int(Game.stats[k]) < 10:
-			var b := Button.new()
-			b.text = " + "
-			b.pressed.connect(func():
+			_button(row, "+", func():
 				Game.points -= 1
 				Game.stats[k] = int(Game.stats[k]) + 1
 				Game.stats_changed.emit()
-				show_tab("STATS"))
-			row.add_child(b)
-	_label(v, "PERKS" + ("   (%d to choose)" % Game.perk_pts if Game.perk_pts > 0 else "   (a new one every second level)"), 21)
-	var perks: Dictionary = Game.L.get("consts", {}).get("PERKS", Game.DB.get("perks", {}))
-	for p in perks:
-		var d: Dictionary = perks[p]
-		var row := HBoxContainer.new()
-		v.add_child(row)
-		var has: bool = Game.perks.has(p)
-		var l := _label(row, ("■ " if has else "□ ") + String(d.get("n", p)) + ": " + String(d.get("d", "")), 18, Color(0.85, 1.0, 0.85) if has else DIM)
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD
-		if not has and Game.perk_pts > 0:
-			var b := Button.new()
-			b.text = "TAKE"
-			b.pressed.connect(func():
-				Game.perk_pts -= 1
-				Game.perks[p] = 1
-				Sfx.play("o_levelup", -6.0)
-				Game.stats_changed.emit()
-				show_tab("STATS"))
-			row.add_child(b)
+				sel_perk = k
+				show_tab("S.P.E.C.I.A.L."), 50)
+	var k2: String = sel_perk if sel_perk in derived else "might"
+	var inf: Array = Game.DB.statinfo.get(k2, [k2.to_upper(), ""])
+	_title(R, String(inf[0]))
+	_label(R, String(inf[1]) + ".", 18)
+	_label(R, "Right now: " + String(derived[k2]) + ".", 18, AMBERC)
+	_label(R, "\nStats rise by one point each level. Chems raise them for a while (and take it back when they wear off).", 16, DIM)
 
-# ---------------------------------------------------------------- ITEMS
-const CATS := [["weapon", "WEAPONS"], ["armor", "APPAREL"], ["aid", "AID"], ["ammo", "AMMO"], ["junk", "JUNK"], ["quest", "QUEST"]]
-func _items() -> void:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 14)
-	body.add_child(h)
-	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.size_flags_stretch_ratio = 1.2
-	h.add_child(left)
-	var cats := HBoxContainer.new()
-	left.add_child(cats)
-	for c in CATS:
-		var b := Button.new()
-		b.text = c[1]
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.modulate = Color(1, 1, 1) if c[0] == item_cat else Color(0.6, 0.6, 0.6)
-		b.add_theme_font_size_override("font_size", 16)
-		b.pressed.connect(func():
-			item_cat = c[0]
-			selected = ""
-			show_tab("ITEMS"))
-		cats.add_child(b)
-	var sc := ScrollContainer.new()
-	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	left.add_child(sc)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sc.add_child(list)
+# ---------------------------------------------------------------- STAT: PERKS
+func _perks() -> void:
+	var lr := _split(1.0)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
+	var perks: Dictionary = Game.L.get("consts", {}).get("PERKS", Game.DB.get("perks", {}))
+	_label(L, ("%d perk%s to choose" % [Game.perk_pts, "s" if Game.perk_pts > 1 else ""]) if Game.perk_pts > 0 else "A new perk every second level.", 17, AMBERC if Game.perk_pts > 0 else DIM)
+	_title(L, "Yours")
+	var mine := perks.keys().filter(func(p): return Game.perks.has(p))
+	if mine.is_empty():
+		_label(L, "None yet.", 16, DIM)
+	for pk in mine:
+		_list_button(L, String(perks[pk].get("n", pk)), pk == sel_perk, func():
+			sel_perk = pk
+			show_tab("PERKS"))
+	_title(L, "Available")
+	for pk in perks:
+		if Game.perks.has(pk):
+			continue
+		_list_button(L, String(perks[pk].get("n", pk)), pk == sel_perk, func():
+			sel_perk = pk
+			show_tab("PERKS"))
+	if not perks.has(sel_perk):
+		_label(R, "Choose a perk to read about it.", 17, DIM)
+		return
+	var d: Dictionary = perks[sel_perk]
+	_title(R, String(d.get("n", sel_perk)))
+	_label(R, String(d.get("d", "")), 18)
+	if Game.perks.has(sel_perk):
+		_label(R, "\nYou have this perk.", 17, AMBERC)
+	else:
+		var pid := sel_perk
+		_button(R, "TAKE THIS PERK" if Game.perk_pts > 0 else "NO PERK POINTS", func():
+			Game.perk_pts -= 1
+			Game.perks[pid] = 1
+			Sfx.play("o_levelup", -6.0)
+			Game.stats_changed.emit()
+			show_tab("PERKS"), 0, Game.perk_pts <= 0)
+
+# ---------------------------------------------------------------- STAT: GENERAL
+func _general() -> void:
+	var lr := _split(1.0)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
+	_title(L, "Record")
+	_row(L, "Days in the wastes", str(Game.day))
+	_row(L, "Level", "%d  (%d / %d XP)" % [Game.level, Game.xp, Game.xp_need()])
+	_row(L, "Karma", "%d — %s" % [Game.karma, Game.karma_title(Game.karma)], GREEN if Game.karma >= 0 else BAD)
+	var qd := 0
+	var qa := 0
+	for q in Game.quests:
+		if Game.quests[q].done:
+			qd += 1
+		else:
+			qa += 1
+	_row(L, "Quests completed", str(qd))
+	_row(L, "Quests underway", str(qa))
+	_row(L, "Places discovered", "%d / %d" % [Game.discovered.size(), Game.DB.locs.size()])
+	var reads := 0
+	for k in Game.DB.lore:
+		if Game.flags.has("read_" + k):
+			reads += 1
+	_row(L, "Terminal entries read", "%d / %d" % [reads, Game.DB.lore.size()])
+	_row(L, "Broadcasts heard", str(Game.flags.get("heard", []).size()))
+	_row(L, "Trips through the floor", str(int(Game.flags.get("kholes", 0))))
+	_row(L, "Caps", str(Game.caps))
+	_title(R, "Kills")
+	var total := 0
+	var ks: Array = Game.kills.keys()
+	ks.sort_custom(func(a, b): return int(Game.kills[a]) > int(Game.kills[b]))
+	for k in ks:
+		total += int(Game.kills[k])
+	_row(R, "Total", str(total), AMBERC)
+	for k in ks:
+		var nm := String(Game.region.etypes.get(k, {}).get("name", k)).capitalize()
+		_row(R, nm, str(int(Game.kills[k])))
+	if ks.is_empty():
+		_label(R, "Nothing yet.", 16, DIM)
+
+# ---------------------------------------------------------------- INV
+func _sorted_ids() -> Array:
 	var ids: Array = Game.inv.keys().filter(func(k): return String(Game.item(k).get("t", "junk")) == item_cat)
-	ids.sort_custom(func(a, b): return Game.iname(a) < Game.iname(b))
+	match sort_by:
+		"weight": ids.sort_custom(func(a, b): return float(Game.item(a).get("w", 0)) > float(Game.item(b).get("w", 0)))
+		"value": ids.sort_custom(func(a, b): return float(Game.item(a).get("v", 0)) > float(Game.item(b).get("v", 0)))
+		"damage": ids.sort_custom(func(a, b): return float(Game.item(a).get("dmg", Game.item(a).get("dr", Game.item(a).get("heal", 0)))) > float(Game.item(b).get("dmg", Game.item(b).get("dr", Game.item(b).get("heal", 0)))))
+		_: ids.sort_custom(func(a, b): return Game.iname(a) < Game.iname(b))
+	return ids
+
+func _items() -> void:
+	var lr := _split(1.0)
+	var L: VBoxContainer = lr[0]
+	var R: VBoxContainer = lr[1]
+	var top := HBoxContainer.new()
+	L.add_child(top)
+	var w := 0.0
+	for k in Game.inv:
+		if String(Game.item(k).get("t", "junk")) == item_cat:
+			w += float(Game.item(k).get("w", 0)) * Game.count(k)
+	var wl := _label(top, "%.1f lbs here" % w, 16, DIM)
+	wl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var order := ["name", "damage", "value", "weight"]
+	_button(top, "SORT: " + sort_by.to_upper(), func():
+		sort_by = order[(order.find(sort_by) + 1) % order.size()]
+		show_tab(current), 170)
+	var list := _scroll(L)
+	var ids := _sorted_ids()
 	if ids.is_empty():
-		_label(list, "Nothing here.", 18, DIM)
+		_label(list, "Nothing here.", 17, DIM)
+	if selected == "" and not ids.is_empty():
+		selected = ids[0]
 	for id in ids:
-		var b := Button.new()
+		var it := Game.item(id)
 		var mark := ""
 		if id == Game.weapon or id == Game.armor:
-			mark = "  [equipped]"
-		b.text = Game.iname(id) + (" (" + str(Game.count(id)) + ")" if Game.count(id) > 1 else "") + mark
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.custom_minimum_size = Vector2(0, 46)
-		b.pressed.connect(func():
+			mark = "  [E]"
+		var extra := ""
+		if it.has("dmg"):
+			extra = "   DMG %d" % int(it.dmg)
+		elif it.has("dr"):
+			extra = "   DR %d" % int(it.dr)
+		elif it.has("heal"):
+			extra = "   +%d HP" % int(it.heal)
+		var b := _list_button(list, Game.iname(id) + (" (" + str(Game.count(id)) + ")" if Game.count(id) > 1 else "") + mark + extra, id == selected, func():
 			selected = id
-			show_tab("ITEMS"))
-		list.add_child(b)
-	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_theme_constant_override("separation", 8)
-	h.add_child(right)
+			show_tab(current))
+		if id == Game.weapon or id == Game.armor:
+			b.add_theme_color_override("font_color", BRIGHT if id != selected else AMBERC)
 	if selected == "" or not Game.has(selected):
-		_label(right, "Carrying %.0f / %.0f lbs" % [Game.carry_now(), Game.carry_max()], 18, DIM)
+		_label(R, "Carrying %.0f / %.0f lbs" % [Game.carry_now(), Game.carry_max()], 17, DIM)
 		return
-	var it := Game.item(selected)
-	_label(right, Game.iname(selected), 23, Color(0.85, 1.0, 0.85))
-	_label(right, String(it.get("desc", "")), 18)
-	var facts := []
-	if it.has("dmg"):
-		facts.append("Damage " + str(it.dmg) + (" x" + str(it.pellets) if it.has("pellets") else ""))
-	if it.has("mag"):
-		facts.append("Magazine " + str(it.mag) + ", " + Game.iname(it.get("ammo")))
-	if it.has("heal"):
-		facts.append("Heals " + str(it.heal))
-	if it.has("dr"):
-		facts.append("Damage resistance " + str(it.dr))
-	facts.append("Weight " + str(it.get("w", 0)) + "   Value " + str(it.get("v", 0)))
-	_label(right, "\n".join(facts), 18, DIM)
-	var row := HBoxContainer.new()
-	right.add_child(row)
-	var t := String(it.get("t", ""))
-	if t in ["weapon", "armor", "aid"] and not (selected == Game.weapon or selected == Game.armor):
-		var u := Button.new()
-		u.text = "EQUIP" if t != "aid" else ("READIED" if Game.nade == selected else "READY") if it.get("throw", false) else "USE"
-		u.custom_minimum_size = Vector2(140, 52)
-		u.pressed.connect(func():
-			Game.use_item(selected)
-			show_tab("ITEMS"))
-		row.add_child(u)
-	if t != "quest" and selected != Game.weapon and selected != Game.armor:
-		var dr := Button.new()
-		dr.text = "DROP"
-		dr.custom_minimum_size = Vector2(120, 52)
-		dr.pressed.connect(func():
-			Game.take(selected, 1)
-			if not Game.has(selected):
-				selected = ""
-			show_tab("ITEMS"))
-		row.add_child(dr)
+	_item_card(R, selected)
 
-# ---------------------------------------------------------------- QUESTS
+# compare a number with what's equipped: green if better, red if worse
+func _cmp(parent: Node, k: String, v: float, eq, fmt := "%.0f", higher_better := true) -> void:
+	var txt := fmt % v
+	var col := GREEN
+	if eq != null and absf(v - float(eq)) > 0.001:
+		var better: bool = (v > float(eq)) == higher_better
+		txt += "  (%s%s)" % ["+" if v > float(eq) else "-", fmt % absf(v - float(eq))]
+		col = GREEN if better else BAD
+	_row(parent, k, txt, col)
+
+func _item_card(R: VBoxContainer, id: String) -> void:
+	var it := Game.item(id)
+	var t := String(it.get("t", ""))
+	_title(R, Game.iname(id) + ("  +%d" % int(Game.upgrades[id]) if int(Game.upgrades.get(id, 0)) > 0 else ""))
+	_label(R, String(it.get("desc", "")), 17)
+	if t == "weapon":
+		var eq := Game.item(Game.weapon) if Game.weapon != "" and Game.weapon != id else {}
+		var dps := func(x: Dictionary) -> float:
+			return float(x.get("dmg", 0)) * float(x.get("pellets", 1)) / maxf(0.05, float(x.get("rof", 0.5)))
+		_cmp(R, "Damage", float(it.get("dmg", 0)) * float(it.get("pellets", 1)), (float(eq.get("dmg", 0)) * float(eq.get("pellets", 1))) if not eq.is_empty() else null)
+		_cmp(R, "Damage per second", dps.call(it), dps.call(eq) if not eq.is_empty() else null)
+		_cmp(R, "Shots per second", 1.0 / maxf(0.05, float(it.get("rof", 0.5))), (1.0 / maxf(0.05, float(eq.get("rof", 0.5)))) if not eq.is_empty() else null, "%.1f")
+		if it.has("range"):
+			_cmp(R, "Range", float(it.range), eq.get("range") if not eq.is_empty() else null, "%.0f m")
+		if it.has("spread"):
+			_cmp(R, "Accuracy", 100.0 - float(it.spread) * 600.0, (100.0 - float(eq.spread) * 600.0) if eq.has("spread") else null, "%.0f")
+		if it.has("mag"):
+			_cmp(R, "Magazine", float(it.mag), eq.get("mag") if not eq.is_empty() else null)
+			_row(R, "Ammunition", "%s  (%d carried)" % [Game.iname(it.get("ammo")), Game.count(String(it.get("ammo", "")))])
+		_row(R, "Type", String(it.get("kind", "")).capitalize())
+	elif t == "armor":
+		var eqa := Game.item(Game.armor) if Game.armor != "" and Game.armor != id else {}
+		_cmp(R, "Damage resistance", float(it.get("dr", 0)), eqa.get("dr", 0) if Game.armor != "" and Game.armor != id else null)
+	elif t == "aid":
+		if it.has("heal"):
+			_row(R, "Heals", "+%d HP" % int(it.heal))
+		var D: Dictionary = Game.L.get("consts", {}).get("DRUGS", {}).get(id, {})
+		if not D.is_empty():
+			_row(R, "Lasts", "%ds" % int(D.get("dur", 0)))
+			_row(R, "Addiction risk", "%d%%" % int(float(D.get("addict", 0)) * 100.0), BAD if float(D.get("addict", 0)) > 0.1 else GREEN)
+			if D.has("stats"):
+				for st in D.stats:
+					_row(R, String(Game.DB.statinfo.get(st, [st])[0]), "%+d" % int(D.stats[st]))
+	_row(R, "Weight", "%s lbs" % str(it.get("w", 0)))
+	_row(R, "Value", "%s caps" % str(it.get("v", 0)))
+	if Game.count(id) > 1:
+		_row(R, "Carried", str(Game.count(id)))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	R.add_child(row)
+	var equipped: bool = id == Game.weapon or id == Game.armor
+	if t in ["weapon", "armor", "aid"] and not equipped:
+		var u := "EQUIP" if t != "aid" else (("READIED" if Game.nade == id else "READY") if it.get("throw", false) else "USE")
+		_button(row, u, func():
+			Game.use_item(id)
+			show_tab(current), 130)
+	if equipped:
+		_label(row, "Equipped", 17, AMBERC)
+	if t != "quest" and not equipped:
+		_button(row, "DROP", func():
+			Game.take(id, 1)
+			if not Game.has(id):
+				selected = ""
+			show_tab(current), 110)
+		if Game.count(id) > 1:
+			_button(row, "DROP ALL", func():
+				Game.take(id, Game.count(id))
+				selected = ""
+				show_tab(current), 140)
+
+# ---------------------------------------------------------------- DATA: QUESTS
 func _quests() -> void:
-	var v := _scroll()
+	var lr := _split(0.9)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
 	var active := []
 	var done := []
 	for q in Game.quests:
 		(done if Game.quests[q].done else active).append(q)
 	active.sort_custom(func(a, b): return int(Game.qdef(a).get("main", false)) > int(Game.qdef(b).get("main", false)))
-	_label(v, "ACTIVE", 21)
+	if sel_quest == "" or not Game.quests.has(sel_quest):
+		sel_quest = String(Game.flags.get("track", active[0] if not active.is_empty() else ""))
+	_title(L, "Active")
 	if active.is_empty():
-		_label(v, "No active quests. Talk to people.", 18, DIM)
+		_label(L, "No active quests. Talk to people.", 16, DIM)
 	for q in active:
-		var d: Dictionary = Game.qdef(q)
-		var row := HBoxContainer.new()
-		v.add_child(row)
 		var tracked: bool = Game.flags.get("track") == q
-		var l := _label(row, ("» " if tracked else "") + String(d.t) + ("  [MAIN]" if d.get("main", false) else ""), 20, Color(1.0, 0.92, 0.6) if tracked else Color(0.85, 1.0, 0.85))
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if not tracked:
-			var b := Button.new()
-			b.text = "TRACK"
-			b.pressed.connect(func():
-				Game.flags["track"] = q
+		var b := _list_button(L, ("◆ " if tracked else "") + String(Game.qdef(q).t) + ("  [MAIN]" if Game.qdef(q).get("main", false) else ""), q == sel_quest, func():
+			sel_quest = q
+			show_tab("QUESTS"))
+		if tracked and q != sel_quest:
+			b.add_theme_color_override("font_color", AMBERC)
+	_title(L, "Completed")
+	if done.is_empty():
+		_label(L, "None yet.", 16, DIM)
+	for q in done:
+		var b := _list_button(L, String(Game.qdef(q).get("t", q)), q == sel_quest, func():
+			sel_quest = q
+			show_tab("QUESTS"))
+		if q != sel_quest:
+			b.add_theme_color_override("font_color", DIM)
+	if sel_quest == "":
+		return
+	var d: Dictionary = Game.qdef(sel_quest)
+	var finished: bool = Game.quests[sel_quest].done
+	_title(R, String(d.get("t", sel_quest)))
+	if d.get("main", false):
+		_label(R, "Main quest", 15, AMBERC)
+	if d.has("desc"):
+		_label(R, Game.subst(Game.vm.to_str(Game.vm.val(d.desc, [Game.G]))), 17)
+	_label(R, "LOG", 17, BRIGHT)
+	var stages: Array = d.get("stages", [])
+	var cur := Game.stage(sel_quest)
+	for i in stages.size():
+		if i > cur and not finished:
+			break
+		var txt := Game.subst(Game.vm.to_str(Game.vm.val(stages[i].get("txt", ""), [Game.G])))
+		var now: bool = i == cur and not finished
+		_label(R, ("► " if now else "✓ ") + txt, 17, BRIGHT if now else DIM)
+	if finished:
+		_label(R, "✓ Done.", 17, AMBERC)
+	var rw: Dictionary = d.get("reward", {})
+	if not rw.is_empty():
+		var parts := []
+		if rw.has("xp"):
+			parts.append("%s XP" % str(rw.xp))
+		if rw.has("caps"):
+			parts.append("%s caps" % str(rw.caps))
+		for k in rw:
+			if not k in ["xp", "caps", "karma"] and Game.DB.items.has(k):
+				parts.append(Game.iname(k))
+		if not parts.is_empty():
+			_label(R, "Reward: " + ", ".join(parts), 16, DIM)
+	if not finished:
+		var qt = null
+		if Game.flags.get("track") == sel_quest:
+			qt = Game.quest_target()
+		if qt != null and Game.player:
+			_label(R, "Objective is %.0f m away." % Vector2(qt.x - Game.player.global_position.x, qt.z - Game.player.global_position.z).length(), 16, DIM)
+		if Game.flags.get("track") != sel_quest:
+			var qq := sel_quest
+			_button(R, "TRACK THIS QUEST", func():
+				Game.flags["track"] = qq
 				Game.quest_changed.emit()
 				show_tab("QUESTS"))
-			row.add_child(b)
-		if d.has("desc"):
-			_label(v, "  " + Game.subst(Game.vm.to_str(Game.vm.val(d.desc, [Game.G]))), 17, DIM)
-		_label(v, "  > " + Game.stage_text(q), 18)
-	_label(v, "COMPLETED", 21)
-	if done.is_empty():
-		_label(v, "None yet.", 18, DIM)
-	for q in done:
-		_label(v, String(Game.qdef(q).get("t", q)), 18, DIM)
+		else:
+			_label(R, "Being tracked.", 16, AMBERC)
+
+# ---------------------------------------------------------------- DATA: NOTES
+func _notes() -> void:
+	var lr := _split(0.8)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
+	var read := []
+	for k in Game.DB.lore:
+		if Game.flags.has("read_" + k):
+			read.append(k)
+	_title(L, "Terminal entries")
+	if read.is_empty():
+		_label(L, "Read terminals to keep copies here.", 16, DIM)
+	if sel_note == "" and not read.is_empty():
+		sel_note = read[0]
+	for k in read:
+		var h := String(Game.DB.lore[k].get("h", k))
+		_list_button(L, h.substr(0, 40), k == sel_note, func():
+			sel_note = k
+			show_tab("NOTES"))
+	if sel_note != "" and Game.DB.lore.has(sel_note):
+		var l: Dictionary = Game.DB.lore[sel_note]
+		_title(R, String(l.get("h", sel_note)))
+		_label(R, String(l.get("t", "")), 16)
 
 # ---------------------------------------------------------------- RADIO
 func _radio() -> void:
