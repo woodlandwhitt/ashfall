@@ -64,6 +64,7 @@ const PEOPLE := {
 }
 
 func setup(d: Dictionary, td: Dictionary) -> void:
+	_unwedge.call_deferred()
 	type = d.type
 	def = td
 	if d.get("name") != null:
@@ -204,6 +205,19 @@ func _arm(d: Dictionary) -> void:
 		aim_hold = AimHold.new()
 		sk.add_child(aim_hold)
 		aim_hold.capture(sk)
+
+# spawned inside a boulder or a wreck: step out to clear ground first
+func _unwedge() -> void:
+	if not is_inside_tree():
+		return
+	var tr := get_tree()
+	await tr.physics_frame
+	await tr.physics_frame
+	if not is_inside_tree() or dead:
+		return
+	var c := ClearSpot.near(get_world_3d().direct_space_state, global_position, 0.32, 1.4, [get_rid()], 4.0)
+	if c != Vector3.INF and c.distance_to(global_position) > 0.01:
+		global_position = c + Vector3.UP * 0.1
 
 func _twist_setup() -> void:
 	var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D

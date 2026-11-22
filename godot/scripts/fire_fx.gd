@@ -11,6 +11,59 @@ var t := 0.0
 static var flame_tex: Texture2D
 static var smoke_tex: Texture2D
 
+# a fire put in place of an old flame cone settles once the ground's collision is in: down onto what's under it if
+# it was hanging in the air, and out of a boulder it was drawn half inside (or smaller, if there's no room)
+func _settle() -> void:
+	var tr := get_tree()
+	for i in 3:
+		await tr.physics_frame
+	if not is_inside_tree():
+		return
+	var space := get_world_3d().direct_space_state
+	var p := global_position
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(p + Vector3.UP * 0.25, p + Vector3.DOWN * 2.5, 1))
+	var gy: float = Game.height(p.x, p.z)
+	var below: float = float(hit.position.y) if not hit.is_empty() else gy
+	if p.y - below > 0.12 and p.y - below < 2.4 and not _held_up(p):
+		p.y = below + 0.02
+	var q := PhysicsShapeQueryParameters3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = 0.28 * size
+	q.shape = sph
+	q.collision_mask = 1
+	q.transform = Transform3D(Basis(), p + Vector3.UP * 0.45 * size)
+	if not space.intersect_shape(q, 1).is_empty():
+		var moved := false
+		for r in [0.35, 0.6, 0.9]:
+			for k in 8:
+				var a := k / 8.0 * TAU
+				var t2: Vector3 = p + Vector3(cos(a), 0, sin(a)) * r
+				q.transform = Transform3D(Basis(), t2 + Vector3.UP * 0.45 * size)
+				if space.intersect_shape(q, 1).is_empty():
+					p = t2
+					moved = true
+					break
+			if moved:
+				break
+		if not moved:
+			scale = Vector3.ONE * 0.45
+	global_position = p
+
+# something drawn right under the fire (a barrel's rim, a brazier) holds it up even without collision of its own
+func _held_up(p: Vector3) -> bool:
+	var probe := p + Vector3.DOWN * 0.08
+	var par := get_parent()
+	if par == null:
+		return false
+	for c in par.find_children("*", "MeshInstance3D", true, false):
+		var mi := c as MeshInstance3D
+		if not mi.visible:
+			continue
+		var ab: AABB = mi.global_transform * mi.get_aabb()
+		if ab.size.length() < 3.0 and ab.grow(0.03).has_point(probe):
+			return true
+	return false
+
 static func make(s := 1.0, with_smoke := true) -> FireFX:
 	var f := FireFX.new()
 	f.size = s
@@ -190,3 +243,4 @@ static func dress(root: Node) -> void:
 		var f := FireFX.make(clampf(maxf(ab.size.x, ab.size.z) * 1.9, 0.6, 2.2))
 		root.add_child(f)
 		f.global_position = base
+		f._settle()

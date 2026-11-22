@@ -131,28 +131,11 @@ func _unwedge() -> void:
 	await tr.physics_frame
 	if not is_inside_tree():
 		return
-	var space := get_world_3d().direct_space_state
-	var q := PhysicsShapeQueryParameters3D.new()
-	var cap := CapsuleShape3D.new()
-	cap.radius = 0.3
-	cap.height = 1.5
-	q.shape = cap
-	q.collision_mask = 1
-	q.exclude = [get_rid()]
-	var test := func(p: Vector3) -> bool:
-		q.transform = Transform3D(Basis(), p + Vector3.UP * 0.95)
-		return space.intersect_shape(q, 1).is_empty()
-	if test.call(global_position):
-		return
-	for r in [0.5, 0.8, 1.1, 1.5, 2.0]:
-		for i in 12:
-			var a := i / 12.0 * TAU + (0.3 if r > 1.0 else 0.0)
-			var p: Vector3 = global_position + Vector3(cos(a), 0, sin(a)) * r
-			if test.call(p):
-				global_position = p
-				home = p
-				target = p
-				return
+	var c := ClearSpot.near(get_world_3d().direct_space_state, global_position, 0.3, 1.5, [get_rid()], 2.2)
+	if c != Vector3.INF and c.distance_to(global_position) > 0.01:
+		global_position = c
+		home = c
+		target = c
 
 func _physics_process(d: float) -> void:
 	t += d
