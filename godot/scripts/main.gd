@@ -1534,7 +1534,7 @@ func _selftest() -> void:
 		var q := PhysicsRayQueryParameters3D.create(from, from + (-player.cam.global_transform.basis.z) * 60.0, 1 | 2 | 4)
 		q.exclude = [player.get_rid()]
 		var h := get_world_3d().direct_space_state.intersect_ray(q)
-		out.append("aim ray hits " + (str(h.collider.name) + " (" + h.collider.get_class() + ")" if h else "nothing"))
+		out.append("aim ray hits " + (str(h.collider.name) + " (" + h.collider.get_class() + ")" if h else "nothing") + " | target %s at %s, me at %s yaw %.2f pitch %.2f dist %.1f" % [tgt.eid, str(tp.snapped(Vector3.ONE * 0.1)), str(player.global_position.snapped(Vector3.ONE * 0.1)), player.yaw, player.pitch, player.global_position.distance_to(tp)])
 		player.fire()
 		await _wait(2)
 		out.append("shot a %s: hp %.0f -> %.0f, mag %d" % [tgt.type, hp0, tgt.hp, Game.mag])
