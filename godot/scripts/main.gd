@@ -879,7 +879,7 @@ func _test_hooks() -> void:
 			if Vector2(cc.x - c.x, cc.z - c.z).length() < float(v[2]) or (ab.size.length() >= 30.0 and ab.grow(0.5).has_point(Vector3(c.x, ab.get_center().y, c.z))):
 				for i in mi.mesh.get_surface_count():
 					var m = mi.get_active_material(i)
-					print("MAT %s %s size %s surf %d mat %s %s vc %s tex %s" % [mi.name, str(cc.snapped(Vector3.ONE * 0.1)), str(ab.size.snapped(Vector3.ONE * 0.1)), i, str(m.resource_name) if m else "-", m.get_class() if m else "", str(m.vertex_color_use_as_albedo if m is StandardMaterial3D else ""), str(m.albedo_texture.resource_path if m is StandardMaterial3D and m.albedo_texture else "")])
+					print("MAT %s %s size %s surf %d mat %s %s vc %s tex %s" % [mi.name, str(cc.snapped(Vector3.ONE * 0.1)), str(ab.size.snapped(Vector3.ONE * 0.1)), i, str(m.resource_name) if m else "-", m.get_class() if m else "", str(m.vertex_color_use_as_albedo if m is StandardMaterial3D else "") + (" alb " + str(m.albedo_color) + " sh " + str(m.shading_mode) if m is StandardMaterial3D else ""), str(m.albedo_texture.resource_path if m is StandardMaterial3D and m.albedo_texture else "")])
 		get_tree().quit()
 	if args.has("casinotest"):
 		await _casino_test()

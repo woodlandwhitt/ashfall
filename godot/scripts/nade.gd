@@ -195,7 +195,14 @@ class Fire extends Node3D:
 		g.set_color(1, Color(0.8, 0.2, 0.05, 0.0))
 		parts.color_ramp = g
 		parts.position = Vector3.UP * 0.3
+		parts.visible = false
 		add_child(parts)
+		# real flames over the burning patch
+		for i in 4:
+			var ff := FireFX.make(0.8 + randf() * 0.5, i == 0)
+			add_child(ff)
+			var a := randf() * TAU
+			ff.position = Vector3(cos(a), 0, sin(a)) * r * (0.15 + 0.45 * randf())
 		Sfx.play_at("k_slice", global_position, 0.0, 0.5)
 
 	func _physics_process(d: float) -> void:

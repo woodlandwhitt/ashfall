@@ -231,6 +231,7 @@ func _build(k: String, ps: PackedScene) -> void:
 func _tune(n: Node) -> void:
 	if Game.area == "world":
 		Weathering.apply(n)
+		FireFX.dress(n)
 	elif Game.area == "cells":
 		# indoors only the painted props age; floors and walls have their own finish
 		Weathering.apply(n, 0.6, true)
