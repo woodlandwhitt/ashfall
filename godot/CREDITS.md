@@ -13,4 +13,12 @@ All third-party assets are free and need no sign-up.
 - **Voices:** generated offline with Piper (github.com/rhasspy/piper, MIT licence) using its "en-us-libritts-high"
   voice from the Piper GitHub release v0.0.2. That voice was trained on LibriTTS (Zen et al., 2019,
   openslr.org/60), CC BY 4.0. Each character speaks with one of its 904 speakers. See tools/voice/.
+- **Radio music** (music/), from filmmusic.io under its standard licence (CC BY 4.0: free with attribution), obtained
+  via SomeTroglodyte/Additional-Music-Various on GitHub:
+  - "Apocalypse Blues", "Sunset Fields", "The Northern Path" by Alexander Nakarada (filmmusic.io)
+  - "Horsemen Approach" and "Tavern Brawl" by Alexander Nakarada feat. Kevin MacLeod (filmmusic.io)
+  - "Teller of the Tales", "Devonshire Waltz Allegretto", "Grand Dark Waltz Allegro", "Adeste Fideles Waltz",
+    "Suonatore di Liuto" by Kevin MacLeod (incompetech.com / filmmusic.io)
+  - "Waltz Primordial" by Kevin MacLeod feat. Alexander Nakarada (filmmusic.io)
+  Licence: https://filmmusic.io/standard-license
 - **Engine:** Godot Engine 4.5, MIT licence.

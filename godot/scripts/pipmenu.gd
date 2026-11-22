@@ -810,31 +810,43 @@ func _notes() -> void:
 
 # ---------------------------------------------------------------- RADIO
 func _radio() -> void:
-	var v := _scroll()
+	var lr := _split(1.0)
+	var L: VBoxContainer = _scroll(lr[0])
+	var R: VBoxContainer = lr[1]
+	_title(L, "Stations")
+	for i in Game.main.STATIONS.size():
+		var st: Dictionary = Game.main.STATIONS[i]
+		var open: bool = Game.main.station_open(i)
+		var on: bool = Game.main.radio_on and Game.main.station == i
+		var idx: int = i
+		var b := _list_button(L, String(st.n) + ("   ON AIR" if on else ("" if open else "   (no signal)")), on, func():
+			Game.main.tune(idx)
+			show_tab("RADIO"))
+		b.disabled = not open
 	var row := HBoxContainer.new()
-	v.add_child(row)
-	var l := _label(row, "MERIDIAN FREE RADIO   " + ("ON AIR" if Game.main.radio_on else "OFF"), 21, Color(1.0, 0.92, 0.6))
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var b := Button.new()
-	b.text = "TURN OFF" if Game.main.radio_on else "TUNE IN"
-	b.pressed.connect(func():
+	row.add_theme_constant_override("separation", 8)
+	L.add_child(row)
+	_button(row, "TURN OFF" if Game.main.radio_on else "TURN ON", func():
 		Game.main.set_radio(not Game.main.radio_on)
-		show_tab("RADIO"))
-	row.add_child(b)
-	_label(v, "News, weather and the valley's gossip, read out while you travel.", 17, DIM)
-	_label(v, "BROADCASTS RECEIVED", 21)
+		show_tab("RADIO"), 150)
+	if Game.main.radio_on:
+		_button(row, "NEXT", func():
+			Game.main.radio_skip()
+			show_tab("RADIO"), 110)
+	if Game.main.radio_on and Game.main.now_playing != "":
+		_label(L, "Now playing: " + Game.main.now_playing, 17, AMBERC)
+		_label(L, "Music: filmmusic.io (CC BY 4.0)", 14, DIM)
+	if not Game.main.station_open(1):
+		_label(L, "Somewhere north a transmitter is waiting for someone to fix it.", 15, DIM)
+	_title(R, "Broadcasts received")
 	var heard: Array = Game.flags.get("heard", [])
 	if heard.is_empty():
-		_label(v, "Nothing yet. Broadcasts arrive as you change the valley.", 18, DIM)
+		_label(R, "Nothing yet. Broadcasts arrive as you change the valley.", 16, DIM)
 	for k in heard:
 		var r: Dictionary = Game.L.radio.get(k, {})
-		var bb := Button.new()
-		bb.text = String(r.get("h", k))
-		bb.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		bb.pressed.connect(func():
+		var bb := _list_button(R, String(r.get("h", k)), false, func():
 			Game.main.hud.toggle_pip()
 			Game.main.broadcast(k))
-		v.add_child(bb)
 
 # ---------------------------------------------------------------- CRAFT
 # a recipe's ingredients; the two upgrade recipes cost more each level (main.js recipeNeed)

@@ -33,6 +33,24 @@ for who, d in L["dialogue"].items():
             for x in acc:
                 if len(x) >= 24 and sent.match(x.strip()):
                     add(who, x)
+# build 10's story additions (data/story.json): new conversation branches and broadcasts
+SP = os.path.join(G, "data/story.json")
+if os.path.exists(SP):
+    S = json.load(open(SP))
+    for who, d in S.get("dialogue", {}).items():
+        for nk, n in d.get("nodes", {}).items():
+            s2 = n.get("say")
+            if isinstance(s2, str):
+                add(who, s2)
+            elif s2 is not None:
+                acc = []
+                strs(s2, acc)
+                for x in acc:
+                    if len(x) >= 24 and sent.match(x.strip()):
+                        add(who, x)
+    for k, r in S.get("radio", {}).items():
+        if "t" in r:
+            add("overseer", r["t"])
 for who, c in L.get("companions", {}).items():
     for k, v in c.get("barks", {}).items():
         for x in ([v] if isinstance(v, str) else v):
@@ -47,8 +65,10 @@ def consts(path, name):
     src = open(os.path.join(G, path)).read()
     m = re.search(r"const %s := \[(.*?)\]\n" % name, src, re.S)
     return re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1)) if m else []
-for x in consts("scripts/main.gd", "DJ"):
+for x in consts("scripts/main.gd", "DJ") + consts("scripts/main.gd", "DJ2"):
     add("radio", x)
+for x in consts("scripts/main.gd", "KDST"):
+    add("lark", x)
 for x in consts("scripts/screens.gd", "SLIDES"):
     add("narrator", x)
 # literal speak("...", "who") calls

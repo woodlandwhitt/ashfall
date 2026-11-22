@@ -204,7 +204,11 @@ func _cell_step_out() -> void:
 
 # Things left lying around where people live and work: on a trader's counter, a table, a shelf. Taking them is
 # stealing (world_objects._steal): unseen it costs a little karma, seen it costs more and the owner's people notice.
+var _stealables_done := false
 func _place_stealables() -> void:
+	if _stealables_done:
+		return
+	_stealables_done = true
 	await get_tree().create_timer(1.5, false).timeout
 	var pool: Array = []
 	for k in Game.DB.items:
@@ -222,6 +226,8 @@ func _place_stealables() -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash(id + Game.area)
 		var placed := 0
+		if not Game.L.get("vendors", {}).has(id) and rng.randf() < 0.5:
+			continue
 		for tries in 14:
 			if placed >= (2 if Game.L.get("vendors", {}).has(id) else 1):
 				break
@@ -1294,6 +1300,35 @@ func _story_test() -> void:
 		if not ep.has("if") or Game.vm.truthy(Game.vm.call_value(ep["if"], [Game.G])):
 			lines.append(Game.vm.to_str(Game.vm.val(ep.get("t", ""), [Game.G])).substr(0, 70))
 	out.append("epilogue (%d): %s" % [lines.size(), " || ".join(lines)])
+	# radio: a song, then the DJ, the second station locked until Dead Air
+	set_radio(true)
+	out.append("radio on: state %s, station open kdst %s" % [radio_state, str(station_open(1))])
+	radio_skip()
+	out.append("radio skip: state %s now playing '%s' music playing %s" % [radio_state, now_playing, str(radio_music.playing)])
+	Game.complete("dead_air")
+	tune(1)
+	await _wait(5)
+	out.append("KDST: station %d state %s '%s'" % [station, radio_state, now_playing])
+	set_radio(false)
+	# stealing in Dustwell: owned things near the traders, taken unseen and seen
+	player.global_position = Vector3(-95, Game.height(-95, 95) + 0.3, 95)
+	chunks.load_now(player.global_position)
+	await _wait(30)
+	_place_stealables()
+	await get_tree().create_timer(2.0).timeout
+	var owned: Array = []
+	for k in objects.grid:
+		for o in objects.grid[k]:
+			if o._k == "pickup" and o.get("owned"):
+				owned.append(o)
+	out.append("owned things placed: %d (%s)" % [owned.size(), str(owned.slice(0, 4).map(func(o): return "%s of %s" % [o.item, o.owned]))])
+	if not owned.is_empty():
+		var o: Dictionary = owned[0]
+		var k0 := Game.karma
+		player.crouch = true
+		out.append("label: " + str(objects.label_of(o)))
+		objects.use(o)
+		out.append("stole %s: karma %d -> %d, caught %s" % [o.item, k0, Game.karma, str(Game.flags.get("caught", 0))])
 	out.append("vm errors %d %s" % [Game.vm.errors, Game.vm.last_error])
 	for l in out:
 		print("TEST ", l)
@@ -2256,35 +2291,174 @@ func broadcast(k: String) -> void:
 	hud.screens.open_term(String(r.h), String(r.t))
 	speak(String(r.t), "overseer")
 
+# Two stations. Meridian Free Radio from the start (blues and frontier tunes between the DJ's notices), and KDST
+# Classics once Lark gets the old transmitter working (Dead Air): waltzes, and Lark between them. Music comes from
+# filmmusic.io (Kevin MacLeod, Alexander Nakarada; attribution in CREDITS.md), played through a band-limited
+# "radio" bus; the DJs' lines are recorded voices like everyone else's.
+const DJ2 := ["That was a song. This is me. Between us we've got a radio station.",
+	"Saltreach reports the salt is salty. More at eleven.",
+	"Somebody at Tin Row is selling 'genuine pre-war water'. It's water. It's from a puddle. It's not pre-war.",
+	"Kess's people are hiring again. They pay in caps and bruises. Mostly bruises.",
+	"Lost: one goat, answers to Mayor. If found, do not elect.",
+	"If the wind's from the reactor, close the shutters. If the wind's from the gulch, close them twice.",
+	"To the Lamplighters out east: we see your lanterns. We'd see them better if you'd come down and buy a round.",
+	"Hound season, friends. If it's got more teeth than you, walk the other way.",
+	"Brannock says if your gun jams, it's your fault. Brannock says that about the weather, too.",
+	"A reminder from Sheriff Voss: the well is for water. Not for wishes, not for coins, and not for Duggan.",
+	"News from the Silver Spur: the house always wins. That's not news. That's a law of nature.",
+	"Here's one for everybody walking the valley tonight. Keep your canteen full and your boots dry."]
+const KDST := ["KDST, back on the air after eleven silent years. This is Lark. The sea is still out there. I checked the map.",
+	"Here's a waltz. Somebody danced to this once in a room with a chandelier. Picture that. Go on.",
+	"KDST Classics. Every record in this booth is older than your grandparents and twice as fussy.",
+	"If you're out on the flats tonight, I'm playing this one for you. Mind the scuttlers.",
+	"The counting woman's frequency is quiet tonight. I don't know if that's good. Here's a waltz anyway.",
+	"Request line's open. It's a tin can on a string. Pull twice.",
+	"That was the grand old dark waltz. Lights low, boots off. KDST.",
+	"Somebody asked me why I play old music. Because it remembers being played to people who weren't scared."]
+const STATIONS := [
+	{"id": "mfr", "n": "Meridian Free Radio", "dj": "radio", "tracks": [["apocalypse_blues", "Apocalypse Blues", "Alexander Nakarada"],
+		["sunset_fields", "Sunset Fields", "Alexander Nakarada"], ["horsemen_approach", "Horsemen Approach", "Alexander Nakarada, Kevin MacLeod"],
+		["tavern_brawl", "Tavern Brawl", "Alexander Nakarada, Kevin MacLeod"], ["teller_of_the_tales", "Teller of the Tales", "Kevin MacLeod"],
+		["northern_path", "The Northern Path", "Alexander Nakarada"]]},
+	{"id": "kdst", "n": "KDST Classics", "dj": "lark", "req": "dead_air", "tracks": [["devonshire_waltz", "Devonshire Waltz Allegretto", "Kevin MacLeod"],
+		["grand_dark_waltz", "Grand Dark Waltz Allegro", "Kevin MacLeod"], ["adeste_fideles_waltz", "Adeste Fideles Waltz", "Kevin MacLeod"],
+		["waltz_primordial", "Waltz Primordial", "Kevin MacLeod, Alexander Nakarada"], ["suonatore_di_liuto", "Suonatore di Liuto", "Kevin MacLeod"]]},
+]
+var station := 0
+var radio_music: AudioStreamPlayer
+var radio_voice: AudioStreamPlayer
+var radio_state := ""
+var radio_order: Array = []
+var now_playing := ""
+
+func station_open(i: int) -> bool:
+	var st: Dictionary = STATIONS[i]
+	return not st.has("req") or Game.is_done(String(st.req)) or Game.dev.get("god", false)
+
+func _radio_bus() -> String:
+	if AudioServer.get_bus_index("Radio") < 0:
+		AudioServer.add_bus()
+		var b := AudioServer.bus_count - 1
+		AudioServer.set_bus_name(b, "Radio")
+		AudioServer.set_bus_send(b, "Master")
+		var hp := AudioEffectHighPassFilter.new()
+		hp.cutoff_hz = 180.0
+		AudioServer.add_bus_effect(b, hp)
+		var lp := AudioEffectLowPassFilter.new()
+		lp.cutoff_hz = 5200.0
+		AudioServer.add_bus_effect(b, lp)
+		var ds := AudioEffectDistortion.new()
+		ds.mode = AudioEffectDistortion.MODE_LOFI
+		ds.drive = 0.12
+		ds.post_gain = -2.0
+		AudioServer.add_bus_effect(b, ds)
+	return "Radio"
+
 func set_radio(on: bool) -> void:
 	radio_on = on
-	if on and radio_loop == null:
-		radio_loop = Sfx.loop("static", -22.0)
-		radio_t = 1.5
-	elif not on and radio_loop:
-		radio_loop.queue_free()
-		radio_loop = null
+	if on:
+		if radio_music == null:
+			radio_music = AudioStreamPlayer.new()
+			radio_music.bus = _radio_bus()
+			radio_music.process_mode = Node.PROCESS_MODE_ALWAYS
+			radio_music.volume_db = -6.0
+			add_child(radio_music)
+			radio_voice = AudioStreamPlayer.new()
+			radio_voice.process_mode = Node.PROCESS_MODE_ALWAYS
+			add_child(radio_voice)
+		if radio_loop == null:
+			radio_loop = Sfx.loop("static", -34.0)
+		radio_order = []
+		_radio_next(true)
+	else:
+		if radio_loop:
+			radio_loop.queue_free()
+			radio_loop = null
+		if radio_music:
+			radio_music.stop()
+			radio_voice.stop()
+		radio_state = ""
+		now_playing = ""
 		DisplayServer.tts_stop()
 
-func radio_tick(dt: float) -> void:
-	if Game.flags.has("radio") and not hud.screens.is_open() and not in_dialog():
-		var k := String(Game.flags.radio)
-		Game.flags.erase("radio")
-		broadcast(k)
+func tune(i: int) -> void:
+	if i < 0 or i >= STATIONS.size() or not station_open(i):
+		return
+	station = i
+	Sfx.play("static", -14.0)
 	if radio_on:
-		radio_t -= dt
-		if radio_t <= 0.0:
-			radio_t = randf_range(28.0, 45.0)
-			var lines: Array = DJ.duplicate()
+		radio_order = []
+		_radio_next(true)
+	else:
+		set_radio(true)
+
+func radio_skip() -> void:
+	if radio_on:
+		_radio_next(false)
+
+func _radio_next(talk: bool) -> void:
+	var st: Dictionary = STATIONS[station]
+	radio_music.stop()
+	radio_voice.stop()
+	if talk:
+		var lines: Array = (DJ + DJ2) if st.id == "mfr" else KDST.duplicate()
+		if st.id == "mfr":
 			for k in Game.flags.get("heard", []):
 				var r: Dictionary = Game.L.radio.get(k, {})
 				if r.has("t"):
 					var paras: Array = Array(String(r.t).split("\n\n")).filter(func(x): return not String(x).strip_edges().begins_with(">"))
 					if not paras.is_empty():
 						lines.append(String(paras[-1]))
-			var line: String = lines[randi() % lines.size()]
-			Game.msg("RADIO: " + line)
-			speak(line, "radio")
+		var line: String = lines[randi() % lines.size()]
+		radio_state = "talk"
+		radio_t = 1.0
+		var p := voice_path(line, String(st.dj))
+		if ResourceLoader.exists(p):
+			radio_voice.stream = load(p)
+			radio_voice.play()
+		else:
+			speak(line, String(st.dj))
+		Game.msg(("LARK: " if st.id == "kdst" else "RADIO: ") + line)
+		return
+	if radio_order.is_empty():
+		radio_order = range(st.tracks.size())
+		radio_order.shuffle()
+	var t: Array = st.tracks[radio_order.pop_back()]
+	var path := "res://music/%s.ogg" % t[0]
+	if not ResourceLoader.exists(path):
+		radio_state = "talk"
+		radio_t = 3.0
+		return
+	radio_music.stream = load(path)
+	radio_music.play()
+	radio_state = "music"
+	now_playing = "%s — %s" % [t[1], t[2]]
+	Game.msg("%s: now playing %s" % [String(st.n).to_upper(), now_playing])
+
+func radio_tick(dt: float) -> void:
+	if Game.flags.has("radio") and not hud.screens.is_open() and not in_dialog():
+		var k := String(Game.flags.radio)
+		Game.flags.erase("radio")
+		if radio_music:
+			radio_music.stop()
+			radio_voice.stop()
+			radio_state = "talk"
+			radio_t = 18.0
+		broadcast(k)
+	if not radio_on or radio_music == null:
+		return
+	# quieter under conversations and other voices
+	var want := -18.0 if in_dialog() or (voice_player and voice_player.playing) else -6.0
+	radio_music.volume_db = lerpf(radio_music.volume_db, want, minf(1.0, dt * 3.0))
+	match radio_state:
+		"music":
+			if not radio_music.playing:
+				_radio_next(randf() < 0.75)
+		"talk":
+			if not radio_voice.playing and not DisplayServer.tts_is_speaking():
+				radio_t -= dt
+				if radio_t <= 0.0:
+					_radio_next(false)
 
 # Spoken lines: every scripted line has a recorded voice (voice/<who>/<key>.ogg, made by tools/voice with Piper and
 # its LibriTTS voices, one speaker per character); anything else falls back to the device's text-to-speech.

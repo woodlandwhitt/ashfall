@@ -142,5 +142,12 @@ Keep every existing quest and line, then deepen them:
    stairs, cover, props, lights, loot, workbenches and enemy spawn points, kept with the save per area, with three
    portable map slots). Haven 12's walls are painted steel panels; handguns are held out two-handed and the
    support hand reaches the handguard on long guns.*
-8. **godot-10:** the story overhaul (new beats, factions, companion quests), all endings and epilogues, polish.
+8. **godot-10:** story and feel. *Status: shipped. The story layer (`tools/story/story10.mjs` -> `data/story.json`,
+   merged over logic.json): six factions with standing (Pip DATA > FACTIONS; shop prices follow it), the council
+   beat "Five Hands on One Lever" (hear each power's claim on the core and pledge to one; the epilogue remembers
+   whether you kept your word), Jory's "The Lead Wagon" and Sable's "Burning Bridges", fourteen new epilogue
+   paragraphs. Sneaking (detection, sneak attacks), stealing (owned things and containers; seen or unseen),
+   two raised fists, a darker Haven 12 and wallpapered town interiors, walls drawn both ways, the security
+   locker, full-resolution near terrain (props no longer float), two radio stations with music and more DJ.*
+9. **godot-11:** more of the valley: the Silver Spur's tables, more companion quests, polish.
    At that point the Godot build replaces the WebView build.
