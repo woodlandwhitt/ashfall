@@ -844,6 +844,19 @@ func _test_hooks() -> void:
 		await _story_test()
 	if args.has("forgetest"):
 		await _forge_test()
+	if args.has("itemgrid"):
+		# every item's ground model in rows in front of you (checking how they read)
+		var ids := ["cram", "stew", "sun_pop", "purified_water", "dirty_water", "rotgut", "glowshine", "k_fizz", "stimpak", "super_stim", "radaway", "rad_tabs",
+			"jerky", "ox_steak", "med_herbs", "frag", "pipe_bomb", "pulse_nade", "ammo_9", "ammo_44", "shells", "cell", "scrap_metal", "duct_tape",
+			"copper_wire", "circuit", "gears", "fuel_can", "glow_fungus", "spur_chip", "keycard", "holotape", "fusion_cell", "leather_jacket", "pipe_pistol", "hunting_rifle"]
+		var f := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
+		var r := Vector3(cos(player.yaw), 0, -sin(player.yaw))
+		for i in ids.size():
+			var m := ItemModels.build(ids[i])
+			add_child(m)
+			var p: Vector3 = player.global_position + f * (1.3 + (i / 6) * 0.42) + r * ((i % 6) - 2.5) * 0.42
+			m.global_position = Vector3(p.x, Game.height(p.x, p.z), p.z)
+			m.scale = Vector3.ONE * 1.25
 	if args.has("topdown"):
 		# an overhead orthographic view (checking a room's layout), ceilings hidden by the near plane
 		var v := String(args.topdown).split(",")

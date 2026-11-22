@@ -79,7 +79,6 @@ func _build(parent: Node3D, C: Dictionary) -> Node3D:
 	_junk(String(C.get("kind", "")))
 	_decor(K)
 	_ceiling(K)
-	print("FURNISH room %d %s: %d pieces, refused %s, rect %s" % [int(C.i), String(C.get("kind", "")), root.get_child_count(), str(why), str(rect)])
 	why = {}
 	return root
 

@@ -55,25 +55,24 @@ func spawn_chunk(key: String) -> void:
 	for o in grid.get(key, []):
 		if o._k != "pickup" or Game.looted.has("pk_" + String(o.id)) or pickup_nodes.has(o.id):
 			continue
-		var mi := MeshInstance3D.new()
-		var b := BoxMesh.new()
-		b.size = Vector3(0.28, 0.16, 0.22)
-		mi.mesh = b
-		var m := StandardMaterial3D.new()
-		var col := Color.hex(int(o.get("glow", o.get("col", 0x8a8a7a))) << 8 | 0xff)
-		m.albedo_color = col.darkened(0.2)
-		m.roughness = 0.6
+		# the thing itself: a tin, a bottle, a syringe, the gun...
+		var mi := ItemModels.build(String(o.item))
+		mi.scale = Vector3.ONE * (1.25 if int(o.get("qty", 1)) == 1 else 1.4)
 		if o.has("glow"):
-			m.emission_enabled = true
-			m.emission = col
-			m.emission_energy_multiplier = 1.6
-		mi.material_override = m
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var gl := OmniLight3D.new()
+			gl.light_color = Color.hex(int(o.glow) << 8 | 0xff)
+			gl.light_energy = 0.6
+			gl.omni_range = 1.6
+			gl.position.y = 0.15
+			mi.add_child(gl)
 		add_child(mi)
-		# on the table or shelf it was left on, if it was left on one
+		# resting on whatever is under it (the table or shelf it was left on, or the floor): never floating
 		var gy := Game.height(float(o.x), float(o.z))
 		var y := float(o.y) if o.has("y") and float(o.y) > gy - 0.3 else gy
-		mi.global_position = Vector3(float(o.x), y + 0.08, float(o.z))
+		var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(float(o.x), y + 0.6, float(o.z)), Vector3(float(o.x), y - 1.5, float(o.z)), 1))
+		if not hit.is_empty():
+			y = maxf(hit.position.y, gy) if not Game.interior() else hit.position.y
+		mi.global_position = Vector3(float(o.x), y + 0.005, float(o.z))
 		mi.rotation.y = hash(o.id) % 628 / 100.0
 		pickup_nodes[o.id] = mi
 
