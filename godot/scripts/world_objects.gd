@@ -103,7 +103,12 @@ func label_of(o: Dictionary) -> Variant:
 				return null
 			return ("Steal " if o.get("owned") else "Take ") + Game.iname(o.item) + (" (" + str(int(o.qty)) + ")" if int(o.get("qty", 1)) > 1 else "")
 		"term":
-			return "Read terminal" if String(o.kind) == "lore" else "Use terminal"
+			if String(o.kind) == "lore":
+				var lk := term_lock(o)
+				if lk > 0 and not Game.opened.has("t_" + String(o.id)):
+					return "Hack terminal (" + ["", "Easy", "Average", "Hard"][lk] + ")"
+				return "Read terminal"
+			return "Use terminal"
 		"bench":
 			return "Use workbench"
 		"ldoor":
@@ -279,11 +284,22 @@ func _terminal(o: Dictionary) -> void:
 	match String(o.kind):
 		"lore":
 			var l: Dictionary = Game.DB.lore.get(String(o.lore), {})
-			main.hud.screens.open_term(String(l.get("h", "TERMINAL")), String(l.get("t", "")))
-			if not Game.flags.has("read_" + String(o.lore)):
-				Game.flags["read_" + String(o.lore)] = 1
-				Game.add_xp(20)
-				Game.check_quests()
+			var lk := term_lock(o)
+			var lore := String(o.lore)
+			var txt := String(l.get("t", ""))
+			# long entries split at their blank lines into a menu of records
+			var parts := txt.split("\n\n", false)
+			var items: Array = []
+			if parts.size() >= 3:
+				for i in parts.size():
+					items.append(["Record %d of %d" % [i + 1, parts.size()], parts[i]])
+			else:
+				items.append([String(l.get("h", "Entry")), txt])
+			main.hud.term.open(String(l.get("h", "TERMINAL")), items, lk, String(o.id), func():
+				if (lk == 0 or Game.opened.has("t_" + String(o.id))) and not Game.flags.has("read_" + lore):
+					Game.flags["read_" + lore] = 1
+					Game.add_xp(20)
+					Game.check_quests())
 		"tower":
 			if G.questDone("static"):
 				main.hud.screens.open_term("RELAY 4 // STATUS", "> CARRIER: ONLINE\n> POWER: 3/3 CELLS\n> LISTENERS: 3 SETTLEMENTS\n\nBroadcasting on all bands. Somebody out there is answering.")
@@ -300,6 +316,15 @@ func _terminal(o: Dictionary) -> void:
 				if not G.questKnown("meridian"):
 					Game.start("meridian")
 				main.start_dialog(null, "core")
+
+# about a third of the valley's terminals are password-locked (never the ones in Haven 12, the relay or the core)
+func term_lock(o: Dictionary) -> int:
+	if Game.area == "vault" or String(o.get("kind", "")) != "lore" or o.has("lock"):
+		return int(o.get("lock", 0))
+	var h := absi(hash(String(o.id) + "lock"))
+	if h % 100 < 62:
+		return 0
+	return 1 + h % 3
 
 func _cross(o: Dictionary, col) -> void:
 	# a door you have opened: step through it to the other side (the door model itself stays shut)

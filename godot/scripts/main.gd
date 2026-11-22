@@ -844,6 +844,14 @@ func _test_hooks() -> void:
 		await _story_test()
 	if args.has("forgetest"):
 		await _forge_test()
+	if args.has("term"):
+		# the terminal screen: open, or locked (term=lock level)
+		var lv := int(String(args.term)) if String(args.term) != "" else 0
+		hud.term.open("MERIDIAN REACTOR // SHIFT LOG", [["Record 1 of 3", "Shift 4. Coolant pressure low again. Halloran says it's the gauge."], ["Record 2 of 3", "Shift 5. It is not the gauge."], ["Record 3 of 3", "Shift 6. Evacuation ordered."]], lv, "test_term")
+		await _wait(40)
+		if lv > 0 and args.has("guess"):
+			hud.term._guess("XXXXX")
+			await _wait(20)
 	if args.has("itemgrid"):
 		# every item's ground model in rows in front of you (checking how they read)
 		var ids := ["cram", "stew", "sun_pop", "purified_water", "dirty_water", "rotgut", "glowshine", "k_fizz", "stimpak", "super_stim", "radaway", "rad_tabs",
@@ -2517,7 +2525,7 @@ func _best_target() -> Dictionary:
 	return best
 
 func interact() -> void:
-	if in_dialog() or Game.hp <= 0 or hud.screens.is_open() or hud.casino.is_open():
+	if in_dialog() or Game.hp <= 0 or hud.screens.is_open() or hud.casino.is_open() or hud.term.is_open():
 		return
 	if buggy and buggy.driving:
 		buggy.exit()

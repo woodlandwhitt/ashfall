@@ -24,6 +24,7 @@ var pip
 var dev: DevMenu
 var screens: Screens
 var casino: Casino
+var term: Terminal
 var focus: Focus
 var ap_bar: ProgressBar
 var clock_t := 0.0
@@ -227,6 +228,8 @@ func _ready() -> void:
 	root.add_child(screens)
 	casino = Casino.new()
 	root.add_child(casino)
+	term = Terminal.new()
+	root.add_child(term)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
 	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx],
@@ -435,7 +438,7 @@ func _cycle_gfx() -> void:
 	_gfx_label()
 
 func toggle_pip() -> void:
-	if Game.main.in_dialog() or Game.hp <= 0 or screens.is_open() or casino.is_open() or pause_panel.visible:
+	if Game.main.in_dialog() or Game.hp <= 0 or screens.is_open() or casino.is_open() or term.is_open() or pause_panel.visible:
 		return
 	pip.at_bench = false
 	if pip.visible:
@@ -506,6 +509,8 @@ func toggle_pause() -> void:
 			dev.visible = false
 		if casino.is_open():
 			casino.close()
+		if term.is_open():
+			term.close()
 		if screens.is_open() and not screens.mode in ["title", "intro", "create"]:
 			screens.close()
 		if Game.main.in_dialog():
@@ -522,6 +527,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		if casino.is_open():
 			casino.close()
+		elif term.is_open():
+			term.close()
 		elif screens.is_open():
 			screens.close()
 		elif pip.visible:
