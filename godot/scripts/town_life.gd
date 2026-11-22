@@ -269,6 +269,23 @@ func pick(npc, home: Vector3, radius: float) -> Dictionary:
 		choices.append(s)
 	if choices.is_empty():
 		return best
+	# near by the way you'd walk, not through a wall into the next room
+	choices.shuffle()
+	var walkable: Array = []
+	for c in choices:
+		if walkable.size() >= 4:
+			break
+		var path := NavigationServer3D.map_get_path(map, home, c.p, true)
+		if path.is_empty() or (path[path.size() - 1] as Vector3).distance_to(c.p) > 0.8:
+			continue
+		var length := 0.0
+		for i in range(1, path.size()):
+			length += path[i - 1].distance_to(path[i])
+		if length <= radius * 1.3:
+			walkable.append(c)
+	choices = walkable
+	if choices.is_empty():
+		return best
 	if OS.get_cmdline_user_args().has("--sitfirst"):
 		var sits := choices.filter(func(c): return String(c.kind) == "sit")
 		if not sits.is_empty():

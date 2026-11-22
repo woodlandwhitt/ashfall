@@ -237,7 +237,14 @@ func _life(d: float) -> float:
 				stuck_t = 0.0
 				last_p = global_position
 		"go", "back":
-			if agent.is_navigation_finished() or global_position.distance_to(agent.target_position) < 0.45:
+			# (a fresh target reads as "finished" until its path is worked out: go by the distance too)
+			var arrived := global_position.distance_to(agent.target_position) < 0.5 or (agent.is_navigation_finished() and agent.get_current_navigation_path().size() > 0)
+			if life == "go" and String(spot.get("kind", "")) == "chat":
+				var m = spot.get("mate")
+				if m == null or not is_instance_valid(m) or m.spot.get("mate") != self:
+					_go_home(false)
+					return 0.0
+			if arrived:
 				if life == "go":
 					life = "act"
 					life_t = randf_range(14.0, 40.0)
