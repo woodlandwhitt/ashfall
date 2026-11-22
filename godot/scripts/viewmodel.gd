@@ -94,10 +94,11 @@ func _align(fit: Basis, bb: AABB, gf: Dictionary) -> void:
 	var rear_top: Vector3 = g_vm * (c - fwd_m * half_len + up_m * half_h)
 	var centre: Vector3 = g_vm * c
 	var long: bool = not gf.get("pistol", false)
-	var want := Vector3(0.2, -0.17 + float(gf.get("sight", 0.07)), -0.5 + float(gf.get("rear", 0.07)))
+	# long guns sit a little higher and closer than they did, so the hand on the grip stays in view
+	var want := Vector3(0.19, -0.15 + float(gf.get("sight", 0.07)), -0.47 + float(gf.get("rear", 0.07)))
 	if not long:
 		# a handgun is held out at arm's length, a little lower, so you see along the top of the slide
-		want += Vector3(0.0, -0.03, -0.1)
+		want += Vector3(0.01, -0.05, -0.13)
 	rig.position += Vector3(want.x - centre.x, want.y - rear_top.y, want.z - rear_top.z)
 	# tip the muzzle down a touch about the back of the gun: held level, a gun below the eye looks to point up
 	var pivot := want
