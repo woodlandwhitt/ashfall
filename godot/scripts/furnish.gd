@@ -113,9 +113,11 @@ func _area(parent: Node3D, r0: Rect2, kind: String, floor_y: float, doors: Array
 				var c := dp + into * (1.5 + k * 1.3)
 				keep_clear.append(Rect2(c - Vector2(1.0, 1.0), Vector2(2.0, 2.0)))
 	# people stand where they stand: keep a little room around them
-	for n in Game.region.npcs:
+	for n in Game.region.get("npcs", []) + Game.W.get("npcs", []):
 		if rect.has_point(Vector2(float(n.x), float(n.z))):
-			keep_clear.append(Rect2(Vector2(float(n.x), float(n.z)) - Vector2(0.9, 0.9), Vector2(1.8, 1.8)))
+			keep_clear.append(Rect2(Vector2(float(n.x), float(n.z)) - Vector2(1.1, 1.1), Vector2(2.2, 2.2)))
+	# signs and posters on the walls stay readable: nothing stands in front of them
+	_find_signs(parent.get_tree().current_scene if parent.get_tree() else parent, floor_y)
 	_walls(K)
 	if String(C.get("kind", "")) in ["storage", "workshop", "store"]:
 		_aisles(K, String(C.get("kind", "")))
@@ -126,6 +128,26 @@ func _area(parent: Node3D, r0: Rect2, kind: String, floor_y: float, doors: Array
 	_ceiling(K)
 	why = {}
 	return root
+
+var signs: Array = []   # Rect2 on the floor in front of each sign
+func _find_signs(top: Node, floor_y: float) -> void:
+	if top == null:
+		return
+	for c in top.find_children("s_*", "MeshInstance3D", true, false):
+		var mi := c as MeshInstance3D
+		if not mi.is_inside_tree():
+			continue
+		var ab: AABB = mi.global_transform * mi.get_aabb()
+		var thin := minf(ab.size.x, ab.size.z)
+		var wide := maxf(ab.size.x, ab.size.z)
+		if thin > 0.08 or wide < 0.3 or ab.size.y < 0.15 or ab.position.y > floor_y + 2.8 or ab.end.y < floor_y + 0.5:
+			continue
+		var r := Rect2(ab.position.x, ab.position.z, ab.size.x, ab.size.z).grow(0.15)
+		if not rect.grow(0.6).intersects(r):
+			continue
+		var g := r.grow_individual(1.1 if ab.size.x <= ab.size.z else 0.0, 1.1 if ab.size.x > ab.size.z else 0.0, 1.1 if ab.size.x <= ab.size.z else 0.0, 1.1 if ab.size.x > ab.size.z else 0.0)
+		keep_clear.append(g)
+		signs.append(g)
 
 # ---------------------------------------------------------------- placement checks
 func _footprint(id: String, pos: Vector2, yaw: float, pad := 0.05) -> Rect2:
@@ -177,21 +199,47 @@ func _put(id: String, pos: Vector2, yaw: float, y: float, lit := false) -> Node3
 	taken.append(_footprint(id, pos, yaw, 0.0))
 	return n
 
-# something small on top of a piece of furniture
-func _on_top(host: String, at: Vector2, yaw: float, y: float, K: Dictionary, n: int) -> void:
+# small things on a piece of furniture: on its top, or (shelving) on its shelves, each one set down on a real
+# surface of the model (Furniture.surfaces) and only where it's supported all the way under it
+func _on_top(host: String, at: Vector2, yaw: float, y: float, K: Dictionary, n: int, shelves := false) -> void:
+	if host in Furniture.SEATS:
+		return
 	var ab := Furniture.aabb(host)
-	var top := y + ab.end.y
-	var half := Vector2(ab.size.x, ab.size.z) * 0.32
+	var placed: Array = []
 	for i in n:
 		var id: String = K.clutter[rng.randi() % K.clutter.size()]
 		var cab := Furniture.aabb(id)
 		if cab.size.x > ab.size.x * 0.7 or cab.size.z > ab.size.z * 0.9:
 			continue
-		var off := Vector2(rng.randf_range(-half.x, half.x), rng.randf_range(-half.y * 0.6, half.y * 0.6)).rotated(-yaw)
-		var c := Furniture.make(id, false)
-		root.add_child(c)
-		c.global_position = Vector3(at.x + off.x, top - cab.position.y * 0.0, at.y + off.y)
-		c.rotation.y = rng.randf() * TAU
+		var lv := Furniture.levels(host, cab.size.y)
+		if not shelves:
+			lv = lv.slice(lv.size() - 1) if not lv.is_empty() else lv
+		elif not lv.is_empty() and float(lv[lv.size() - 1]) > 1.9:
+			lv.pop_back()   # nothing up on top of a tall bookcase where nobody can reach it
+		if lv.is_empty():
+			continue
+		var level: float = lv[rng.randi() % lv.size()]
+		for attempt in 6:
+			var lp := Vector2(rng.randf_range(ab.position.x + cab.size.x * 0.6, ab.end.x - cab.size.x * 0.6),
+				rng.randf_range(ab.position.z + cab.size.z * 0.6, ab.end.z - cab.size.z * 0.6))
+			var r := maxf(cab.size.x, cab.size.z) * 0.42
+			var ok := true
+			for o in [Vector2.ZERO, Vector2(r, 0), Vector2(-r, 0), Vector2(0, r), Vector2(0, -r)]:
+				if absf(Furniture.surface_at(host, lp + o, level + 0.01) - level) > 0.025:
+					ok = false
+					break
+			for q in placed:
+				if (q as Vector2).distance_to(lp) < r + 0.08:
+					ok = false
+			if not ok:
+				continue
+			placed.append(lp)
+			var w := lp.rotated(-yaw)
+			var c := Furniture.make(id, false)
+			root.add_child(c)
+			c.global_position = Vector3(at.x + w.x, y + level - cab.position.y + 0.002, at.y + w.y)
+			c.rotation.y = rng.randf() * TAU
+			break
 
 # ---------------------------------------------------------------- big pieces against the walls
 func _walls(K: Dictionary) -> void:
@@ -220,15 +268,8 @@ func _walls(K: Dictionary) -> void:
 				_put(id, pos, yaw, fy)
 				if ab.end.y < 1.3 and ab.size.x > 0.5:
 					_on_top(id, pos, yaw, fy, K, rng.randi_range(1, 3))
-				elif id in ["Shelf_01", "modern_bookshelf"]:
-					# a few things on the shelves
-					for k in 2:
-						var sid: String = K.clutter[rng.randi() % K.clutter.size()]
-						var c := Furniture.make(sid, false)
-						root.add_child(c)
-						var hy: float = fy + [0.42, 0.85, 1.28, 1.7][rng.randi() % 4]
-						c.global_position = Vector3(pos.x + dir.x * rng.randf_range(-0.3, 0.3), hy, pos.y + dir.y * rng.randf_range(-0.3, 0.3))
-						c.rotation.y = rng.randf() * TAU
+				elif id in ["Shelf_01", "modern_bookshelf", "modern_sideboard", "ClassicConsole_01"]:
+					_on_top(id, pos, yaw, fy, K, 3, true)
 				last = id
 				t += along + (rng.randf_range(0.4, 1.8) if no_lights else rng.randf_range(0.08, 0.7))
 			else:
@@ -247,12 +288,7 @@ func _aisles(K: Dictionary, kind: String) -> void:
 			if _free(id, p, yaw, fy):
 				_put(id, p, yaw, fy)
 				if id == "Shelf_01":
-					for k in 2:
-						var sid: String = K.clutter[rng.randi() % K.clutter.size()]
-						var c := Furniture.make(sid, false)
-						root.add_child(c)
-						c.global_position = Vector3(p.x, fy + [0.42, 0.85, 1.28][rng.randi() % 3], p.y + rng.randf_range(-0.35, 0.35))
-						c.rotation.y = rng.randf() * TAU
+					_on_top(id, p, yaw, fy, K, 3, true)
 			z += Furniture.aabb(id).size.x + rng.randf_range(0.1, 0.6)
 
 # ---------------------------------------------------------------- the bits on the floor that tell you nobody sweeps
@@ -334,6 +370,12 @@ func _decor(K: Dictionary) -> void:
 			continue
 		var hp: Vector3 = h.position
 		if Vector2(hp.x, hp.z).distance_to(p) > 0.5 or absf(Vector2(h.normal.x, h.normal.z).dot(nrm)) < 0.8:
+			continue
+		var on_sign := false
+		for sg in signs:
+			if (sg as Rect2).grow(0.4).has_point(Vector2(hp.x, hp.z)):
+				on_sign = true
+		if on_sign:
 			continue
 		var id: String = K.decor[rng.randi() % K.decor.size()]
 		var c := Furniture.make(id, id == "industrial_wall_lamp" and lights < 3 and not no_lights)

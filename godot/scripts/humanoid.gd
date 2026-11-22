@@ -244,6 +244,7 @@ const PALM := Vector3(0.0, -0.04, 0.035)
 # hold a gun by its grip (call after posing)
 static func hold_gun(root: Node3D, scene: PackedScene, fit: Basis, gf: Dictionary = {}) -> Node3D:
 	var g := hold_aligned(root, scene, fit, Vector3.ZERO)
+	GunPaint.apply(g, gf)
 	var bb := gun_bounds(g)
 	seat(root, g, PALM, grip_of(bb, fit) if gf.is_empty() else grip_fit(bb, fit, gf))
 	return g
@@ -256,7 +257,7 @@ static func guard_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
 	var c := bb.get_center()
 	var half_len := absf(fwd.dot(bb.size)) * 0.5
 	var half_h := absf(up.dot(bb.size)) * 0.5
-	var t: Array = GRIPS.get(String(gf.get("glb", "")), [])
+	var t: Array = grips.get(String(gf.get("glb", "")), [])
 	var gfrac: float = t[2] if t.size() > 2 else 0.62
 	var gdown: float = t[3] if t.size() > 3 else 0.55
 	return c - fwd * half_len + up * half_h + fwd * half_len * 2.0 * gfrac - up * half_h * 2.0 * gdown
@@ -271,6 +272,8 @@ const GRIPS := {
 	"Shotgun_SawedOff": [0.13, 0.58, 0.67, 0.4], "SniperRifle_4": [0.235, 0.5, 0.52, 0.5], "Sniper_Rifle_West": [0.26, 0.72, 0.62, 0.43],
 	"SubmachineGun_3": [0.46, 0.59, 0.85, 0.59],
 }
+# GRIPS plus the ones data/arsenal.json adds (Game._merge_arsenal)
+static var grips: Dictionary = GRIPS.duplicate()
 
 static func grip_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
 	var inv := fit.orthonormalized().inverse()
@@ -279,7 +282,7 @@ static func grip_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
 	var c := bb.get_center()
 	var half_len := absf(fwd.dot(bb.size)) * 0.5
 	var half_h := absf(up.dot(bb.size)) * 0.5
-	var t: Array = GRIPS.get(String(gf.get("glb", "")), [])
+	var t: Array = grips.get(String(gf.get("glb", "")), [])
 	var pistol: bool = gf.get("pistol", false)
 	var along: float = t[0] if t.size() > 0 else (0.3 if pistol else 0.33)
 	var down: float = t[1] if t.size() > 1 else 0.62

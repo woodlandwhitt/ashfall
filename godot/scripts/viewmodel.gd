@@ -310,7 +310,11 @@ func setup_melee(armed: bool, id: String) -> void:
 		var lfy := Vector3(0.22, 0.1, -1.0).normalized()
 		var lfx := Vector3(-1.0, 0.0, -0.15)
 		lfx = (lfx - lfy * lfx.dot(lfy)).normalized()
-		var lhand := Basis(lfx, lfy, lfx.cross(lfy).normalized())
+		# turned half a turn about the fingers so it mirrors the right fist (it showed its palm before)
+		var lhand := Basis(lfy, PI) * Basis(lfx, lfy, lfx.cross(lfy).normalized())
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--lrot="):
+				lhand = Basis(lfy, float(a.trim_prefix("--lrot="))) * lhand
 		var lgrip := Vector3(-grip_vm.x + 0.02, grip_vm.y + 0.02, grip_vm.z - 0.03)
 		lt.transform = to_mount.call(Transform3D(lhand, lgrip - lhand * Vector3(-0.03, 0.065, 0.0)))
 		ikl.pin_rotation = true

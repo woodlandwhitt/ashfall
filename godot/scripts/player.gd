@@ -89,7 +89,18 @@ static func model_for(id: String) -> Array:
 	fit = fit.scaled(Vector3.ONE * float(f.get("s", 1.0)))
 	var gf := f.duplicate()
 	gf["glb"] = glb
+	if it.has("finish"):
+		gf["finish"] = it.finish
 	return ["res://guns/" + glb + ".glb", fit, gf]
+
+# the same model at life size, for a gun held in the world (third person, a body's hands)
+static func world_model(id: String) -> Array:
+	var m := model_for(id)
+	if m.is_empty():
+		return m
+	var f: Dictionary = Game.DB.gunfit.get(String(m[2].glb), {})
+	m[1] = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(Vector3.ONE * float(f.get("k", 1.0)))
+	return m
 
 func weapon_changed() -> void:
 	if vm:

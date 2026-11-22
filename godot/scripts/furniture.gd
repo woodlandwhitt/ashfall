@@ -137,6 +137,106 @@ static func make(id: String, lit := true, solid_override := -1) -> Node3D:
 		root.add_child(l)
 	return root
 
+# ---------------------------------------------------------------- where things can rest on a piece
+# Every upward-facing face of the model, rasterised into a 5 cm grid over its footprint: for each cell, the heights
+# of the surfaces there (a table top; a bookcase's shelf boards; a chair's seat and arms). Small things placed on a
+# piece land on a real surface this way, instead of on the top of its bounding box.
+const SEATS := ["SchoolChair_01", "GreenChair_01", "ArmChair_01", "Rockingchair_01", "BarberShopChair_01", "Ottoman_01", "modern_bar_stool", "Sofa_01"]
+const GRID := 0.05
+static var surf: Dictionary = {}
+
+static func surfaces(id: String) -> Dictionary:
+	if surf.has(id):
+		return surf[id]
+	var ab := aabb(id)
+	var nx := maxi(1, ceili(ab.size.x / GRID))
+	var nz := maxi(1, ceili(ab.size.z / GRID))
+	var cells: Array = []
+	cells.resize(nx * nz)
+	for i in cells.size():
+		cells[i] = PackedFloat32Array()
+	var ps := scene(id)
+	if ps:
+		var n := ps.instantiate() as Node3D
+		for c in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := c as MeshInstance3D
+			if mi.mesh == null:
+				continue
+			var xf := _local_xf(mi, n)
+			var f := mi.mesh.get_faces()
+			for t in range(0, f.size(), 3):
+				var a: Vector3 = xf * f[t]
+				var b: Vector3 = xf * f[t + 1]
+				var cc: Vector3 = xf * f[t + 2]
+				var nrm := (b - a).cross(cc - a)
+				if nrm.length_squared() < 1e-12:
+					continue
+				nrm = nrm.normalized()
+				if absf(nrm.y) < 0.8:
+					continue
+				var x0 := clampi(floori((minf(a.x, minf(b.x, cc.x)) - ab.position.x) / GRID), 0, nx - 1)
+				var x1 := clampi(floori((maxf(a.x, maxf(b.x, cc.x)) - ab.position.x) / GRID), 0, nx - 1)
+				var z0 := clampi(floori((minf(a.z, minf(b.z, cc.z)) - ab.position.z) / GRID), 0, nz - 1)
+				var z1 := clampi(floori((maxf(a.z, maxf(b.z, cc.z)) - ab.position.z) / GRID), 0, nz - 1)
+				var den := (b.z - cc.z) * (a.x - cc.x) + (cc.x - b.x) * (a.z - cc.z)
+				if absf(den) < 1e-9:
+					continue
+				for ix in range(x0, x1 + 1):
+					for iz in range(z0, z1 + 1):
+						var px := ab.position.x + (ix + 0.5) * GRID
+						var pz := ab.position.z + (iz + 0.5) * GRID
+						var w0 := ((b.z - cc.z) * (px - cc.x) + (cc.x - b.x) * (pz - cc.z)) / den
+						var w1 := ((cc.z - a.z) * (px - cc.x) + (a.x - cc.x) * (pz - cc.z)) / den
+						var w2 := 1.0 - w0 - w1
+						if w0 < -0.01 or w1 < -0.01 or w2 < -0.01:
+							continue
+						var y := w0 * a.y + w1 * b.y + w2 * cc.y
+						var arr: PackedFloat32Array = cells[ix * nz + iz]
+						var dup := false
+						for h in arr:
+							if absf(h - y) < 0.03:
+								dup = true
+								break
+						if not dup:
+							arr.append(y)
+							cells[ix * nz + iz] = arr
+		n.free()
+	var out := {"ab": ab, "nx": nx, "nz": nz, "cells": cells}
+	surf[id] = out
+	return out
+
+# the highest surface at a point (in the piece's own space) no higher than 'below'; -INF where there's nothing
+static func surface_at(id: String, p: Vector2, below: float) -> float:
+	var S := surfaces(id)
+	var ab: AABB = S.ab
+	var ix := floori((p.x - ab.position.x) / GRID)
+	var iz := floori((p.y - ab.position.z) / GRID)
+	if ix < 0 or iz < 0 or ix >= int(S.nx) or iz >= int(S.nz):
+		return -INF
+	var best := -INF
+	for h in (S.cells[ix * int(S.nz) + iz] as PackedFloat32Array):
+		if h <= below + 0.005 and h > best:
+			best = h
+	return best
+
+# the levels something of height 'need' could stand on, under the middle of the piece: the top, and any shelf with
+# that much room above it
+static func levels(id: String, need: float) -> Array:
+	var S := surfaces(id)
+	var ab: AABB = S.ab
+	var ix := int(S.nx) / 2
+	var iz := int(S.nz) / 2
+	var hs: Array = Array(S.cells[ix * int(S.nz) + iz] as PackedFloat32Array)
+	hs.sort()
+	var out: Array = []
+	for i in hs.size():
+		var h: float = hs[i]
+		if h < ab.position.y + 0.15:
+			continue   # the floor of the piece itself, a plinth
+		if i == hs.size() - 1 or float(hs[i + 1]) - h > need + 0.04:
+			out.append(h)
+	return out
+
 static func ids_in(group: String) -> Array:
 	var out: Array = []
 	for k in CAT:

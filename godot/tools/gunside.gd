@@ -25,7 +25,13 @@ func _ready():
 	line.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	line.no_depth_test = true
 	var gf: Dictionary = Game.DB.gunfit
+	var only := []
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="):
+			only = a.trim_prefix("--only=").split(",")
 	for glb in gf:
+		if not only.is_empty() and not (glb in only or only.any(func(o): return glb.begins_with(o))):
+			continue
 		var f: Dictionary = gf[glb]
 		var fit := Basis.IDENTITY
 		if f.has("k"):
@@ -60,7 +66,7 @@ func _ready():
 			holder.add_child(h)
 		for _i in 4:
 			await get_tree().process_frame
-		get_viewport().get_texture().get_image().save_png(out + "/side_" + glb + ".png")
+		get_viewport().get_texture().get_image().save_png(out + "/side_" + glb.replace("/", "_") + ".png")
 		holder.queue_free()
 		await get_tree().process_frame
 	get_tree().quit()

@@ -239,12 +239,20 @@ static func _generic(root: Node3D, id: String, t: String, it: Dictionary, rng: R
 				root.add_child(holder)
 				holder.add_child(g)
 				g.transform = Transform3D(mdl[1], Vector3.ZERO)
+				GunPaint.apply(g, mdl[2])
 				# on its side, at life size
 				holder.rotation = Vector3(0, rng.randf() * TAU, PI * 0.5)
 				holder.scale = Vector3.ONE * 0.85
 				holder.position.y = 0.03
 				for c in g.find_children("*", "GeometryInstance3D", true, false):
 					(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				return
+			if it.has("mglb"):
+				var w := (load("res://guns/" + String(it.mglb) + ".glb") as PackedScene).instantiate() as Node3D
+				w.scale = Vector3.ONE * float(it.get("ms", 1.0))
+				w.rotation = Vector3(PI * 0.5, rng.randf() * TAU, 0)
+				w.position.y = 0.03
+				root.add_child(w)
 				return
 			# a blade or club
 			_mesh(root, _box(Vector3(0.42, 0.02, 0.04)), Vector3(0, 0.01, 0), _m("blade", {"base": Color(0.6, 0.6, 0.62), "metal": 0.8, "rough": 0.35, "rust": 0.4}), Vector3(0, rng.randf() * TAU, 0))

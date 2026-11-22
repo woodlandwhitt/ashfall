@@ -18,6 +18,8 @@ func setup(m) -> void:
 	_lights()
 	_doors()
 	_walls()
+	_atrium_walls()
+	_shell()
 	_locker()
 	_great_door()
 
@@ -55,11 +57,14 @@ func _wall_material() -> ShaderMaterial:
 render_mode cull_disabled;
 uniform vec3 paint : source_color = vec3(0.4, 0.45, 0.43);
 uniform float floor_y = -60.0;
+uniform vec3 door_c = vec3(0.0, -1000.0, 0.0);
 varying vec3 wp;
 varying vec3 wn;
 void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz); }
 float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void fragment(){
+	// the old flat door painted into the exported wall: cut out, so the tunnel behind the wheel shows
+	if (length(wp.xy - door_c.xy) < 3.12 && wp.z > door_c.z - 0.3) discard;
 	float u = abs(wn.x) > abs(wn.z) ? wp.z : wp.x;
 	float y = wp.y - floor_y;
 	vec2 p = vec2(u / 1.5, y / 1.2);
@@ -82,7 +87,35 @@ void fragment(){
 	wall_mat = ShaderMaterial.new()
 	wall_mat.shader = sh
 	wall_mat.set_shader_parameter("floor_y", O.y)
+	wall_mat.set_shader_parameter("door_c", O + Vector3(0, 3.05, 90.9))
 	return wall_mat
+
+# the exported concrete shell has the original's flat painted door in its end wall (a black wheel shape that showed
+# once ours rolled away): the same look, with a round hole where the tunnel is
+const SHELL := "d91d753e-ac87"
+var cut_mat: ShaderMaterial
+func _cut_material(src: StandardMaterial3D) -> ShaderMaterial:
+	if cut_mat:
+		return cut_mat
+	var sh := Shader.new()
+	sh.code = """shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform vec4 base : source_color = vec4(1.0);
+uniform vec3 door_c;
+varying vec3 wp;
+void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment(){
+	if (length(wp.xy - door_c.xy) < 3.5 && wp.z > door_c.z - 0.3) discard;
+	ALBEDO = texture(tex, UV).rgb * COLOR.rgb * base.rgb;
+	ROUGHNESS = 0.85;
+}"""
+	cut_mat = ShaderMaterial.new()
+	cut_mat.shader = sh
+	cut_mat.set_shader_parameter("tex", src.albedo_texture)
+	cut_mat.set_shader_parameter("base", src.albedo_color)
+	cut_mat.set_shader_parameter("door_c", O + Vector3(0, 3.05, 90.9))
+	return cut_mat
 
 func brighten(n: Node) -> void:
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
@@ -91,6 +124,9 @@ func brighten(n: Node) -> void:
 			continue
 		for i in mesh.get_surface_count():
 			var m := mesh.surface_get_material(i)
+			if m is StandardMaterial3D and (m as StandardMaterial3D).albedo_texture and SHELL in (m as StandardMaterial3D).albedo_texture.resource_path:
+				(mi as MeshInstance3D).set_surface_override_material(i, _cut_material(m as StandardMaterial3D))
+				continue
 			if m is StandardMaterial3D and (m as StandardMaterial3D).albedo_texture and PLASTER in (m as StandardMaterial3D).albedo_texture.resource_path:
 				(mi as MeshInstance3D).set_surface_override_material(i, _wall_material())
 				continue
@@ -255,6 +291,35 @@ func _walls() -> void:
 			box(Vector3(0.16, 7.1, 0.3), P(sx * 12.1, 3.55, az), steel)
 			az += 2.5
 
+# the export left the rooms' ends open onto the entry atrium (the atrium wall only started above the room ceiling):
+# close them, floor to ceiling, on both sides of the corridor mouth
+func _atrium_walls() -> void:
+	var wm := _wall_material()
+	for side in [[-12.2, -2.0], [2.0, 12.2]]:
+		var x0: float = side[0]
+		var x1: float = side[1]
+		var w := box(Vector3(x1 - x0, WH + 0.1, 0.22), P((x0 + x1) * 0.5, (WH + 0.1) * 0.5, 74.8), wm)
+		w.name = "AtriumWall"
+		var sb := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(x1 - x0, WH + 0.1, 0.22)
+		cs.shape = bs
+		sb.add_child(cs)
+		w.add_child(sb)
+		# the yellow-brown cap rail the other walls carry, on both faces
+		for f in [-1.0, 1.0]:
+			box(Vector3(x1 - x0, 0.1, 0.03), P((x0 + x1) * 0.5, 2.06, 74.8 + f * 0.125), mat(Color(0.55, 0.42, 0.16), 0.2, 0.6))
+
+# a closed shell just outside the whole shelter, painted the walls' colour: wherever two exported wall slabs don't
+# quite meet, the crack shows wall-coloured shadow instead of the black underside of the ground 60 m above
+func _shell() -> void:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color(0.2, 0.23, 0.22)
+	m.cull_mode = BaseMaterial3D.CULL_FRONT
+	box(Vector3(56.0, 8.4, 104.6), P(0, 3.9, 50.7), m).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
 func _process(dt: float) -> void:
 	var who: Array = [Game.player] + main.npcs
 	for d in doors:
@@ -279,18 +344,66 @@ func _great_door() -> void:
 	void_m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	void_m.albedo_color = Color(0.01, 0.01, 0.012)
 	var centre := P(0, 3.05, 90.75)
-	# the dark tunnel behind the wheel, and the frame round it
+	# the tunnel behind the wheel: a bored rock passage with a grated floor and caged lamps, running back toward a
+	# second, sealed bulkhead (it used to be a flat black disc, which showed as a black hole once the wheel rolled away)
+	# rock lit by its own caged lamps (unshaded, so nothing outside can throw light or shadow into it)
+	var rsh := Shader.new()
+	rsh.code = """shader_type spatial;
+render_mode unshaded, cull_disabled;
+uniform float z0;
+varying vec3 wp;
+void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+float n3(vec3 p){ vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y),
+		mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); }
+void fragment(){
+	float n = n3(wp * 1.3) * 0.5 + n3(wp * 4.0) * 0.3 + n3(wp * 11.0) * 0.2;
+	vec3 rock = mix(vec3(0.16, 0.15, 0.13), vec3(0.46, 0.43, 0.38), n);
+	float d = wp.z - z0;
+	float lamp = 0.0;
+	for (int i = 0; i < 3; i++) { float lz = 2.5 + float(i) * 3.4; lamp += exp(-pow(d - lz, 2.0) * 0.18); }
+	float fade = clamp(1.0 - d / 14.0, 0.25, 1.0);
+	ALBEDO = rock * (0.32 + 0.55 * lamp) * fade * vec3(1.0, 0.93, 0.82);
+}"""
+	var rock := ShaderMaterial.new()
+	rock.shader = rsh
+	rock.set_shader_parameter("z0", O.z + 91.1)
+	var tube := MeshInstance3D.new()
+	var tc := CylinderMesh.new()
+	tc.top_radius = 3.45
+	tc.bottom_radius = 3.45
+	tc.height = 11.0
+	tc.cap_top = false
+	tc.cap_bottom = false
+	tc.radial_segments = 28
+	tube.mesh = tc
+	tube.material_override = rock
+	tube.rotation.x = PI / 2
+	tube.position = P(0, 3.05, 96.6)
+	add_child(tube)
+	var grate := mat(Color(0.3, 0.31, 0.3), 0.25, 0.6)
+	box(Vector3(4.4, 0.12, 11.0), P(0, 0.06, 96.6), grate)
+	for z in [93.6, 97.0, 100.4]:
+		box(Vector3(4.4, 0.06, 0.08), P(0, 0.14, z), dark)
+		var lamp := OmniLight3D.new()
+		lamp.light_color = Color(1.0, 0.82, 0.55)
+		lamp.light_energy = 1.1
+		lamp.omni_range = 6.0
+		add_child(lamp)
+		lamp.position = P(2.4, 4.6, z)
+		var lm := StandardMaterial3D.new()
+		lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		lm.albedo_color = Color(1.3, 1.05, 0.7)
+		box(Vector3(0.18, 0.3, 0.18), P(2.55, 4.7, z), lm)
+	# the far bulkhead, shut
+	box(Vector3(6.6, 6.6, 0.3), P(0, 3.05, 102.0), steel)
+	for y in [1.2, 3.05, 4.9]:
+		box(Vector3(6.2, 0.18, 0.1), P(0, y, 101.82), yel)
 	var hole := MeshInstance3D.new()
-	var hc := CylinderMesh.new()
-	hc.top_radius = 3.05
-	hc.bottom_radius = 3.05
-	hc.height = 0.02
-	hc.radial_segments = 40
-	hole.mesh = hc
-	hole.material_override = void_m
-	hole.rotation.x = PI / 2
-	hole.position = P(0, 3.05, 91.08)
+	hole.visible = false
 	add_child(hole)
+	hole.material_override = void_m
 	var ring := MeshInstance3D.new()
 	var tm := TorusMesh.new()
 	tm.inner_radius = 3.1

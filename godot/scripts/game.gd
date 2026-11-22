@@ -492,6 +492,7 @@ func _ready() -> void:
 		"agility": ["AGILITY", "Move speed, reload speed, Action Points"], "luck": ["LUCK", "Critical hit chance, the tables at the Spur"]}
 	L = _json("res://data/logic.json")
 	_merge_story()
+	_merge_arsenal()
 	CELLS = _json("res://data/cells.json")
 	vm = JsVM.new()
 	G = GApi.install(vm, L)
@@ -914,6 +915,29 @@ func spawn_allowed(e: Dictionary) -> bool:
 	return true
 
 var DIALOGUE: Dictionary = {}
+
+# ---------------------------------------------------------------- build 13's arsenal (data/arsenal.json, from tools/arsenal)
+# new guns, melee weapons, grenades and chems, how each model sits in the hand, and which traders and loot carry them
+func _merge_arsenal() -> void:
+	var A: Dictionary = _json("res://data/arsenal.json")
+	for k in A.get("gunfit", {}):
+		DB.gunfit[k] = A.gunfit[k]
+	for k in A.get("grips", {}):
+		Humanoid.grips[k] = A.grips[k]
+	for k in A.get("items", {}):
+		var it: Dictionary = A.items[k]
+		if DB.items.has(k):
+			DB.items[k].merge(it, true)
+		else:
+			DB.items[k] = it
+	for k in A.get("drugs", {}):
+		L.consts.DRUGS[k] = A.drugs[k]
+	for v in A.get("stock", {}):
+		if DB.vendors.has(v):
+			DB.vendors[v].stock.append_array(A.stock[v])
+	for t in A.get("loot", {}):
+		if DB.loot.has(t):
+			DB.loot[t].append_array(A.loot[t])
 
 # ---------------------------------------------------------------- the build 10 story (data/story.json, from tools/story)
 var STORY: Dictionary = {}

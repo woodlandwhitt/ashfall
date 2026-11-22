@@ -57,11 +57,11 @@ func _weapon() -> void:
 		held = null
 	var it := Game.item(Game.weapon)
 	if Game.weapon != "" and String(it.get("kind", "")) != "melee":
-		var mdl: Array = p.model_for(Game.weapon)
+		var mdl: Array = p.world_model(Game.weapon)
 		if not mdl.is_empty():
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
-			held = Humanoid.hold_gun(body, load(mdl[0]), Basis(Vector3.UP, PI / 2.0).scaled(Vector3.ONE * 0.12))
+			held = Humanoid.hold_gun(body, load(mdl[0]), mdl[1], mdl[2])
 
 func update(d: float) -> void:
 	if not on:
