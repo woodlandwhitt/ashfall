@@ -191,6 +191,14 @@ func _physics_process(d: float) -> void:
 	if Game.ap < Game.ap_max:
 		Game.ap = minf(Game.ap_max, Game.ap + d * (5.0 if Game.main.in_combat() else 9.0) * float(fxc.ap))
 	var iv := Game.touch_move
+	if not seat.is_empty():
+		# sitting: any move (or jump) gets you up again
+		var want := iv.length() > 0.3 or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_SPACE)
+		if want and not talking:
+			stand_up()
+		else:
+			velocity = Vector3.ZERO
+			return
 	if not talking:
 		if Input.is_key_pressed(KEY_W): iv.y -= 1
 		if Input.is_key_pressed(KEY_S): iv.y += 1
@@ -247,6 +255,34 @@ func _physics_process(d: float) -> void:
 	if trigger and not talking:
 		fire()
 
+# ---------------------------------------------------------------- sitting down (TownLife seats)
+var seat: Dictionary = {}
+var _seat_from := Vector3.ZERO
+func sit(s: Dictionary) -> void:
+	if not seat.is_empty():
+		return
+	seat = s
+	s.who = self
+	_seat_from = global_position
+	collision_mask = 0
+	var at: Vector3 = s.at
+	global_position = Vector3(at.x, global_position.y, at.z)
+	yaw = float(s.yaw) + PI
+	crouch = false
+	running = false
+	Sfx.play("k_cloth1", -8.0)
+	Game.msg("You sit down. Move to get up.")
+
+func stand_up() -> void:
+	if seat.is_empty():
+		return
+	var p: Vector3 = seat.p
+	seat.who = null
+	seat = {}
+	collision_mask = 1 | 4
+	global_position = Vector3(p.x, global_position.y + 0.05, p.z)
+	Sfx.play("k_cloth1", -10.0)
+
 func toggle_crouch() -> void:
 	crouch = not crouch
 	if crouch:
@@ -276,7 +312,7 @@ func _process(d: float) -> void:
 	var sh := Vector2(randf() - 0.5, randf() - 0.5) * hurt_shake * 0.03
 	cam.rotation = Vector3(pitch + recoil * 0.06 + sh.y, 0, sh.x)
 	rotation.y = yaw
-	eye_h = lerpf(eye_h, EYE * (0.62 if crouch else 1.0), 1.0 - exp(-10.0 * d))
+	eye_h = lerpf(eye_h, (float(seat.seat_h) + 0.72) if not seat.is_empty() else EYE * (0.62 if crouch else 1.0), 1.0 - exp(-10.0 * d))
 	cam.position.y = eye_h + sin(bob * 2.0) * 0.025
 	var hs := Vector2(velocity.x, velocity.z).length()
 	var target := Vector3(sin(bob) * 0.008 * hs * 0.2, absf(cos(bob)) * 0.006 * hs * 0.2, recoil * 0.025)

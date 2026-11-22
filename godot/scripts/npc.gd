@@ -35,6 +35,16 @@ var bark_t := 0.0
 var los := false
 var held: Node3D = null
 var idle_anim := "Idle"
+# a day's routine (TownLife): home -> walking to a spot -> sitting or working there -> back home
+var agent: NavigationAgent3D
+var safe_v := Vector3.ZERO
+var home_yaw := 0.0
+var life := "home"
+var life_t := 20.0
+var spot: Dictionary = {}
+var sit_t := 0.0
+var stuck_t := 0.0
+var last_p := Vector3.ZERO
 
 static func look_colors(look: Dictionary) -> Array:
 	var cloth := Color(0.85, 0.8, 0.72)
@@ -91,6 +101,57 @@ func setup(d: Dictionary) -> void:
 		ap.play(idle_anim)
 		ap.seek(randf() * 2.0, true)
 	target = home
+	home_yaw = face_yaw
+	# walking round furniture and each other: a navigation agent (TownLife bakes the floor it walks on)
+	if ap and not (id in ANIMALS):
+		agent = NavigationAgent3D.new()
+		agent.path_desired_distance = 0.45
+		agent.target_desired_distance = 0.4
+		agent.radius = 0.32
+		agent.height = 1.75
+		agent.avoidance_enabled = true
+		agent.max_speed = 1.6
+		agent.neighbor_distance = 4.0
+		agent.velocity_computed.connect(func(v: Vector3): safe_v = v)
+		add_child(agent)
+		life_t = randf_range(6.0, 30.0)
+		if OS.get_cmdline_user_args().has("--lifefast"):
+			life_t = randf_range(1.0, 3.0)
+		if Game.area == "world" and Game.main and Game.main.town:
+			Game.main.town.bake_outdoor(home)
+	_unwedge.call_deferred()
+
+# placed inside a desk or a counter (where the original game had them stand): step out to the nearest clear floor
+func _unwedge() -> void:
+	if not is_inside_tree():
+		return
+	var tr := get_tree()
+	await tr.physics_frame
+	await tr.physics_frame
+	if not is_inside_tree():
+		return
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsShapeQueryParameters3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.3
+	cap.height = 1.5
+	q.shape = cap
+	q.collision_mask = 1
+	q.exclude = [get_rid()]
+	var test := func(p: Vector3) -> bool:
+		q.transform = Transform3D(Basis(), p + Vector3.UP * 0.95)
+		return space.intersect_shape(q, 1).is_empty()
+	if test.call(global_position):
+		return
+	for r in [0.5, 0.8, 1.1, 1.5, 2.0]:
+		for i in 12:
+			var a := i / 12.0 * TAU + (0.3 if r > 1.0 else 0.0)
+			var p: Vector3 = global_position + Vector3(cos(a), 0, sin(a)) * r
+			if test.call(p):
+				global_position = p
+				home = p
+				target = p
+				return
 
 func _physics_process(d: float) -> void:
 	t += d
@@ -112,6 +173,8 @@ func _physics_process(d: float) -> void:
 	if talking and Game.player:
 		var to := Game.player.global_position - global_position
 		face_yaw = lerp_angle(face_yaw, atan2(to.x, to.z), 1.0 - exp(-6.0 * d))
+	elif agent and not hostile:
+		spd = _life(d)
 	elif wander_r > 0.0:
 		wait -= d
 		var to := target - global_position
@@ -127,6 +190,11 @@ func _physics_process(d: float) -> void:
 			spd = 1.25
 			face_yaw = lerp_angle(face_yaw, atan2(v.x, v.z), 1.0 - exp(-5.0 * d))
 	moving = spd > 0.0
+	if life == "act" and String(spot.get("kind", "")) == "sit":
+		model.rotation.y = face_yaw
+		if near and ap:
+			Humanoid.play(ap, "Sitting_Talking" if talking else ("Sitting_Idle" if sit_t <= 0.0 else "Sitting_Enter"))
+		return
 	# a standing person doesn't need the physics step at all
 	if moving or not is_on_floor():
 		if not moving:
@@ -138,9 +206,90 @@ func _physics_process(d: float) -> void:
 	if not near:
 		return
 	if ap:
-		Humanoid.play(ap, "Idle_Talking" if talking else ("Walk" if moving else idle_anim))
+		var a := "Idle_Talking" if talking else ("Walk" if moving else idle_anim)
+		if life == "act" and not talking and not moving:
+			a = String(spot.get("anim", idle_anim))
+		Humanoid.play(ap, a)
 	elif rig:
 		rig.animate(d, spd, t)
+
+const LIFE_R := 13.0
+func _life(d: float) -> float:
+	life_t -= d
+	var spd := 0.0
+	match life:
+		"home":
+			face_yaw = lerp_angle(face_yaw, home_yaw, 1.0 - exp(-3.0 * d))
+			if life_t <= 0.0:
+				life_t = randf_range(15.0, 40.0)
+				if Game.main.town == null or not Game.main.town.ready_at(global_position):
+					return 0.0
+				# vendors and guards don't stray far from their post
+				var r := 6.0 if (Game.DB.vendors.has(id) or id.begins_with("guard")) else LIFE_R
+				spot = Game.main.town.pick(self, home, r)
+				if spot.is_empty():
+					# nothing to do nearby: stretch the legs somewhere close
+					var map := get_world_3d().navigation_map
+					var a := randf() * TAU
+					var p := NavigationServer3D.map_get_closest_point(map, home + Vector3(cos(a), 0, sin(a)) * randf_range(2.0, 5.0))
+					spot = {"kind": "stand", "p": p, "at": p, "yaw": randf() * TAU, "anim": ["Idle_FoldArms", "Idle", "Idle"][randi() % 3], "who": self}
+				agent.target_position = NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, spot.p)
+				life = "go"
+				stuck_t = 0.0
+				last_p = global_position
+		"go", "back":
+			if agent.is_navigation_finished() or global_position.distance_to(agent.target_position) < 0.45:
+				if life == "go":
+					life = "act"
+					life_t = randf_range(14.0, 40.0)
+					if String(spot.kind) == "sit":
+						sit_t = 1.4
+						collision_layer = 0
+						var tw := create_tween()
+						tw.tween_property(self, "global_position", Vector3(spot.at.x, global_position.y, spot.at.z), 0.5)
+						model.position.y = float(spot.seat_h) - 0.5
+				else:
+					life = "home"
+					life_t = randf_range(20.0, 50.0)
+				return 0.0
+			var nxt := agent.get_next_path_position()
+			var to := nxt - global_position
+			to.y = 0
+			if to.length() > 0.01:
+				var want := to.normalized() * 1.2
+				agent.velocity = want
+				var v := safe_v if safe_v.length() > 0.05 else want
+				velocity = Vector3(v.x, velocity.y, v.z)
+				spd = Vector2(v.x, v.z).length()
+				face_yaw = lerp_angle(face_yaw, atan2(v.x, v.z), 1.0 - exp(-6.0 * d))
+			# stuck (a door shut, someone in the way for good): give up and go home
+			stuck_t += d
+			if stuck_t > 3.0:
+				if global_position.distance_to(last_p) < 0.3:
+					_go_home(true)
+				stuck_t = 0.0
+				last_p = global_position
+		"act":
+			sit_t -= d
+			face_yaw = lerp_angle(face_yaw, float(spot.yaw), 1.0 - exp(-5.0 * d))
+			if life_t <= 0.0 and not talking:
+				_go_home(false)
+	return spd
+
+func _go_home(stuck: bool) -> void:
+	if String(spot.get("kind", "")) == "sit":
+		model.position.y = 0.0
+		collision_layer = 4
+		global_position = Vector3(spot.p.x, global_position.y, spot.p.z) if not stuck else global_position
+	if Game.main and Game.main.town:
+		Game.main.town.release(spot, self)
+	spot = {}
+	if stuck and global_position.distance_to(home) > 1.0 and Game.player and global_position.distance_to(Game.player.global_position) > 15.0:
+		global_position = home
+	life = "back"
+	agent.target_position = home
+	stuck_t = 0.0
+	last_p = global_position
 
 
 # ---------------------------------------------------------------- companions (main.js updParty)

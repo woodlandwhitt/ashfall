@@ -56,8 +56,10 @@ var fy := -60.0
 var lights := 0
 var rect: Rect2
 
-static func room(parent: Node3D, C: Dictionary) -> Node3D:
+var nav_key := ""            # TownLife area the seats and work spots belong to
+static func room(parent: Node3D, C: Dictionary, key := "") -> Node3D:
 	var f := Furnish.new()
+	f.nav_key = key
 	return f._build(parent, C)
 
 # Haven 12: its rooms (found from the walls; x, z ranges relative to the vault's origin), what each one is, and the
@@ -76,6 +78,7 @@ static func vault(parent: Node3D, origin: Vector3) -> Node3D:
 		var R: Array = VAULT_ROOMS[i]
 		var f := Furnish.new()
 		f.no_lights = true
+		f.nav_key = "vault"
 		var rr := Rect2(origin.x + float(R[0]), origin.z + float(R[2]), float(R[1]) - float(R[0]), float(R[3]) - float(R[2]))
 		var dp := Vector2(origin.x + float(R[5][0]), origin.z + float(R[5][1]))
 		f._area(all, rr, String(R[4]), origin.y, [dp], "vault%d" % i)
@@ -197,6 +200,8 @@ func _put(id: String, pos: Vector2, yaw: float, y: float, lit := false) -> Node3
 	n.global_position = Vector3(pos.x, y, pos.y)
 	n.rotation.y = yaw
 	taken.append(_footprint(id, pos, yaw, 0.0))
+	if nav_key != "" and TownLife.inst:
+		TownLife.inst.add_piece(nav_key, id, n)
 	return n
 
 # small things on a piece of furniture: on its top, or (shelving) on its shelves, each one set down on a real
@@ -253,9 +258,11 @@ func _walls(K: Dictionary) -> void:
 		var nrm: Vector2 = s[2]
 		var L := a.distance_to(b)
 		var dir := (b - a) / L
-		var t := rng.randf_range(0.3, 1.2)
+		var t := rng.randf_range(0.6, 2.0)
 		var last := ""
-		while t < L - 0.5:
+		# a real room has a few pieces along a wall, not a showroom's worth
+		var cap := maxi(1, int(L / (4.5 if no_lights else 3.2)))
+		while t < L - 0.5 and cap > 0:
 			var id: String = K.wall[rng.randi() % K.wall.size()]
 			if id == last:
 				id = K.wall[rng.randi() % K.wall.size()]
@@ -267,11 +274,12 @@ func _walls(K: Dictionary) -> void:
 			if _free(id, pos, yaw, fy):
 				_put(id, pos, yaw, fy)
 				if ab.end.y < 1.3 and ab.size.x > 0.5:
-					_on_top(id, pos, yaw, fy, K, rng.randi_range(1, 3))
+					_on_top(id, pos, yaw, fy, K, rng.randi_range(0, 2))
 				elif id in ["Shelf_01", "modern_bookshelf", "modern_sideboard", "ClassicConsole_01"]:
-					_on_top(id, pos, yaw, fy, K, 3, true)
+					_on_top(id, pos, yaw, fy, K, rng.randi_range(1, 2), true)
 				last = id
-				t += along + (rng.randf_range(0.4, 1.8) if no_lights else rng.randf_range(0.08, 0.7))
+				cap -= 1
+				t += along + (rng.randf_range(1.2, 3.2) if no_lights else rng.randf_range(0.5, 1.8))
 			else:
 				t += 0.5
 
@@ -296,7 +304,7 @@ func _junk(kind: String) -> void:
 	var pool := ["k:q_TrashBag_1", "k:q_CinderBlock", "k:g_debris-wood", "k:q_TrashBag_2"]
 	if kind in ["storage", "workshop"]:
 		pool += ["k:q_Pipes", "k:g_shovel-dirt", "k:q_Pallet_Broken", "k:s_barrel-open"]
-	var n := 3 + rng.randi() % 4
+	var n := 2 + rng.randi() % 3
 	var tries := 0
 	while n > 0 and tries < 40:
 		tries += 1
@@ -312,6 +320,8 @@ func _junk(kind: String) -> void:
 # ---------------------------------------------------------------- tables out in the room, chairs round them
 func _tables(K: Dictionary) -> void:
 	var want: int = K.sets
+	if no_lights:
+		want = maxi(1, want / 2)
 	var tries := 0
 	while want > 0 and tries < 60:
 		tries += 1
@@ -330,7 +340,7 @@ func _tables(K: Dictionary) -> void:
 		if not ok:
 			continue
 		_put(tid, p, yaw, fy)
-		_on_top(tid, p, yaw, fy, K, rng.randi_range(1, 3))
+		_on_top(tid, p, yaw, fy, K, rng.randi_range(0, 2))
 		want -= 1
 		# chairs on the long sides (and the ends of a long table), facing in, pushed in a little askew
 		var cid: String = K.chair[rng.randi() % K.chair.size()]
@@ -349,7 +359,7 @@ func _tables(K: Dictionary) -> void:
 
 # ---------------------------------------------------------------- on the walls: pictures, clocks, a dartboard, lamps
 func _decor(K: Dictionary) -> void:
-	var n := 3 + rng.randi() % 3
+	var n := 2 + rng.randi() % 2
 	var tries := 0
 	while n > 0 and tries < 40:
 		tries += 1

@@ -41,9 +41,12 @@ var nav_busy := false
 var disc_t := 1.0
 var auto_t := 180.0
 
+var town: TownLife
 func _ready() -> void:
 	Game.main = self
 	var R: Dictionary = Game.region
+	town = TownLife.new()
+	add_child(town)
 	_environment()
 	_terrain()
 	if vault_dress:
@@ -699,6 +702,7 @@ func _forgive_tick(d: float) -> void:
 	_forgive_t = 1.0
 	_unstick()
 	_furnish_tick()
+	_terminal_desks()
 	for e in enemies.duplicate():
 		if not is_instance_valid(e) or e.dead or e.get("npc") == null:
 			continue
@@ -709,6 +713,83 @@ func _forgive_tick(d: float) -> void:
 			_calm(e)
 			Game.msg(nm + " has calmed down.")
 			Game.flags["forgiven_" + String(e.get("npc_id") if e.get("npc_id") else nm)] = Game.day
+
+# a terminal the original game stood on a desk it drew by itself (so the desk never reached the export) floats in
+# the air: once its chunk is in, look under the terminal's own meshes, and if nothing holds them up, build a steel desk
+var _desked := {}
+func _terminal_desks() -> void:
+	for t in Game.W.get("terminals", []):
+		var id := String(t.id)
+		if _desked.has(id):
+			continue
+		var tp := Vector3(float(t.x), float(t.get("y", Game.height(float(t.x), float(t.z)))), float(t.z))
+		if Vector2(tp.x - player.global_position.x, tp.z - player.global_position.z).length() > 45.0:
+			continue
+		var ck: String = chunks.key_of(tp)
+		if not chunks.loaded.has(ck):
+			continue
+		_desked[id] = true
+		var floor_y: float = Game.height(tp.x, tp.z)
+		var hit0 := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(tp + Vector3.UP * 0.2, tp + Vector3.DOWN * 3.0, 1))
+		if not hit0.is_empty():
+			floor_y = maxf(floor_y, float(hit0.position.y)) if hit0.position.y < tp.y - 0.4 else floor_y
+		var box := AABB()
+		var first := true
+		var others: Array = []
+		for c in (chunks.loaded[ck] as Node).find_children("*", "MeshInstance3D", true, false):
+			var mi := c as MeshInstance3D
+			var ab: AABB = mi.global_transform * mi.get_aabb()
+			if ab.size.length() > 6.0:
+				continue
+			var cc := ab.get_center()
+			if Vector2(cc.x - tp.x, cc.z - tp.z).length() < 0.6 and ab.position.y > floor_y + 0.3 and ab.position.y < tp.y + 0.6:
+				box = ab if first else box.merge(ab)
+				first = false
+			else:
+				others.append(ab)
+		if first:
+			continue
+		var bottom := box.position.y
+		if bottom - floor_y < 0.35:
+			continue
+		var c2 := box.get_center()
+		var probe := Vector3(c2.x, bottom - 0.06, c2.z)
+		var held := not get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(probe + Vector3.UP * 0.05, probe + Vector3.DOWN * 0.12, 1)).is_empty()
+		for ab in others:
+			if (ab as AABB).grow(0.02).has_point(probe):
+				held = true
+		if held:
+			continue
+		var w := maxf(box.size.x + 0.3, 0.9)
+		var dd := maxf(box.size.z + 0.3, 0.6)
+		var h := bottom - floor_y
+		var desk := Node3D.new()
+		desk.name = "TermDesk_" + id
+		add_child(desk)
+		desk.global_position = Vector3(c2.x, floor_y, c2.z)
+		var steel := VaultDress.mat(Color(0.34, 0.36, 0.35), 0.25, 0.55)
+		var dark := VaultDress.mat(Color(0.18, 0.19, 0.19), 0.2, 0.6)
+		var part := func(sz: Vector3, at: Vector3, m: Material) -> void:
+			var mi := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = sz
+			mi.mesh = bm
+			mi.material_override = m
+			mi.position = at
+			desk.add_child(mi)
+		part.call(Vector3(w, 0.04, dd), Vector3(0, h - 0.02, 0), steel)
+		part.call(Vector3(w * 0.42, h - 0.1, dd - 0.06), Vector3(-w * 0.27, (h - 0.1) * 0.5 + 0.06, 0), dark)
+		for sx in [-1.0, 1.0]:
+			part.call(Vector3(0.05, h - 0.04, dd - 0.08), Vector3(sx * (w * 0.5 - 0.04), (h - 0.04) * 0.5, 0), steel)
+		Weathering.apply(desk, 0.6, false, true)
+		var sb := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(w, h, dd)
+		cs.shape = bs
+		cs.position.y = h * 0.5
+		sb.add_child(cs)
+		desk.add_child(sb)
 
 # the room you're standing in gets its furniture (and the one you left gives it back)
 var furnished := -1
@@ -721,8 +802,20 @@ func _furnish_tick() -> void:
 		return
 	if furnish_node and is_instance_valid(furnish_node):
 		furnish_node.queue_free()
+	town.forget("cell%d" % furnished)
 	furnished = c
-	furnish_node = Furnish.room(self, Game.CELLS[c])
+	furnish_node = Furnish.room(self, Game.CELLS[c], "cell%d" % c)
+	_bake_cell.call_deferred(c)
+
+# the room's walkable floor, once its furniture's collision is in
+func _bake_cell(c: int) -> void:
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if c != furnished:
+		return
+	var C: Dictionary = Game.CELLS[c]
+	var y := float(Game.L.consts.CELLS.y)
+	town.bake_box("cell%d" % c, AABB(Vector3(float(C.ox) - float(C.W2) * 0.5 - 1.0, y - 1.0, float(C.oz) - float(C.D2) * 0.5 - 1.0), Vector3(float(C.W2) + 2.0, 4.5, float(C.D2) + 2.0)))
 
 # wedged inside a solid (a wall you slipped through, a tank you spawned into)? step out of its nearest side
 func _unstick() -> void:
@@ -879,6 +972,8 @@ func _test_hooks() -> void:
 			var p: Vector3 = player.global_position + f * (1.3 + (i / 6) * 0.42) + r * ((i % 6) - 2.5) * 0.42
 			m.global_position = Vector3(p.x, Game.height(p.x, p.z), p.z)
 			m.scale = Vector3.ONE * 1.25
+	if args.has("lifelog"):
+		_lifelog()
 	if args.has("opendoor") and vault_dress:
 		vault_dress.open_great_door()
 	if args.has("topdown"):
@@ -2276,11 +2371,22 @@ func _environment() -> void:
 		vault_dress.setup(self)
 		_furnish_vault.call_deferred()
 
+func _lifelog() -> void:
+	while true:
+		await get_tree().create_timer(3.0).timeout
+		var out := []
+		for n in npcs:
+			out.append("%s:%s/%s@%.0f,%.0f" % [n.id, n.life, String(n.spot.get("kind", "-")), n.global_position.x, n.global_position.z])
+		print("LIFE spots=%d keys=%s " % [town.spots.size(), str(town.ready_keys.keys())], " ".join(out))
+
 # Haven 12's rooms get their furniture once the walls (and their collision) are in
 func _furnish_vault() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	Furnish.vault(self, vault_dress.O)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	town.bake_box("vault", AABB(vault_dress.O + Vector3(-28.0, -1.0, -1.0), Vector3(56.0, 5.0, 95.0)))
 
 # ---------------------------------------------------------------- terrain: streamed ground meshes, one physics heightfield
 func _terrain() -> void:
@@ -2574,6 +2680,10 @@ func _best_target() -> Dictionary:
 	if not ob.is_empty() and not door_behind:
 		best = ob
 		bd = float(ob.d)
+	if best.is_empty() and town and player.seat.is_empty():
+		var st := town.seat_near(pp, fwd, 1.9)
+		if not st.is_empty():
+			best = {"k": "seat", "o": st, "label": "Sit down"}
 	if buggy and not buggy.driving:
 		var to := buggy.global_position - pp
 		to.y = 0
@@ -2601,6 +2711,7 @@ func interact() -> void:
 			hud.screens.open_loot(String(e.def.get("name", e.type)), e.loot, func(empty): e.looted = empty)
 		"obj": objects.use(t.o)
 		"buggy": buggy.use()
+		"seat": player.sit(t.o)
 
 # what a dead enemy carries: caps, its own drops and rolls on the shared loot tables (data.js LOOT)
 func loot_for(type: String) -> Array:
