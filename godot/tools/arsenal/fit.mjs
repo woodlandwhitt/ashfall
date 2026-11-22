@@ -24,8 +24,9 @@ const M = {
   'lp_beamer': L(1.05, .26, [0.21, 0.62, 0.55, 0.4], {fb: 'carbine'}),
 };
 const B = (x, k, g, pistol, o = {}) => {
-  M['bl/blaster_' + x] = pistol ? {fit: {k, ry: 0, s: 1.15, rear: .07, sight: .07, pistol: 1, fb: 'pistol', ...o}, grip: g}
-    : {fit: {k, ry: 0, s: 1.0, rear: .25, sight: .07, fb: 'carbine', ...o}, grip: g};
+  // the kit's blasters are toy-chunky: slimmed across and in height, kept long
+  M['bl/blaster_' + x] = pistol ? {fit: {k, kv: [k * 0.68, k * 0.68, k * 0.85], ry: 0, s: 1.15, rear: .07, sight: .07, pistol: 1, fb: 'pistol', ...o}, grip: g}
+    : {fit: {k, kv: [k * 0.62, k * 0.62, k * 0.95], ry: 0, s: 1.0, rear: .1, sight: .05, fb: 'carbine', ...o}, grip: g};
 };
 B('a', 0.9, [0.3, 0.55, 0.7, 0.6]);
 B('b', 0.8, [0.18, 0.6], true);

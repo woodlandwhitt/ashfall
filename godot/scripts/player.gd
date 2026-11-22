@@ -84,7 +84,7 @@ static func model_for(id: String) -> Array:
 	var f: Dictionary = Game.DB.gunfit.get(glb, {})
 	var fit := Basis.IDENTITY
 	if f.has("k"):
-		fit = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(Vector3.ONE * float(f.k))
+		fit = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(_kv(f))
 	# first-person guns are drawn a little larger than life, as in the original
 	fit = fit.scaled(Vector3.ONE * float(f.get("s", 1.0)))
 	var gf := f.duplicate()
@@ -93,13 +93,20 @@ static func model_for(id: String) -> Array:
 		gf["finish"] = it.finish
 	return ["res://guns/" + glb + ".glb", fit, gf]
 
+# a model's scale: one number, or (the chunky blaster-kit guns) slimmed across and kept long
+static func _kv(f: Dictionary) -> Vector3:
+	if f.has("kv"):
+		var v: Array = f.kv
+		return Vector3(float(v[0]), float(v[1]), float(v[2]))
+	return Vector3.ONE * float(f.get("k", 1.0))
+
 # the same model at life size, for a gun held in the world (third person, a body's hands)
 static func world_model(id: String) -> Array:
 	var m := model_for(id)
 	if m.is_empty():
 		return m
 	var f: Dictionary = Game.DB.gunfit.get(String(m[2].glb), {})
-	m[1] = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(Vector3.ONE * float(f.get("k", 1.0)))
+	m[1] = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(_kv(f) if f.has("k") else Vector3.ONE)
 	return m
 
 func weapon_changed() -> void:

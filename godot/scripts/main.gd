@@ -957,6 +957,17 @@ func _test_hooks() -> void:
 			if e:
 				e.face_yaw = atan2(-f.x, -f.z)
 				e.model.rotation.y = e.face_yaw
+	if args.has("fight"):
+		# hostiles a little way off, coming for you (god mode on): checking how they move, aim and shoot
+		Game.dev.god = true
+		var ts := String(args.fight).split(",")
+		var f := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
+		var r := Vector3(cos(player.yaw), 0, -sin(player.yaw))
+		for i in ts.size():
+			var p: Vector3 = player.global_position + f * 11.0 + r * (i - (ts.size() - 1) * 0.5) * 2.5
+			var e = events._enemy(ts[i], p.x, p.z, true)
+			if e:
+				e.state = "chase"
 	if args.has("third"):
 		player.tp.set_on(true)
 	if args.has("itemgrid"):

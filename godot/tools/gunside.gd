@@ -35,7 +35,7 @@ func _ready():
 		var f: Dictionary = gf[glb]
 		var fit := Basis.IDENTITY
 		if f.has("k"):
-			fit = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(Vector3.ONE * float(f.k))
+			fit = Basis(Vector3.UP, float(f.get("ry", 0.0))).scaled(preload("res://scripts/player.gd")._kv(f))
 		var holder := Node3D.new()
 		add_child(holder)
 		var g := (load("res://guns/" + glb + ".glb") as PackedScene).instantiate() as Node3D

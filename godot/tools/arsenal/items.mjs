@@ -80,7 +80,7 @@ const NEW = {
   // ---- melee
   fire_axe: W('Fire Axe', {kind: 'melee', mglb: 'ml/tool_axe', ms: 3.3, two: true, w: 5, v: 90, dmg: 46, rof: 0.75, range: 2.9,
     desc: 'Red paint mostly gone. The edge has been kept sharp by someone who meant it.'}),
-  claw_hammer: W('Claw Hammer', {kind: 'melee', mglb: 'ml/tool_hammer', ms: 2.3, w: 1.5, v: 30, dmg: 24, rof: 0.42, range: 2.4,
+  claw_hammer: W('Claw Hammer', {kind: 'melee', mglb: 'ml/tool_hammer', ms: 1.7, w: 1.5, v: 30, dmg: 24, rof: 0.42, range: 2.4,
     desc: 'Builds a shack, takes it apart, settles a dispute.'}),
   pickaxe: W('Miner\'s Pickaxe', {kind: 'melee', mglb: 'ml/tool_pickaxe', ms: 3.4, two: true, w: 6, v: 80, dmg: 44, rof: 0.85, range: 2.9,
     desc: 'From the Saltpan quarries. Goes through rock; goes through armour.'}),

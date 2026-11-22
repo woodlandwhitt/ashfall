@@ -182,6 +182,13 @@ func _mount(sk: Transform3D, long: bool, bb: AABB, fit: Basis, gf: Dictionary) -
 				sgn = float(a.trim_prefix("--lpalm="))
 		var fy := Vector3(0.55, 0.45, -0.7).normalized()
 		var palm := Vector3(0.45, 0.9, 0.0)
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--lfy="):
+				var v := a.trim_prefix("--lfy=").split(",")
+				fy = Vector3(float(v[0]), float(v[1]), float(v[2])).normalized()
+			if a.begins_with("--lpv="):
+				var v := a.trim_prefix("--lpv=").split(",")
+				palm = Vector3(float(v[0]), float(v[1]), float(v[2]))
 		palm = (palm - fy * palm.dot(fy)).normalized()
 		var lhx := palm * sgn
 		var lb_vm := Basis(lhx, fy, lhx.cross(fy).normalized())
@@ -270,7 +277,7 @@ func setup_melee(armed: bool, id: String) -> void:
 	var vm_from_sk: Transform3D = rig.transform * sk
 	var sk_from_vm := vm_from_sk.affine_inverse()
 	melee_kind = id if armed and id != "" and id != "fists" else "fist"
-	var two := id in ["sledge", "bat"]
+	var two: bool = id in ["sledge", "bat"] or bool(Game.item(id).get("two", false))
 	var grip_vm := Vector3(0.2, -0.24, -0.38) if not two else Vector3(0.17, -0.27, -0.36)
 	if melee_kind == "fist":
 		grip_vm = Vector3(0.15, -0.19, -0.36)
@@ -381,7 +388,25 @@ func _melee_mesh(k: String) -> Node3D:
 		c.height = h
 		c.radial_segments = 10
 		return c
+	var it := Game.item(k)
+	if it.has("mglb"):
+		# a modelled tool or blade (built along +Y with the handle at the origin), held a hand's width up the handle
+		var w := (load("res://guns/" + String(it.mglb) + ".glb") as PackedScene).instantiate() as Node3D
+		var ms := float(it.get("ms", 1.0))
+		w.scale = Vector3.ONE * ms
+		w.position.y = -0.05 * ms * (0.4 if ms < 1.5 else 0.6)
+		Weathering.apply(w, 0.6, false, true)
+		root.add_child(w)
+		return root
 	match k:
+		"lead_pipe":
+			var pm := StandardMaterial3D.new()
+			pm.albedo_color = Color(0.36, 0.37, 0.38)
+			pm.metallic = 0.25
+			pm.roughness = 0.55
+			part.call(cy.call(0.016, 0.016, 0.62), pm, Vector3(0, 0.24, 0))
+			part.call(cy.call(0.024, 0.024, 0.06), pm, Vector3(0, 0.54, 0))
+			part.call(bx.call(0.032, 0.09, 0.032), dark, Vector3(0, 0.0, 0))
 		"combat_knife", "knife":
 			part.call(bx.call(0.026, 0.12, 0.032), dark, Vector3(0, 0.0, 0))
 			part.call(bx.call(0.03, 0.012, 0.075), metal, Vector3(0, 0.066, 0.006))
