@@ -839,6 +839,12 @@ func _test_hooks() -> void:
 		Game.flags["read_sheriff"] = 1
 		Game.rad = 18.0
 		Game.buffs["dr"] = {"amt": 10.0, "t": 60.0}
+		if String(args.pip) == "PARTY":
+			Game.flags["leftVault"] = 1
+			recruit("jory", true)
+			Game.flags["appr_jory"] = 34
+			Game.flags["appr_sable"] = -18
+			Game.start("jory_wagon")
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
 	if args.has("tod"):
@@ -1328,6 +1334,28 @@ func _casino_test() -> void:
 	out.append("gapi casino opens: %s %s" % [str(cz.is_open()), cz.game])
 	cz.close()
 	out.append("closed: paused %s" % str(get_tree().paused))
+	# walking up to the tables in the Spur's hall
+	if Game.area == "world":
+		cz.fast = false
+		player.global_position = Vector3(12, -4.4, 66)
+		chunks.load_now(player.global_position)
+		await _wait(20)
+		for id in ["blackjack", "roulette", "dice", "slots0", "slots2"]:
+			var pt = _obj_point(id)
+			if pt == null:
+				out.append("no point " + id)
+				continue
+			out.append("%s: label '%s'" % [id, str(objects.point_label(pt))])
+			objects.point_use(pt)
+			out.append("  opens %s game %s machine %d" % [str(cz.is_open()), cz.game, cz.machine])
+			cz.close()
+		out.append(_dlg("lou", ["Deal me in"]))
+		out.append("  Lou deals: open %s game %s, dialogue %s" % [str(cz.is_open()), cz.game, str(in_dialog())])
+		cz.close()
+		out.append(_dlg("lou", ["Roll the dice"]))
+		out.append("  dice: open %s game %s" % [str(cz.is_open()), cz.game])
+		cz.close()
+		out.append("hall ambience: music %s crowd %s mix %.2f" % [str(spur_music != null and spur_music.playing), str(spur_crowd != null and spur_crowd.playing), spur_mix])
 	for l in out:
 		print("TEST ", l)
 	get_tree().quit()
