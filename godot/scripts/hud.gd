@@ -232,9 +232,14 @@ func _ready() -> void:
 	root.add_child(term)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
-	pause_panel = _center_panel("Paused\n\nAshfall: Meridian", [["Resume", toggle_pause], ["Graphics", _cycle_gfx], ["Camera: first / third person", func(): Game.player.toggle_view()],
+	pause_panel = _center_panel("Paused", [["Resume", toggle_pause], ["Save game", _save_now], ["Settings", _open_settings],
 		["Developer", func(): toggle_pause(); toggle_dev()], ["Forge mode", func(): toggle_pause(); Game.main.forge.toggle()],
 		["Main menu", func(): toggle_pause(); screens.open_title()]])
+	settings_panel = _center_panel("Settings", [["Graphics", _cycle_gfx], ["Camera: first / third person", func(): Game.player.toggle_view(); _settings_labels()],
+		["DEV button on screen", func(): _flip_setting("dev")], ["FORGE button on screen", func(): _flip_setting("forge")], ["Back", func(): settings_panel.visible = false; pause_panel.visible = true]])
+	settings_panel.offset_top = -260
+	settings_panel.offset_bottom = 260
+	Settings.load_all()
 	_gfx_label()
 
 	Game.message.connect(add_msg)
@@ -487,6 +492,49 @@ func show_dead(on: bool) -> void:
 	dead_panel.visible = on
 	touch.visible = touch_on and not on
 
+# ---------------------------------------------------------------- saving from the pause menu, and settings
+var settings_panel: PanelContainer
+func _save_now() -> void:
+	# the manual slot, kept apart from the autosave so travelling never overwrites it
+	if Game.save_game("1"):
+		Game.msg("Game saved.")
+		Sfx.play("k_click", -6.0)
+		var b := _panel_button(pause_panel, "Save game")
+		if b:
+			b.text = "Saved  (" + Time.get_time_string_from_system().substr(0, 5) + ")"
+	else:
+		Game.msg("Couldn't save here.")
+
+func _panel_button(p: PanelContainer, prefix: String) -> Button:
+	for b in p.get_child(0).get_children():
+		if b is Button and (String(b.text).begins_with(prefix) or (prefix == "Save game" and String(b.text).begins_with("Saved"))):
+			return b
+	return null
+
+func _open_settings() -> void:
+	pause_panel.visible = false
+	settings_panel.visible = true
+	_settings_labels()
+
+func _flip_setting(k: String) -> void:
+	Settings.set_flag(k, not Settings.flag(k))
+	_settings_labels()
+	touch.queue_redraw()
+
+func _settings_labels() -> void:
+	var g := _panel_button(settings_panel, "Graphics")
+	if g and Game.main:
+		g.text = "Graphics: " + Quality.NAMES[Game.main.quality] + "  (tap to change)"
+	var c := _panel_button(settings_panel, "Camera")
+	if c and Game.player:
+		c.text = "Camera: " + ("third person" if Game.player.tp and Game.player.tp.on else "first person")
+	var dv := _panel_button(settings_panel, "DEV button")
+	if dv:
+		dv.text = "DEV button on screen: " + ("ON" if Settings.flag("dev") else "OFF")
+	var fg := _panel_button(settings_panel, "FORGE button")
+	if fg:
+		fg.text = "FORGE button on screen: " + ("ON" if Settings.flag("forge") else "OFF")
+
 func _gfx_button() -> Button:
 	for b in pause_panel.get_child(0).get_children():
 		if b is Button and String(b.text).begins_with("Graphics"):
@@ -497,6 +545,8 @@ func _gfx_label() -> void:
 	var b := _gfx_button()
 	if b and Game.main:
 		b.text = "Graphics: " + Quality.NAMES[Game.main.quality] + "  (tap to change)"
+	if settings_panel:
+		_settings_labels()
 
 func _cycle_gfx() -> void:
 	Game.main.cycle_quality()
@@ -584,6 +634,10 @@ func toggle_pause() -> void:
 	Game.paused = not Game.paused
 	get_tree().paused = Game.paused
 	pause_panel.visible = Game.paused
+	settings_panel.visible = false
+	var sb := _panel_button(pause_panel, "Save game")
+	if sb:
+		sb.text = "Save game"
 	if Game.paused:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		_gfx_label()
@@ -732,7 +786,16 @@ class TouchPad extends Control:
 			"focus": [Vector2(s.x - 370, s.y - 200), 38.0, "FOCUS"],
 			"sneak": [Vector2(470, s.y - 60), 36.0, "SNEAK"],
 			"chem": [Vector2(s.x - 470, s.y - 120), 34.0, "CHEM"],
-		}
+		}.merged(_extra(s))
+
+	# the DEV and FORGE buttons, when Settings puts them on screen
+	func _extra(s: Vector2) -> Dictionary:
+		var x := {}
+		if Settings.flag("dev"):
+			x["dev"] = [Vector2(s.x - 120, 150), 30.0, "DEV"]
+		if Settings.flag("forge"):
+			x["forge"] = [Vector2(s.x - 210, 150), 30.0, "FORGE"]
+		return x
 
 	func _input(e: InputEvent) -> void:
 		if not visible or Game.paused:
@@ -787,6 +850,13 @@ class TouchPad extends Control:
 		if p == null:
 			return
 		var forging: bool = Game.main.forge != null and Game.main.forge.active
+		if k == "dev" or k == "forge":
+			if on:
+				if k == "dev":
+					Game.main.hud.toggle_dev()
+				else:
+					Game.main.forge.toggle()
+			return
 		if forging or Game.dev.noclip:
 			if k == "jump":
 				Game.touch_fly = 1.0 if on else 0.0
