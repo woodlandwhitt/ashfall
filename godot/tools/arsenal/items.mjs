@@ -250,3 +250,33 @@ export const PERKS = {
   rad_child: {n: 'Rad Child', d: 'Radiation heals you: the more you have, the faster you mend.', lvl: 12},
   treasure_hunter: {n: 'Treasure Hunter', d: 'Bodies carry one more find.', lvl: 4},
 };
+
+// ---- build 14: food and drink. heal, rad (radiation added), buff {k: dr|rad|melee|luck|ap, amt, t seconds}
+const F = (n, w, v, heal, desc, o = {}) => ({n, t: 'aid', w, v, heal, desc, food: true, ...o});
+export const FOOD = {
+  roast_molerat: F('Roast Mole Rat', 0.4, 12, 22, 'Restores 22 health. Crackling skin, stringy meat, a little glow in the fat.', {rad: 1}),
+  scorp_tail: F('Fried Scorpion Tail', 0.3, 22, 26, 'Restores 26 health and +10% melee damage for a minute. Venom gland removed. Mostly.', {buff: {k: 'melee', amt: 1.1, t: 60}}),
+  flatbread: F('Corn Flatbread', 0.2, 6, 16, 'Restores 16 health. Saltreach corn, slapped flat and charred.'),
+  smoked_fish: F('Saltreach Smoked Fish', 0.4, 18, 30, 'Restores 30 health. Caught in the salt pans, smoked over driftwood.', {rad: 1}),
+  hollow_shrooms: F('Hollow Mushrooms', 0.2, 4, 8, 'Restores 8 health. They grow in the dark under Hollow, and they glow a little.', {rad: 3}),
+  iguana_stick: F('Iguana-on-a-Stick', 0.3, 10, 20, 'Restores 20 health. Every stall in the valley sells them; every stall swears theirs is the original.'),
+  boar_ribs: F('Boar Ribs', 0.8, 30, 40, 'Restores 40 health and +8 damage resistance for two minutes. Sticky, smoky, enormous.', {buff: {k: 'dr', amt: 8, t: 120}}),
+  pinyon_cake: F('Pinyon Nut Cake', 0.2, 20, 18, 'Restores 18 health and +1 Luck for two minutes. Della bakes them for the high rollers.', {buff: {k: 'luck', amt: 1, t: 120}}),
+  coffee_tin: F('Chicory Coffee', 0.3, 12, 4, 'Restores 4 health and Action Points come back faster for three minutes. Bitter as a debt.', {buff: {k: 'ap', amt: 0.3, t: 180}}),
+  canned_beans: F('Canned Beans', 0.5, 7, 20, 'Restores 20 health. Prewar, dented, eaten cold with a knife.', {rad: 2}),
+  dust_pops: F('Dust Pops Cereal', 0.3, 9, 12, 'Restores 12 health, and more Action Points for a minute. Sugar that survived the end of the world.', {rad: 3, buff: {k: 'ap', amt: 0.2, t: 60}}),
+  vulture_omelette: F('Vulture Egg Omelette', 0.4, 24, 35, 'Restores 35 health. You don\'t want to know how big the egg was.'),
+  rad_tea: F('Lead-Root Tea', 0.3, 20, 6, 'Restores 6 health and halves radiation taken for two minutes.', {buff: {k: 'rad', amt: 0.5, t: 120}}),
+  cactus_water: F('Spiced Cactus Water', 0.5, 10, 14, 'Restores 14 health. Clean, cool, a kick of chilli.'),
+  prewar_cola: F('Sun Pop Classic', 0.4, 14, 12, 'Restores 12 health. The original recipe. Slightly radioactive, as it always was.', {rad: 2}),
+  hunter_stew: F("Hunter's Stew", 0.8, 40, 55, "Restores 55 health and +15% melee damage for two minutes. Whatever the hunter caught, and a lot of it.", {buff: {k: 'melee', amt: 1.15, t: 120}}),
+};
+Object.assign(ITEMS, FOOD);
+(STOCK.cass ||= []).push(['roast_molerat', 4], ['flatbread', 6], ['iguana_stick', 6], ['canned_beans', 4], ['cactus_water', 5], ['coffee_tin', 3]);
+(STOCK.hollis ||= []).push(['boar_ribs', 3], ['hunter_stew', 2], ['vulture_omelette', 2], ['scorp_tail', 3]);
+(STOCK.della ||= []).push(['pinyon_cake', 4], ['prewar_cola', 4]);
+(STOCK.ezra ||= []).push(['smoked_fish', 4], ['flatbread', 4], ['rad_tea', 2]);
+(STOCK.hale ||= []).push(['smoked_fish', 3], ['hunter_stew', 2], ['coffee_tin', 2]);
+(STOCK.halloran ||= []).push(['rad_tea', 3]);
+LOOT.common.push(['canned_beans', 1, 2], ['dust_pops', 1, 1], ['prewar_cola', 1, 1], ['hollow_shrooms', 1, 2], ['iguana_stick', 1, 1]);
+LOOT.uncommon.push(['roast_molerat', 1, 1], ['smoked_fish', 1, 1], ['rad_tea', 1, 1], ['coffee_tin', 1, 1]);

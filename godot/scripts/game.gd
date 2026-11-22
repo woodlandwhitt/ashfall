@@ -217,7 +217,7 @@ func use_item(id: String) -> void:
 				rad = maxf(0.0, rad - float(it.radx))
 				msg("Radiation flushed (" + str(int(rad)) + " left)")
 			if it.get("buff"):
-				buffs[String(it.buff.k)] = {"amt": float(it.buff.amt), "t": float(it.buff.t)}
+				buffs[String(it.buff.k)] = {"amt": float(it.buff.amt), "t": float(it.buff.t), "n": String(it.get("n", ""))}
 			msg("Used " + iname(id) + (" (+" + str(int(heal)) + " HP)" if heal > 0 else ""))
 			Sfx.play("o_coin", -12.0, 1.6)
 	stats_changed.emit()
@@ -325,8 +325,9 @@ func body_tick(dt: float) -> void:
 	for k in buffs.keys():
 		buffs[k].t = float(buffs[k].t) - dt
 		if float(buffs[k].t) <= 0.0:
+			var nm := String(buffs[k].get("n", ""))
 			buffs.erase(k)
-			msg({"dr": "Numb", "rad": "Lead Tabs", "melee": "Rotgut", "luck": "Lucky Sour", "ap": "Prickly Pop"}.get(k, k) + " wore off.")
+			msg((nm if nm != "" else {"dr": "Numb", "rad": "Lead Tabs", "melee": "Rotgut", "luck": "Lucky Sour", "ap": "Prickly Pop"}.get(k, k)) + " wore off.")
 	for k in drugs.keys():
 		var d: Dictionary = drugs[k]
 		var D: Dictionary = L.consts.DRUGS.get(k, {})
