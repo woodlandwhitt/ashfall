@@ -3,6 +3,9 @@
 # the furniture and each other instead of through them. Furnished rooms register "spots": chairs to sit in, desks,
 # shelves, benches and planters to work at. Each person spends a while at home, goes to a free spot near it, sits or
 # works there for a bit, and comes back (npc.gd's life loop). Chairs work for you too: look at one and USE.
+# Townspeople walk on their own navigation map, apart from the coarse one hostiles hunt you on (main.gd's _bake_nav):
+# the two need different detail, and Godot wants every mesh on a map baked at the map's cell size. Outdoors the
+# valley is baked in 32 m tiles that line up edge to edge (a border is baked and trimmed, so neighbours join).
 class_name TownLife
 extends Node
 
@@ -20,19 +23,53 @@ const USE := {
 var spots: Array = []        # {p: approach point, at: where the body goes, yaw, kind: "sit"/"use", anim, seat_h, node, who}
 var regions := {}            # key -> NavigationRegion3D
 var ready_keys := {}         # key -> true once its mesh is baked
-var _world_cells := {}       # outdoor patches already baked
+var _world_cells := {}       # outdoor tiles already baked
+var map: RID                 # the townspeople's own navigation map
+const CELL := 0.1
+const CELL_H := 0.05
+const TILE := 32.0
+var obstacle: NavigationObstacle3D   # you: people step round you
+var _near_t := 0.0
 
 func _ready() -> void:
 	inst = self
-	var map := get_viewport().find_world_3d().navigation_map
-	NavigationServer3D.map_set_cell_size(map, 0.1)
-	NavigationServer3D.map_set_cell_height(map, 0.05)
-	NavigationServer3D.map_set_edge_connection_margin(map, 0.3)
+	map = NavigationServer3D.map_create()
+	NavigationServer3D.map_set_up(map, Vector3.UP)
+	NavigationServer3D.map_set_cell_size(map, CELL)
+	NavigationServer3D.map_set_cell_height(map, CELL_H)
+	NavigationServer3D.map_set_edge_connection_margin(map, 0.35)
+	NavigationServer3D.map_set_link_connection_radius(map, 0.5)
+	NavigationServer3D.map_set_active(map, true)
+
+func _exit_tree() -> void:
+	if map.is_valid():
+		NavigationServer3D.map_set_active(map, false)
+
+func _process(_d: float) -> void:
+	# a moving obstacle on the player, so a person walking your way steps aside instead of into you
+	if obstacle == null and Game.player and Game.player.is_inside_tree():
+		obstacle = NavigationObstacle3D.new()
+		obstacle.radius = 0.45
+		obstacle.height = 1.8
+		obstacle.avoidance_enabled = true
+		Game.player.add_child(obstacle)
+		obstacle.set_navigation_map(map)
+	elif obstacle and Game.player:
+		obstacle.velocity = Game.player.velocity
+		# with company along outdoors, the ground round you gets baked too, so they can find their way after you
+		_near_t -= _d
+		if _near_t <= 0.0 and Game.area == "world" and Game.main and not Game.main.party.is_empty():
+			_near_t = 2.0
+			bake_outdoor(Game.player.global_position)
+
+# an agent (a townsperson) put on the townspeople's map
+func adopt(agent: NavigationAgent3D) -> void:
+	agent.set_navigation_map(map)
 
 static func _mesh() -> NavigationMesh:
 	var nm := NavigationMesh.new()
-	nm.cell_size = 0.1
-	nm.cell_height = 0.05
+	nm.cell_size = CELL
+	nm.cell_height = CELL_H
 	nm.agent_radius = 0.3
 	nm.agent_height = 1.7
 	nm.agent_max_climb = 0.3
@@ -53,53 +90,123 @@ func bake_box(key: String, box: AABB) -> void:
 	NavigationServer3D.parse_source_geometry_data(nm, src, Game.main)
 	_bake(key, nm, src)
 
-# outdoors: the ground from the heightfield (a metre grid) and the buildings' solid boxes, round a point
-func bake_outdoor(at: Vector3) -> void:
-	var cx := floori(at.x / 40.0)
-	var cz := floori(at.z / 40.0)
+# outdoors: the ground from the heightfield (half-metre grid) and the buildings' solid boxes, one 32 m tile at a
+# time; tiles are baked with a 2 m border that is trimmed off, so neighbouring tiles share their edges exactly
+func bake_outdoor(at: Vector3, reach := 1) -> void:
+	var cx := floori(at.x / TILE)
+	var cz := floori(at.z / TILE)
+	for di in range(-reach, reach + 1):
+		for dj in range(-reach, reach + 1):
+			_tile(cx + di, cz + dj)
+
+func _tile(cx: int, cz: int) -> void:
 	var key := "w%d_%d" % [cx, cz]
 	if _world_cells.has(key):
 		return
 	_world_cells[key] = true
-	var x0 := cx * 40.0 - 6.0
-	var z0 := cz * 40.0 - 6.0
-	var size := 52.0
+	var border := 2.0
+	var x0 := cx * TILE - border - 1.0
+	var z0 := cz * TILE - border - 1.0
+	var size := TILE + (border + 1.0) * 2.0
 	var nm := _mesh()
-	nm.cell_size = 0.2
-	nm.cell_height = 0.1
 	nm.agent_max_climb = 0.45
+	nm.border_size = border
 	var src := NavigationMeshSourceGeometryData3D.new()
 	var f := PackedVector3Array()
-	var n := int(size)
-	var hy := func(x: float, z: float) -> Vector3: return Vector3(x, Game.height(x, z), z)
+	var step := 0.5
+	var n := int(size / step)
 	for i in n:
 		for j in n:
-			var a: Vector3 = hy.call(x0 + i, z0 + j)
-			var b: Vector3 = hy.call(x0 + i + 1, z0 + j)
-			var c: Vector3 = hy.call(x0 + i, z0 + j + 1)
-			var d: Vector3 = hy.call(x0 + i + 1, z0 + j + 1)
-			f.append_array([a, c, b, b, c, d])
+			var x := x0 + i * step
+			var z := z0 + j * step
+			var a := Vector3(x, Game.height(x, z), z)
+			var b := Vector3(x + step, Game.height(x + step, z), z)
+			var c := Vector3(x, Game.height(x, z + step), z + step)
+			var d := Vector3(x + step, Game.height(x + step, z + step), z + step)
+			f.append_array([a, b, c, b, d, c])
 	src.add_faces(f, Transform3D.IDENTITY)
 	var r := Rect2(x0, z0, size, size)
 	for s in Game.region.get("solids", []):
 		var sr := Rect2(float(s[0]), float(s[2]), float(s[1]) - float(s[0]), float(s[3]) - float(s[2]))
 		if not r.intersects(sr):
 			continue
-		var bm := BoxMesh.new()
-		bm.size = Vector3(sr.size.x, float(s[5]) - float(s[4]), sr.size.y)
-		src.add_mesh(bm, Transform3D(Basis(), Vector3(sr.get_center().x, (float(s[4]) + float(s[5])) * 0.5, sr.get_center().y)))
-	nm.filter_baking_aabb = AABB(Vector3(x0, -200, z0), Vector3(size, 600, size))
+		src.add_faces(Game.main._box_faces(Vector3(s[0], s[4], s[2]), Vector3(s[1], s[5], s[3])), Transform3D.IDENTITY)
+	nm.filter_baking_aabb = AABB(Vector3(cx * TILE - border, -400, cz * TILE - border), Vector3(TILE + border * 2.0, 800, TILE + border * 2.0))
 	_bake(key, nm, src)
+	# the town's own gathering places in this tile: the well, the notice board, the gaming tables
+	var tile := Rect2(cx * TILE, cz * TILE, TILE, TILE)
+	for pt in Game.W.get("points", []):
+		var id := String(pt.get("id", ""))
+		if not id in ["well", "saltwell", "board", "blackjack", "dice", "roulette", "slots0", "slots1", "slots2", "slots3"]:
+			continue
+		var pp := Vector3(float(pt.x), float(pt.get("y", Game.height(float(pt.x), float(pt.z)))), float(pt.z))
+		if not tile.has_point(Vector2(pp.x, pp.z)):
+			continue
+		var anim := "Interact" if id in ["well", "saltwell"] else ("Idle_FoldArms" if id == "board" else "Idle")
+		for k in (2 if id in ["well", "saltwell", "board"] else 1):
+			var a := randf() * TAU + k * PI
+			add_point_spot(key, pp + Vector3(cos(a), 0, sin(a)) * 1.1, pp, anim)
 
 func _bake(key: String, nm: NavigationMesh, src: NavigationMeshSourceGeometryData3D) -> void:
 	var reg := NavigationRegion3D.new()
 	reg.name = "Nav_" + key
 	add_child(reg)
+	reg.set_navigation_map(map)
 	regions[key] = reg
 	NavigationServer3D.bake_from_source_geometry_data_async(nm, src, func():
 		if is_instance_valid(reg):
 			reg.navigation_mesh = nm
-			ready_keys[key] = true)
+			ready_keys[key] = true
+			if debug_on:
+				_draw(reg))
+
+# ---------------------------------------------------------------- seeing it (Developer menu)
+static var debug_on := false
+func show_debug(on: bool) -> void:
+	debug_on = on
+	for k in regions:
+		var reg: NavigationRegion3D = regions[k]
+		var old := reg.get_node_or_null("Debug")
+		if old:
+			old.queue_free()
+		if on and reg.navigation_mesh:
+			_draw(reg)
+
+# the walkable polygons in translucent green, their edges darker, lifted a little off the floor
+func _draw(reg: NavigationRegion3D) -> void:
+	var nm := reg.navigation_mesh
+	var verts := nm.get_vertices()
+	var im := ImmediateMesh.new()
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in nm.get_polygon_count():
+		var poly := nm.get_polygon(i)
+		for k in range(1, poly.size() - 1):
+			for idx in [poly[0], poly[k], poly[k + 1]]:
+				im.surface_add_vertex(verts[idx] + Vector3.UP * 0.06)
+	im.surface_end()
+	im.surface_begin(Mesh.PRIMITIVE_LINES)
+	for i in nm.get_polygon_count():
+		var poly := nm.get_polygon(i)
+		for k in poly.size():
+			im.surface_add_vertex(verts[poly[k]] + Vector3.UP * 0.08)
+			im.surface_add_vertex(verts[poly[(k + 1) % poly.size()]] + Vector3.UP * 0.08)
+	im.surface_end()
+	var mi := MeshInstance3D.new()
+	mi.name = "Debug"
+	mi.mesh = im
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.2, 1.0, 0.4, 0.28)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.no_depth_test = false
+	mi.material_override = m
+	var lm := StandardMaterial3D.new()
+	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lm.albedo_color = Color(0.05, 0.4, 0.15)
+	mi.set_surface_override_material(1, lm)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	reg.add_child(mi)
 
 func forget(key: String) -> void:
 	if regions.has(key):
@@ -132,6 +239,21 @@ func add_piece(key: String, id: String, node: Node3D) -> void:
 		spots.append({"key": key, "kind": "use", "node": node, "yaw": yaw + PI, "seat_h": 0.0,
 			"at": base + fwd * reach, "p": base + fwd * reach, "anim": USE[id], "who": null})
 
+# somewhere to stand facing something (a well, a fire, a notice board)
+func add_point_spot(key: String, at: Vector3, look: Vector3, anim: String) -> void:
+	var to := look - at
+	spots.append({"key": key, "kind": "use", "node": null, "yaw": atan2(to.x, to.z), "seat_h": 0.0, "at": at, "p": at, "anim": anim, "who": null})
+
+# a fire: a few places round it to stand and warm your hands
+func add_fire(pos: Vector3, size: float) -> void:
+	var key := "fire_%d_%d" % [roundi(pos.x), roundi(pos.z)]
+	for s in spots:
+		if String(s.key) == key:
+			return
+	for k in 3:
+		var a := k * TAU / 3.0 + randf() * 0.5
+		add_point_spot(key, pos + Vector3(cos(a), 0, sin(a)) * (1.1 + size * 0.5), pos, "Idle_FoldArms" if k == 1 else "Idle")
+
 # a free spot near home that this person can walk to
 func pick(npc, home: Vector3, radius: float) -> Dictionary:
 	var best := {}
@@ -139,7 +261,7 @@ func pick(npc, home: Vector3, radius: float) -> Dictionary:
 	for s in spots:
 		if s.who != null and is_instance_valid(s.who) and s.who != npc:
 			continue
-		if not is_instance_valid(s.node):
+		if s.node != null and not is_instance_valid(s.node):
 			continue
 		var d: float = (s.p as Vector3).distance_to(home)
 		if d > radius or absf((s.p as Vector3).y - home.y) > 1.5:
@@ -155,6 +277,17 @@ func pick(npc, home: Vector3, radius: float) -> Dictionary:
 	best.who = npc
 	return best
 
+# two neighbours stopping for a word: a spot for each, a pace apart, facing each other
+func chat_spots(a: Vector3, b: Vector3) -> Array:
+	var mid := (a + b) * 0.5
+	var dir := (b - a)
+	dir.y = 0
+	dir = dir.normalized() if dir.length() > 0.1 else Vector3.FORWARD
+	var pa := closest(mid - dir * 0.6)
+	var pb := closest(mid + dir * 0.6)
+	return [{"key": "chat", "kind": "chat", "node": null, "yaw": atan2(dir.x, dir.z), "seat_h": 0.0, "at": pa, "p": pa, "anim": "Idle_Talking", "who": null},
+		{"key": "chat", "kind": "chat", "node": null, "yaw": atan2(-dir.x, -dir.z), "seat_h": 0.0, "at": pb, "p": pb, "anim": "Idle_Talking", "who": null}]
+
 func release(s: Dictionary, npc) -> void:
 	if not s.is_empty() and s.get("who") == npc:
 		s.who = null
@@ -164,7 +297,7 @@ func seat_near(p: Vector3, fwd: Vector3, maxd: float) -> Dictionary:
 	var best := {}
 	var bd := maxd
 	for s in spots:
-		if String(s.kind) != "sit" or not is_instance_valid(s.node) or (s.who != null and is_instance_valid(s.who)):
+		if String(s.kind) != "sit" or s.node == null or not is_instance_valid(s.node) or (s.who != null and is_instance_valid(s.who)):
 			continue
 		var to: Vector3 = (s.at as Vector3) - p
 		to.y = 0
@@ -181,8 +314,10 @@ func seat_near(p: Vector3, fwd: Vector3, maxd: float) -> Dictionary:
 
 # whether there's a walkable mesh under a point yet (people stay put until the bake for their place finishes)
 func ready_at(p: Vector3) -> bool:
-	var map := get_viewport().find_world_3d().navigation_map
 	if NavigationServer3D.map_get_iteration_id(map) == 0:
 		return false
 	var c := NavigationServer3D.map_get_closest_point(map, p)
 	return c.distance_to(p) < 1.2
+
+func closest(p: Vector3) -> Vector3:
+	return NavigationServer3D.map_get_closest_point(map, p)

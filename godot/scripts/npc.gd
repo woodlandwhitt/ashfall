@@ -45,6 +45,7 @@ var life_t := 20.0
 var spot: Dictionary = {}
 var sit_t := 0.0
 var stuck_t := 0.0
+var stuck_n := 0
 var last_p := Vector3.ZERO
 
 static func look_colors(look: Dictionary) -> Array:
@@ -115,6 +116,8 @@ func setup(d: Dictionary) -> void:
 		agent.neighbor_distance = 4.0
 		agent.velocity_computed.connect(func(v: Vector3): safe_v = v)
 		add_child(agent)
+		if Game.main and Game.main.town:
+			Game.main.town.adopt(agent)
 		life_t = randf_range(6.0, 30.0)
 		if OS.get_cmdline_user_args().has("--lifefast"):
 			life_t = randf_range(1.0, 3.0)
@@ -210,14 +213,26 @@ func _life(d: float) -> float:
 					return 0.0
 				# vendors and guards don't stray far from their post
 				var r := 6.0 if (Game.DB.vendors.has(id) or id.begins_with("guard")) else LIFE_R
-				spot = Game.main.town.pick(self, home, r)
+				spot = {}
+				# now and then, a word with a neighbour who's at home too
+				if randf() < 0.35:
+					var mate = _neighbour(10.0)
+					if mate:
+						var cs: Array = Game.main.town.chat_spots(global_position, mate.global_position)
+						cs[0].who = self
+						cs[1].who = mate
+						cs[0]["mate"] = mate
+						cs[1]["mate"] = self
+						mate.invite(cs[1])
+						spot = cs[0]
+				if spot.is_empty():
+					spot = Game.main.town.pick(self, home, r)
 				if spot.is_empty():
 					# nothing to do nearby: stretch the legs somewhere close
-					var map := get_world_3d().navigation_map
 					var a := randf() * TAU
-					var p := NavigationServer3D.map_get_closest_point(map, home + Vector3(cos(a), 0, sin(a)) * randf_range(2.0, 5.0))
+					var p: Vector3 = Game.main.town.closest(home + Vector3(cos(a), 0, sin(a)) * randf_range(2.0, 5.0))
 					spot = {"kind": "stand", "p": p, "at": p, "yaw": randf() * TAU, "anim": ["Idle_FoldArms", "Idle", "Idle"][randi() % 3], "who": self}
-				agent.target_position = NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, spot.p)
+				agent.target_position = Game.main.town.closest(spot.p)
 				life = "go"
 				stuck_t = 0.0
 				last_p = global_position
@@ -226,6 +241,8 @@ func _life(d: float) -> float:
 				if life == "go":
 					life = "act"
 					life_t = randf_range(14.0, 40.0)
+					if String(spot.kind) == "chat":
+						life_t = 18.0
 					if String(spot.kind) == "sit":
 						sit_t = 1.4
 						collision_layer = 0
@@ -234,6 +251,7 @@ func _life(d: float) -> float:
 						model.position.y = float(spot.seat_h) - 0.5
 				else:
 					life = "home"
+					stuck_n = 0
 					life_t = randf_range(20.0, 50.0)
 				return 0.0
 			var nxt := agent.get_next_path_position()
@@ -256,9 +274,49 @@ func _life(d: float) -> float:
 		"act":
 			sit_t -= d
 			face_yaw = lerp_angle(face_yaw, float(spot.yaw), 1.0 - exp(-5.0 * d))
+			# a chat partner who wandered off (or was never coming) ends the chat
+			if String(spot.get("kind", "")) == "chat":
+				var m = spot.get("mate")
+				if m == null or not is_instance_valid(m) or m.spot.get("mate") != self:
+					life_t = minf(life_t, 0.0)
 			if life_t <= 0.0 and not talking:
 				_go_home(false)
 	return spd
+
+# the way toward a goal round walls and furniture, where the townspeople's map has been baked; straight otherwise
+var _repath := 0.0
+func _path_dir(goal: Vector3, straight: Vector3) -> Vector3:
+	if agent == null or Game.main == null or Game.main.town == null or not Game.main.town.ready_at(global_position):
+		return straight
+	_repath -= get_physics_process_delta_time()
+	if _repath <= 0.0:
+		agent.target_position = goal
+		_repath = 0.35
+	if agent.is_navigation_finished():
+		return straight
+	var nxt := agent.get_next_path_position() - global_position
+	nxt.y = 0
+	return nxt.normalized() if nxt.length() > 0.05 else straight
+
+# another townsperson at home nearby, free to talk
+func _neighbour(r: float):
+	for n in Game.main.npcs:
+		if n == self or not is_instance_valid(n) or n.follow or n.hostile or n.talking or n.get("agent") == null:
+			continue
+		if n.life != "home" or n.global_position.distance_to(global_position) > r:
+			continue
+		return n
+	return null
+
+# called by a neighbour who wants a word: walk over to the spot they picked
+func invite(s: Dictionary) -> void:
+	if life != "home":
+		return
+	spot = s
+	life = "go"
+	agent.target_position = s.p
+	stuck_t = 0.0
+	last_p = global_position
 
 func _go_home(stuck: bool) -> void:
 	if String(spot.get("kind", "")) == "sit":
@@ -268,8 +326,15 @@ func _go_home(stuck: bool) -> void:
 	if Game.main and Game.main.town:
 		Game.main.town.release(spot, self)
 	spot = {}
-	if stuck and global_position.distance_to(home) > 1.0 and Game.player and global_position.distance_to(Game.player.global_position) > 15.0:
-		global_position = home
+	if stuck:
+		stuck_n += 1
+	# stuck for good: back home, as long as you're not looking (or it's happened a few times)
+	if stuck and global_position.distance_to(home) > 1.0 and Game.player:
+		var to_me: Vector3 = global_position - Game.player.global_position
+		var seen: bool = to_me.length() < 25.0 and (-Game.player.cam.global_basis.z).dot(to_me.normalized()) > 0.3
+		if not seen or stuck_n >= 4:
+			global_position = home
+			stuck_n = 0
 	life = "back"
 	agent.target_position = home
 	stuck_t = 0.0
@@ -430,9 +495,9 @@ func _companion(d: float) -> void:
 		if dd > 40.0:
 			global_position = Vector3(goal.x, Game.height(goal.x, goal.z) + 0.2, goal.z)
 		elif dd > 1.1:
-			mv = to / dd
+			mv = _path_dir(goal, to / dd)
 			spd = cspd if dd > 6.0 else (cspd * 0.7 if dd > 2.5 else cspd * 0.4)
-			face_yaw = atan2(to.x, to.z)
+			face_yaw = atan2(mv.x, mv.z)
 		else:
 			var tp := pp - global_position
 			face_yaw = lerp_angle(face_yaw, atan2(tp.x, tp.z), minf(1.0, d * 2.0))

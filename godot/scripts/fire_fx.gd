@@ -48,6 +48,9 @@ func _settle() -> void:
 		if not moved:
 			scale = Vector3.ONE * 0.45
 	global_position = p
+	# somewhere for townsfolk to stand and warm their hands
+	if Game.main and Game.main.get("town") and Game.area != "vault":
+		Game.main.town.add_fire(p, size * scale.x)
 
 # something drawn right under the fire (a barrel's rim, a brazier) holds it up even without collision of its own
 func _held_up(p: Vector3) -> bool:

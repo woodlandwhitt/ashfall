@@ -227,6 +227,9 @@ func _world() -> void:
 	g = _row("Day length", "x%s" % str(Game.dev.dayrate))
 	for r in [0.0, 1.0, 10.0, 60.0]:
 		_btn(g, "STOP" if r == 0.0 else "x" + str(int(r)), func(): Game.dev.dayrate = r, is_equal_approx(float(Game.dev.dayrate), r))
+	g = _row("Townspeople's navmesh", "%d areas baked, %d spots" % [Game.main.town.ready_keys.size(), Game.main.town.spots.size()] if Game.main.town else "")
+	_btn(g, "SHOW" if not TownLife.debug_on else "HIDE", func(): Game.main.town.show_debug(not TownLife.debug_on); _refresh(), TownLife.debug_on)
+	_btn(g, "BAKE HERE", func(): Game.main.town.bake_outdoor(Game.player.global_position); _refresh())
 	g = _row("Game speed", "x%s" % str(Engine.time_scale))
 	for r in [0.25, 0.5, 1.0, 2.0, 4.0]:
 		_btn(g, "x" + str(r), func(): Engine.time_scale = r; Game.dev.timescale = r, is_equal_approx(Engine.time_scale, r))

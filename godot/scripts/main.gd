@@ -984,6 +984,8 @@ func _test_hooks() -> void:
 			var p: Vector3 = player.global_position + f * (1.3 + (i / 6) * 0.42) + r * ((i % 6) - 2.5) * 0.42
 			m.global_position = Vector3(p.x, Game.height(p.x, p.z), p.z)
 			m.scale = Vector3.ONE * 1.25
+	if args.has("navshow"):
+		TownLife.debug_on = true
 	if args.has("lifelog"):
 		_lifelog()
 	if args.has("raytest"):
