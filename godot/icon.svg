@@ -1,8 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-<rect width="128" height="128" rx="22" fill="#2a1f16"/>
-<circle cx="64" cy="70" r="40" fill="#c8742a"/>
-<path d="M14 92 L44 70 L58 80 L80 56 L114 92 Z" fill="#1a130d"/>
-<rect x="60" y="30" width="8" height="34" fill="#f2d28a"/>
-<rect x="50" y="26" width="28" height="7" fill="#f2d28a"/>
-<text x="64" y="118" font-family="sans-serif" font-size="15" font-weight="700" fill="#f2d28a" text-anchor="middle">GODOT</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Ashfall: Meridian. A low ember sun through ash haze, the valley's ridge, the relay tower, ash drifting down. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1411"/>
+      <stop offset="0.55" stop-color="#5a2a17"/>
+      <stop offset="0.8" stop-color="#b5541f"/>
+      <stop offset="1" stop-color="#e08a35"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff1c2"/>
+      <stop offset="0.45" stop-color="#ffc861"/>
+      <stop offset="1" stop-color="#e0752a"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.55">
+      <stop offset="0" stop-color="#ffb357" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffb357" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile"><rect width="512" height="512" rx="96"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="url(#sky)"/>
+    <rect width="512" height="512" fill="url(#glow)"/>
+    <circle cx="256" cy="318" r="118" fill="url(#sun)"/>
+    <!-- haze bands across the sun -->
+    <rect x="146" y="290" width="220" height="9" fill="#c4612a" opacity="0.55"/>
+    <rect x="152" y="318" width="208" height="7" fill="#b8572a" opacity="0.5"/>
+    <rect x="160" y="342" width="192" height="6" fill="#a84d27" opacity="0.45"/>
+    <!-- far ridge, near ridge -->
+    <path d="M0 372 L58 336 L104 356 L162 318 L214 350 L262 330 L318 360 L372 322 L428 352 L470 334 L512 350 L512 512 L0 512 Z" fill="#3a1d12"/>
+    <path d="M0 418 L70 386 L132 404 L190 378 L250 402 L300 390 L360 414 L420 384 L470 400 L512 392 L512 512 L0 512 Z" fill="#160d09"/>
+    <!-- the relay tower -->
+    <g stroke="#160d09" stroke-width="7" stroke-linecap="square" fill="none">
+      <path d="M318 404 L352 150 L386 404"/>
+      <path d="M330 314 L376 314 M337 252 L368 252 M343 200 L361 200"/>
+      <path d="M326 352 L378 290 M330 290 L374 352 M334 252 L370 210"/>
+    </g>
+    <path d="M352 150 L352 112" stroke="#160d09" stroke-width="5"/>
+    <circle cx="352" cy="108" r="7" fill="#ff4a2a"/>
+    <circle cx="352" cy="108" r="16" fill="#ff4a2a" opacity="0.25"/>
+    <!-- ash -->
+    <g fill="#e8d9c4" opacity="0.75">
+      <circle cx="80" cy="96" r="4"/><circle cx="150" cy="60" r="3"/><circle cx="212" cy="130" r="3.5"/>
+      <circle cx="104" cy="196" r="3"/><circle cx="430" cy="70" r="4"/><circle cx="460" cy="170" r="3"/>
+      <circle cx="270" cy="78" r="2.5"/><circle cx="40" cy="250" r="3"/><circle cx="182" cy="226" r="2.5"/>
+      <circle cx="420" cy="232" r="2.5"/><circle cx="300" cy="190" r="2"/><circle cx="486" cy="290" r="3"/>
+    </g>
+  </g>
 </svg>
