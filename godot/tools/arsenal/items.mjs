@@ -319,3 +319,27 @@ export const PROPS = [
   PR('bench', -298, 379, 0.3), PR('bench', -302, 381, -0.6), PR('fence', -316, 381, 1.2), PR('fence', -318, 377, 1.4),
   PR('loot_common', -309, 375, 0), PR('lamp', -300, 369, 0), {kind: 'campfire', x: -300, z: 376},
 ];
+
+// ---- build 14: the gunsmith. Six slots on a gun; each mod changes its numbers (multipliers) and shows on the model.
+// kinds: which weapon kinds take it. cost: parts from the workbench.
+const MOD = (n, slot, kinds, cost, fx, desc) => ({n, slot, kinds, cost, fx, desc});
+const GUNS = ['pistol', 'smg', 'rifle', 'shotgun'];
+export const MODS = {
+  long_barrel: MOD('Long Barrel', 'barrel', ['rifle', 'smg', 'pistol'], {scrap_metal: 4, gears: 1}, {range: 1.35, spread: 0.75, rof: 1.08}, 'Reaches further and groups tighter; a touch slower to bring round.'),
+  short_barrel: MOD('Sawn Barrel', 'barrel', ['shotgun', 'rifle', 'smg'], {scrap_metal: 2}, {range: 0.7, spread: 1.35, dmg: 1.08, rof: 0.94}, 'Hacked short: wilder, harder-hitting up close, quicker to swing.'),
+  ported_barrel: MOD('Ported Barrel', 'barrel', GUNS, {scrap_metal: 3, gears: 2}, {spread: 0.85, rof: 0.95}, 'Gas ports along the top keep the muzzle down between shots.'),
+  heavy_receiver: MOD('Heavy Receiver', 'receiver', GUNS, {scrap_metal: 5, gears: 2}, {dmg: 1.22, rof: 1.12}, 'Hotter loads, a stronger action. Hits much harder, fires a little slower.'),
+  hair_trigger: MOD('Hair Trigger', 'receiver', GUNS, {gears: 2, duct_tape: 1}, {rof: 0.8, spread: 1.1}, 'A filed sear and a lighter spring: fires much faster, a little less steady.'),
+  calibrated: MOD('Calibrated Receiver', 'receiver', ['rifle', 'pistol', 'energy'], {gears: 2, circuit: 1}, {dmg: 1.12, spread: 0.9}, 'Machined to fine tolerances. More damage, steadier.'),
+  big_mag: MOD('Extended Magazine', 'magazine', GUNS.concat(['energy']), {scrap_metal: 3, duct_tape: 1}, {mag: 1.6, reload: 1.15}, 'Holds 60% more; takes a moment longer to swap.'),
+  quick_mag: MOD('Quick-Eject Magazine', 'magazine', GUNS.concat(['energy']), {gears: 1, duct_tape: 1}, {reload: 0.65}, 'A taped pull tab and a polished well: reloads a third faster.'),
+  drum_mag: MOD('Drum Magazine', 'magazine', ['smg', 'rifle', 'shotgun'], {scrap_metal: 6, gears: 2}, {mag: 2.4, reload: 1.4, rof: 1.04}, 'Huge capacity, heavy and slow to change.'),
+  scope: MOD('Long Scope', 'sight', ['rifle', 'energy'], {scrap_metal: 2, circuit: 1}, {spread: 0.5, range: 1.25}, 'Pinpoint at range. FOCUS likes it too.'),
+  reflex: MOD('Reflex Sight', 'sight', GUNS.concat(['energy']), {circuit: 1, duct_tape: 1}, {spread: 0.78}, 'A glowing dot on glass. Quick and steady.'),
+  suppressor: MOD('Suppressor', 'muzzle', ['pistol', 'smg', 'rifle'], {scrap_metal: 3, duct_tape: 2}, {quiet: 1, dmg: 0.95}, 'Much quieter: shots barely carry, and sneak attacks stay sneak attacks.'),
+  compensator: MOD('Compensator', 'muzzle', GUNS, {scrap_metal: 2, gears: 1}, {spread: 0.82}, 'Bleeds gas sideways to fight the kick.'),
+  focus_lens: MOD('Focusing Lens', 'muzzle', ['energy'], {circuit: 2}, {dmg: 1.18, range: 1.2}, 'A ground-glass lens that tightens the beam.'),
+  full_stock: MOD('Padded Stock', 'stock', ['rifle', 'smg', 'shotgun'], {scrap_metal: 2, duct_tape: 1}, {spread: 0.85}, 'A recoil pad and a cheek rest.'),
+  wire_stock: MOD('Folding Wire Stock', 'stock', ['smg', 'pistol'], {scrap_metal: 2}, {spread: 0.9, reload: 0.92}, 'Light, folds away, steadies the shot.'),
+  capacitor: MOD('Overcharged Capacitor', 'receiver', ['energy'], {circuit: 2, gears: 1}, {dmg: 1.3, mag: 0.75}, 'Pushes every cell harder: more damage per shot, fewer shots per cell.'),
+};

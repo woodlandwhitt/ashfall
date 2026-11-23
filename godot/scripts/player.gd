@@ -135,6 +135,9 @@ func weapon_changed() -> void:
 		flash.light_color = Color(1.0, 0.75, 0.4)
 
 func reload_time() -> float:
+	return _reload_base() * float(Game.item(Game.weapon).get("reload_k", 1.0))
+
+func _reload_base() -> float:
 	return (1.5 - (int(Game.stats.agility) - 5) * 0.07) * (0.6 if Game.perks.has("quick_hands") else 1.0) * float(Game.fx().reload)
 
 # damage as in the original: aim (or might for melee) and perks scale the weapon's base damage
@@ -404,11 +407,12 @@ func shot_fx(kind: String) -> void:
 		Sfx.play("k_slice", -2.0, randf_range(0.9, 1.1))
 		return
 	recoil = clampf(float(it.get("dmg", 15)) / 25.0, 0.6, 2.0)
-	flash.light_energy = 6.0
-	flash_q.visible = true
+	var quiet: bool = it.get("quiet", false)
+	flash.light_energy = 1.2 if quiet else 6.0
+	flash_q.visible = not quiet
 	flash_q.rotation.z = randf() * TAU
 	var snd: String = it.get("snd", SND.get(kind, "pistol"))
-	Sfx.play(snd, -3.0, randf_range(0.95, 1.05) * (1.4 if kind == "energy" else 1.0))
+	Sfx.play(snd, -17.0 if quiet else -3.0, randf_range(0.95, 1.05) * (1.4 if kind == "energy" else 1.0) * (1.5 if quiet else 1.0))
 
 func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 	var sp := Vector2(randf() - 0.5, randf() - 0.5) * spread * 2.0

@@ -215,6 +215,7 @@ func setup(gun_scene: PackedScene, fit: Basis, gf: Dictionary = {}) -> void:
 	ap.play("Pistol_Aim_Neutral")
 	ap.seek(0.0, true)
 	gun = Humanoid.hold_gun(rig, gun_scene, fit, gf)
+	GunMods.attach(gun, fit, String(gf.get("id", Game.weapon)))
 	_no_shadow(gun)
 	# the muzzle is the front of the model's bounds along its own forward axis, near the top
 	var bb := AABB()

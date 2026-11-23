@@ -123,7 +123,55 @@ const FISTS := {"n": "Fists", "t": "weapon", "kind": "melee", "dmg": 5, "range":
 func item(id) -> Dictionary:
 	if id == null or String(id) == "":
 		return FISTS
+	if mods.has(id):
+		return _modded(String(id))
 	return DB.items.get(id, {})
+
+# ---------------------------------------------------------------- the gunsmith (build 14)
+# mods fitted to each gun: {weapon id: {slot: mod id}}. A modded gun's numbers are its own numbers times each mod's.
+var mods: Dictionary = {}
+var _mod_cache := {}
+func _modded(id: String) -> Dictionary:
+	if _mod_cache.has(id):
+		return _mod_cache[id]
+	var it: Dictionary = DB.items.get(id, {}).duplicate(true)
+	var M: Dictionary = ARSENAL.get("mods", {})
+	for slot in mods[id]:
+		var md: Dictionary = M.get(String(mods[id][slot]), {})
+		var fx: Dictionary = md.get("fx", {})
+		for k in fx:
+			match k:
+				"dmg", "rof", "range", "spread":
+					it[k] = float(it.get(k, {"dmg": 8, "rof": 0.3, "range": 100, "spread": 0.02}[k])) * float(fx[k])
+				"mag":
+					if it.has("mag"):
+						it.mag = maxi(1, roundi(float(it.mag) * float(fx[k])))
+				"reload":
+					it["reload_k"] = float(it.get("reload_k", 1.0)) * float(fx[k])
+				"quiet":
+					it["quiet"] = true
+	_mod_cache[id] = it
+	return it
+
+func fit_mod(id: String, mod: String) -> void:
+	var md: Dictionary = ARSENAL.get("mods", {}).get(mod, {})
+	if md.is_empty():
+		return
+	if not mods.has(id):
+		mods[id] = {}
+	mods[id][String(md.slot)] = mod
+	_mod_cache.erase(id)
+	if magd.has(id):
+		magd[id] = mini(int(magd[id]), int(item(id).get("mag", 0)))
+
+func strip_mod(id: String, slot: String) -> void:
+	if mods.has(id):
+		mods[id].erase(slot)
+		if mods[id].is_empty():
+			mods.erase(id)
+		_mod_cache.erase(id)
+		if magd.has(id):
+			magd[id] = mini(int(magd[id]), int(item(id).get("mag", 0)))
 
 func iname(id) -> String:
 	var up := int(upgrades.get(id, 0)) if id != null else 0
@@ -369,7 +417,7 @@ func save_game(slot: String) -> bool:
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
 		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points, "perk_pts": perk_pts, "ap": ap, "name": player_name, "area": area, "rad": rad, "tod": time, "buffs": buffs, "drugs": drugs, "addict": addict,
 		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "chem": chem, "armor": armor, "magd": magd, "discovered": discovered,
-		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day}
+		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day, "mods": mods}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
 	if f == null:
 		return false
@@ -394,6 +442,8 @@ func load_game(slot: String) -> bool:
 		return false
 	for k in ["inv", "flags", "quests", "kills", "stats", "perks", "magd", "discovered", "dead", "looted"]:
 		set(k, s[k])
+	mods = s.get("mods", {})
+	_mod_cache.clear()
 	for k in ["killed", "shops", "upgrades", "opened"]:
 		set(k, s.get(k, {}))
 	day = int(s.get("day", 1))
@@ -459,8 +509,9 @@ func reset() -> void:
 		load_area("world")
 	player_name = "Wanderer"
 	inv = {"vault_suit": 1, "pipe_pistol": 1, "ammo_9": 36, "stimpak": 2}
-	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted", "killed", "shops", "upgrades", "opened"]:
+	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted", "killed", "shops", "upgrades", "opened", "mods"]:
 		set(k, {})
+	_mod_cache.clear()
 	day = 1
 	_vm_state()
 	stats = {"might": 5, "aim": 5, "endurance": 5, "charm": 5, "intellect": 5, "agility": 5, "luck": 5}

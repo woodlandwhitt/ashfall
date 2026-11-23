@@ -19,13 +19,21 @@ func _ready():
 			var it: Dictionary = Game.DB.items[k]
 			if String(it.get("t", "")) == "weapon":
 				ids.append(k)
+	# --mods=a,b,c fits these to every gun first (to see them)
+	for a in args:
+		if a.begins_with("--mods="):
+			for id in ids:
+				for m in a.trim_prefix("--mods=").split(","):
+					Game.fit_mod(String(id), m)
 	for id in ids:
 		var vm := Viewmodel.new(); cam.add_child(vm)
 		var mdl: Array = preload("res://scripts/player.gd").model_for(id)
 		if mdl.is_empty():
 			vm.setup_melee(true, id)
 		else:
-			vm.setup(load(mdl[0]), mdl[1], mdl[2])
+			var gf: Dictionary = mdl[2]
+			gf["id"] = id
+			vm.setup(load(mdl[0]), mdl[1], gf)
 		for i in 6: await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png(out + "/fp_" + id + ".png")
 		vm.queue_free()

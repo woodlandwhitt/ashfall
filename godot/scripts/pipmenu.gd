@@ -15,7 +15,7 @@ const DIM := Color(0.35, 0.7, 0.42)
 const AMBERC := Color(1.0, 0.9, 0.55)
 const BAD := Color(1.0, 0.5, 0.4)
 const SECTIONS := {"STAT": ["STATUS", "S.P.E.C.I.A.L.", "PERKS", "GENERAL"], "INV": ["WEAPONS", "APPAREL", "AID", "AMMO", "MISC", "QUEST"],
-	"DATA": ["QUESTS", "MAP", "FACTIONS", "PARTY", "NOTES", "CRAFT"], "RADIO": ["RADIO"], "SYS": ["SYSTEM"]}
+	"DATA": ["QUESTS", "MAP", "FACTIONS", "PARTY", "NOTES", "CRAFT", "GUNSMITH"], "RADIO": ["RADIO"], "SYS": ["SYSTEM"]}
 const INV_CAT := {"WEAPONS": "weapon", "APPAREL": "armor", "AID": "aid", "AMMO": "ammo", "MISC": "junk", "QUEST": "quest"}
 # the old single-word page names still open the right place
 const ALIAS := {"STATS": "STATUS", "ITEMS": "WEAPONS", "SPECIAL": "S.P.E.C.I.A.L."}
@@ -203,6 +203,7 @@ func show_tab(t: String) -> void:
 		"FACTIONS": _factions()
 		"PARTY": _party()
 		"CRAFT": _craft()
+		"GUNSMITH": _gunsmith()
 		"RADIO": _radio()
 		"SYSTEM": _system()
 
@@ -1038,6 +1039,93 @@ func _craft() -> void:
 			Game.check_quests()
 			show_tab("CRAFT"))
 		row.add_child(b)
+
+# ---------------------------------------------------------------- GUNSMITH (build 14)
+# a gun you own on the left; on the right its numbers, and its six slots with the mods that fit it
+var sel_gun := ""
+const SLOTS := ["barrel", "receiver", "magazine", "sight", "muzzle", "stock"]
+func _gunsmith() -> void:
+	var lr := _split(0.8)
+	var L: VBoxContainer = lr[0]
+	var R: VBoxContainer = lr[1]
+	var guns: Array = []
+	for id in Game.inv:
+		var it: Dictionary = Game.DB.items.get(id, {})
+		if String(it.get("t", "")) == "weapon" and String(it.get("kind", "")) != "melee":
+			guns.append(id)
+	if guns.is_empty():
+		_label(L, "No guns to work on.", 18, DIM)
+		return
+	if not sel_gun in guns:
+		sel_gun = Game.weapon if Game.weapon in guns else String(guns[0])
+	var sc := _scroll(L)
+	for id in guns:
+		var gid: String = id
+		_list_button(sc, Game.iname(gid) + ("  *" if Game.mods.has(gid) else ""), gid == sel_gun, func():
+			sel_gun = gid
+			show_tab("GUNSMITH"))
+	var base: Dictionary = Game.DB.items.get(sel_gun, {})
+	var it: Dictionary = Game.item(sel_gun)
+	_title(R, Game.iname(sel_gun))
+	if not at_bench:
+		_label(R, "Fitting parts needs a workbench (Dustwell, Bunker Nine). You can look.", 16, Color(0.85, 0.65, 0.4))
+	_label(R, "Scrap %d  ·  Gears %d  ·  Circuits %d  ·  Tape %d" % [Game.count("scrap_metal"), Game.count("gears"), Game.count("circuit"), Game.count("duct_tape")], 16, DIM)
+	var stat := func(nm: String, a: float, b: float, fmt: String, better_low := false) -> void:
+		var col := GREEN
+		if not is_equal_approx(a, b):
+			col = Color(0.5, 1.0, 0.5) if ((b < a) == better_low) else Color(1.0, 0.6, 0.45)
+		_row(R, nm, (fmt % b) + ("" if is_equal_approx(a, b) else ("   (was " + fmt % a + ")")), col)
+	stat.call("Damage", float(base.get("dmg", 0)), float(it.get("dmg", 0)), "%.0f")
+	stat.call("Shots a second", 1.0 / maxf(0.01, float(base.get("rof", 0.3))), 1.0 / maxf(0.01, float(it.get("rof", 0.3))), "%.1f")
+	if base.has("mag"):
+		stat.call("Magazine", float(base.get("mag", 0)), float(it.get("mag", 0)), "%.0f")
+	stat.call("Spread", float(base.get("spread", 0.02)) * 1000.0, float(it.get("spread", 0.02)) * 1000.0, "%.0f", true)
+	stat.call("Range", float(base.get("range", 100)), float(it.get("range", 100)), "%.0f m")
+	stat.call("Reload time", 1.0, float(it.get("reload_k", 1.0)), "x%.2f", true)
+	var kind := String(base.get("kind", ""))
+	var M: Dictionary = Game.ARSENAL.get("mods", {})
+	var fitted: Dictionary = Game.mods.get(sel_gun, {})
+	for slot in SLOTS:
+		var opts: Array = []
+		for mid in M:
+			if String(M[mid].slot) == slot and kind in M[mid].kinds:
+				opts.append(mid)
+		if opts.is_empty():
+			continue
+		_label(R, "\n" + slot.to_upper() + ":  " + (String(M[fitted[slot]].n) if fitted.has(slot) else "standard"), 18, AMBERC)
+		if fitted.has(slot):
+			var s2: String = slot
+			_button(R, "REMOVE " + String(M[fitted[slot]].n).to_upper(), func():
+				Game.strip_mod(sel_gun, s2)
+				_after_mod()
+				show_tab("GUNSMITH"), 0.0, not at_bench)
+		for mid in opts:
+			if fitted.get(slot) == mid:
+				continue
+			var md: Dictionary = M[mid]
+			var cost: Dictionary = md.cost
+			var ok := true
+			var parts := []
+			for k in cost:
+				parts.append("%s %d/%d" % [Game.iname(k), Game.count(k), int(cost[k])])
+				if Game.count(k) < int(cost[k]):
+					ok = false
+			_label(R, String(md.n) + "  —  " + String(md.desc), 16)
+			_label(R, "  ".join(parts), 15, DIM if ok else Color(0.75, 0.55, 0.4))
+			var m2: String = mid
+			_button(R, "FIT " + String(md.n).to_upper(), func():
+				for k in cost:
+					Game.take(k, int(cost[k]))
+				Game.fit_mod(sel_gun, m2)
+				Sfx.play("k_metal_latch", -2.0)
+				Game.msg(String(md.n) + " fitted to the " + Game.iname(sel_gun) + ".")
+				_after_mod()
+				show_tab("GUNSMITH"), 0.0, not (at_bench and ok))
+
+# the gun in your hands shows its new parts straight away
+func _after_mod() -> void:
+	if sel_gun == Game.weapon and Game.player:
+		Game.player.weapon_changed()
 
 # ---------------------------------------------------------------- MAP
 func _map_image() -> ImageTexture:
