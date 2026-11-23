@@ -99,7 +99,13 @@ func _ready() -> void:
 	add_child(forge)
 	# story scenery built from the forge's pieces (Coyle's camp)
 	if Game.area == "world":
-		for pr in Game.STORY.get("props", []):
+		for pr in Game.STORY.get("props", []) + Game.ARSENAL.get("props", []):
+			if String(pr.kind) == "campfire":
+				var cf := FireFX.make(1.0)
+				add_child(cf)
+				cf.global_position = Vector3(float(pr.x), Game.height(float(pr.x), float(pr.z)), float(pr.z))
+				town.add_fire(cf.global_position, 1.0)
+				continue
 			if Forge.KINDS.has(String(pr.kind)):
 				var pn: Node3D = forge.build(String(pr.kind), -1)
 				add_child(pn)

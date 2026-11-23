@@ -299,13 +299,23 @@ export const ENEMIES = {
   warden: [{n: 'Iron Warden', hp: 240, spd: 3.0, dmg: 14, ranged: true, range: 42, atk: 1.0, detect: 46, xp: 170, caps: [10, 40], mag: 20,
     loot: [['rare', 1]], drops: [['power_armor', 1, 1, 0.35], ['warden_tags', 1, 1, 1], ['laser_rifle', 1, 1, 0.2], ['cell', 10, 20, 1], ['stimpak', 1, 2, 0.6]]}, {hp: 240, dmg: 14, speed: 3.0, range: 42, xp: 170, ranged: true}],
 };
-// where they are: a new hollow in the north-west hills, synths round the reactor, robots at the airfield, Wardens at Ironside
-export const LOCS = {holler: {name: 'Hollerback Holler', x: -300, z: 430, r: 26}};
+// where they are: a new hollow in the low ground north-west of the Gulch, synths round the reactor, robots at the airfield, Wardens at Ironside
+export const LOCS = {holler: {name: 'Hollerback Holler', x: -300, z: 375, r: 26}};
 const S = (type, x, z, name) => ({type, x, z, hostile: true, name});
 export const SPAWNS = [
-  S('hillfolk', -305, 420), S('hillfolk', -292, 436), S('hillfolk', -312, 440), S('hillfolk', -285, 422), S('hillfolk', -318, 428), S('hill_ma', -300, 432, 'Ma Tuttle'),
+  S('hillfolk', -305, 365), S('hillfolk', -292, 381), S('hillfolk', -312, 385), S('hillfolk', -285, 367), S('hillfolk', -318, 373), S('hill_ma', -300, 377, 'Ma Tuttle'),
   S('synth', 60, -255), S('synth', 72, -246), S('synth', 55, -240), S('synth', 82, -262),
   S('guardbot', 290, -345), S('guardbot', 312, -322), S('guardbot', 322, -348),
   S('warden', -320, -288), S('warden', -342, -312),
 ];
 
+
+// the Tuttles' camp: shacks of scrap walls round a fire, barrels, crates and a bench (forge pieces)
+const PR = (kind, x, z, rot = 0) => ({kind, x, z, rot});
+export const PROPS = [
+  PR('wall', -308, 369, 0), PR('wall', -308, 373, 0), PR('wall_door', -311, 371, 1.57), PR('roof', -309.5, 371, 0),
+  PR('wall', -290, 383, 1.57), PR('wall_window', -294, 383, 1.57), PR('roof', -292, 381.5, 1.57),
+  PR('barrel', -303, 373), PR('barrel', -302.2, 373.6), PR('crate', -296, 373, 0.4), PR('crate', -295.3, 373.8, 1.0),
+  PR('bench', -298, 379, 0.3), PR('bench', -302, 381, -0.6), PR('fence', -316, 381, 1.2), PR('fence', -318, 377, 1.4),
+  PR('loot_common', -309, 375, 0), PR('lamp', -300, 369, 0), {kind: 'campfire', x: -300, z: 376},
+];
