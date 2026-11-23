@@ -46,6 +46,13 @@ var spot: Dictionary = {}
 var sit_t := 0.0
 var stuck_t := 0.0
 var stuck_n := 0
+# what the body is doing moment to moment, so nobody repeats one motion for half a minute: a working beat, then a
+# pause, a different idle, a word, then back to it
+var beat_a := ""
+var beat_t := 0.0
+var home_a := "Idle"
+var home_t := 0.0
+var recent: Array = []        # the last few places they went, so they don't go back to the same one every time
 var last_p := Vector3.ZERO
 
 static func look_colors(look: Dictionary) -> Array:
@@ -180,7 +187,7 @@ func _physics_process(d: float) -> void:
 	if life == "act" and String(spot.get("kind", "")) == "sit":
 		model.rotation.y = face_yaw
 		if near and ap:
-			Humanoid.play(ap, "Sitting_Talking" if talking else ("Sitting_Idle" if sit_t <= 0.0 else "Sitting_Enter"))
+			Humanoid.play(ap, "Sitting_Talking" if talking else (beat_a if beat_a.begins_with("Sitting") else ("Sitting_Idle" if sit_t <= 0.0 else "Sitting_Enter")))
 		return
 	# a standing person doesn't need the physics step at all
 	if moving or not is_on_floor():
@@ -194,8 +201,10 @@ func _physics_process(d: float) -> void:
 		return
 	if ap:
 		var a := "Idle_Talking" if talking else ("Walk" if moving else idle_anim)
-		if life == "act" and not talking and not moving:
-			a = String(spot.get("anim", idle_anim))
+		if life == "act" and not talking and not moving and beat_a != "":
+			a = beat_a
+		elif life == "home" and not talking and not moving and agent:
+			a = home_a
 		Humanoid.play(ap, a)
 	elif rig:
 		rig.animate(d, spd, t)
@@ -206,7 +215,14 @@ func _life(d: float) -> float:
 	var spd := 0.0
 	match life:
 		"home":
-			face_yaw = lerp_angle(face_yaw, home_yaw, 1.0 - exp(-3.0 * d))
+			# standing about at home: shifting between idles, now and then glancing about
+			home_t -= d
+			if home_t <= 0.0:
+				home_t = randf_range(6.0, 15.0)
+				var r := randf()
+				home_a = "Idle_FoldArms" if r < 0.25 and home_a != "Idle_FoldArms" else ("Idle" if r < 0.85 else idle_anim)
+				_glance = randf_range(-0.7, 0.7) if randf() < 0.5 else 0.0
+			face_yaw = lerp_angle(face_yaw, home_yaw + _glance, 1.0 - exp(-2.0 * d))
 			if life_t <= 0.0:
 				life_t = randf_range(15.0, 40.0)
 				if Game.main.town == null or not Game.main.town.ready_at(global_position):
@@ -223,10 +239,11 @@ func _life(d: float) -> float:
 						cs[1].who = mate
 						cs[0]["mate"] = mate
 						cs[1]["mate"] = self
+						cs[0]["first"] = true
 						mate.invite(cs[1])
 						spot = cs[0]
 				if spot.is_empty():
-					spot = Game.main.town.pick(self, home, r)
+					spot = Game.main.town.pick(self, home, r, recent)
 				if spot.is_empty():
 					# nothing to do nearby: stretch the legs somewhere close
 					var a := randf() * TAU
@@ -247,9 +264,14 @@ func _life(d: float) -> float:
 			if arrived:
 				if life == "go":
 					life = "act"
-					life_t = randf_range(14.0, 40.0)
+					life_t = randf_range(10.0, 30.0)
+					beat_a = ""
+					beat_t = 0.0
 					if String(spot.kind) == "chat":
-						life_t = 18.0
+						life_t = randf_range(12.0, 22.0)
+					recent.append(spot.p)
+					if recent.size() > 3:
+						recent.pop_front()
 					if String(spot.kind) == "sit":
 						sit_t = 1.4
 						collision_layer = 0
@@ -280,7 +302,8 @@ func _life(d: float) -> float:
 				last_p = global_position
 		"act":
 			sit_t -= d
-			face_yaw = lerp_angle(face_yaw, float(spot.yaw), 1.0 - exp(-5.0 * d))
+			_beat(d)
+			face_yaw = lerp_angle(face_yaw, float(spot.yaw) + _glance, 1.0 - exp(-5.0 * d))
 			# a chat partner who wandered off (or was never coming) ends the chat
 			if String(spot.get("kind", "")) == "chat":
 				var m = spot.get("mate")
@@ -324,6 +347,59 @@ func invite(s: Dictionary) -> void:
 	agent.target_position = s.p
 	stuck_t = 0.0
 	last_p = global_position
+
+var _glance := 0.0
+const WORK_IDLES := ["Idle", "Idle_FoldArms", "Idle"]
+
+# the next moment of an activity
+func _beat(d: float) -> void:
+	beat_t -= d
+	if beat_t > 0.0:
+		return
+	var kind := String(spot.get("kind", ""))
+	var work := String(spot.get("anim", "Idle"))
+	match kind:
+		"sit":
+			var near_sitter := false
+			for n in Game.main.npcs:
+				if n != self and is_instance_valid(n) and n.life == "act" and String(n.spot.get("kind", "")) == "sit" and n.global_position.distance_to(global_position) < 2.6:
+					near_sitter = true
+			if sit_t > 0.0:
+				beat_a = "Sitting_Enter"
+				beat_t = sit_t
+			elif near_sitter and beat_a != "Sitting_Talking" and randf() < 0.4:
+				beat_a = "Sitting_Talking"
+				beat_t = randf_range(3.0, 6.0)
+			else:
+				beat_a = "Sitting_Idle"
+				beat_t = randf_range(4.0, 9.0)
+		"chat":
+			# taking turns: whoever started it sets the rhythm; the other listens while they talk, and answers
+			if spot.get("first", false):
+				beat_a = "Idle_Talking" if beat_a != "Idle_Talking" else ["Idle", "Idle_FoldArms"][randi() % 2]
+				beat_t = randf_range(3.0, 6.5)
+			else:
+				var m = spot.get("mate")
+				var they_talk: bool = m != null and is_instance_valid(m) and m.beat_a == "Idle_Talking"
+				var want := (["Idle", "Idle_FoldArms"][randi() % 2] if they_talk else "Idle_Talking")
+				if (beat_a == "Idle_Talking") != (want == "Idle_Talking"):
+					beat_a = want
+				beat_t = 0.3
+		"stand":
+			beat_a = WORK_IDLES[randi() % WORK_IDLES.size()] if beat_a == "" or randf() < 0.6 else work
+			beat_t = randf_range(4.0, 9.0)
+		_:
+			if beat_a == work or (beat_a == "" and randf() < 0.3):
+				beat_a = WORK_IDLES[randi() % WORK_IDLES.size()]
+				beat_t = randf_range(2.5, 7.0)
+				_glance = randf_range(-0.5, 0.5)
+			else:
+				beat_a = work
+				var anim := ap.get_animation(work) if ap and ap.has_animation(work) else null
+				beat_t = (anim.length if anim else 3.0) * (1 if randf() < 0.6 else 2) * 0.98
+				_glance = 0.0
+				if ap and ap.current_animation == work:
+					ap.seek(0.0, true)
 
 func _go_home(stuck: bool) -> void:
 	if String(spot.get("kind", "")) == "sit":

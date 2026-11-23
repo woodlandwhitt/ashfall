@@ -255,13 +255,19 @@ func add_fire(pos: Vector3, size: float) -> void:
 		add_point_spot(key, pos + Vector3(cos(a), 0, sin(a)) * (1.1 + size * 0.5), pos, "Idle_FoldArms" if k == 1 else "Idle")
 
 # a free spot near home that this person can walk to
-func pick(npc, home: Vector3, radius: float) -> Dictionary:
+func pick(npc, home: Vector3, radius: float, avoid: Array = []) -> Dictionary:
 	var best := {}
 	var choices: Array = []
 	for s in spots:
 		if s.who != null and is_instance_valid(s.who) and s.who != npc:
 			continue
 		if s.node != null and not is_instance_valid(s.node):
+			continue
+		var been := false
+		for a in avoid:
+			if (a as Vector3).distance_to(s.p) < 0.8:
+				been = true
+		if been:
 			continue
 		var d: float = (s.p as Vector3).distance_to(home)
 		if d > radius or absf((s.p as Vector3).y - home.y) > 1.5:

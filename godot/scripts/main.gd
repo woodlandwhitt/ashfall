@@ -2473,7 +2473,7 @@ func _lifelog() -> void:
 		await get_tree().create_timer(3.0).timeout
 		var out := []
 		for n in npcs:
-			out.append("%s:%s/%s@%.0f,%.0f" % [n.id, n.life, String(n.spot.get("kind", "-")), n.global_position.x, n.global_position.z])
+			out.append("%s:%s/%s[%s]@%.0f,%.0f" % [n.id, n.life, String(n.spot.get("kind", "-")), n.beat_a if n.life == "act" else n.home_a, n.global_position.x, n.global_position.z])
 		print("LIFE spots=%d keys=%s " % [town.spots.size(), str(town.ready_keys.keys())], " ".join(out))
 
 # Haven 12's rooms get their furniture once the walls (and their collision) are in
