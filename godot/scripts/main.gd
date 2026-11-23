@@ -1099,6 +1099,14 @@ func _test_hooks() -> void:
 			Game.flags["appr_jory"] = 34
 			Game.flags["appr_sable"] = -18
 			Game.start("jory_wagon")
+		if String(args.pip) == "GUNSMITH":
+			Game.give("hunting_rifle", 1)
+			Game.give("scrap_metal", 12)
+			Game.give("gears", 5)
+			Game.give("circuit", 3)
+			Game.fit_mod("hunting_rifle", "scope")
+			hud.pip.at_bench = true
+			hud.pip.sel_gun = "hunting_rifle"
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
 	if args.has("tod"):
