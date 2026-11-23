@@ -381,7 +381,7 @@ func _beat(d: float) -> void:
 			else:
 				var m = spot.get("mate")
 				var they_talk: bool = m != null and is_instance_valid(m) and m.beat_a == "Idle_Talking"
-				var want := (["Idle", "Idle_FoldArms"][randi() % 2] if they_talk else "Idle_Talking")
+				var want: String = (["Idle", "Idle_FoldArms"][randi() % 2] if they_talk else "Idle_Talking")
 				if (beat_a == "Idle_Talking") != (want == "Idle_Talking"):
 					beat_a = want
 				beat_t = 0.3
