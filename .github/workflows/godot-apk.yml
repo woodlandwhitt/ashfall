@@ -27,13 +27,20 @@ jobs:
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME" > $HOME/.config/godot/editor_settings-4.5.tres
       # which build this is, and which installed APK its update patch is for (godot/patch_base.txt: "self" makes
       # this build a new base, whose full pack is kept on its release for later patches to be cut against)
+      # which build this is, and which installed APKs get an update patch (godot/patch_base.txt: a list of base
+      # builds; "self" makes this build a new base too, whose full pack is kept on its release for later patches)
       - name: Stamp the build number
         run: |
           N=${{ github.run_number }}
-          B=$(tr -d '[:space:]' < godot/patch_base.txt 2>/dev/null || echo self)
-          if [ -z "$B" ] || [ "$B" = "self" ]; then B=$N; fi
+          BASES=$(cat godot/patch_base.txt 2>/dev/null || echo self)
+          [ -z "$(echo $BASES | tr -d '[:space:]')" ] && BASES=self
+          B=""
+          for t in $BASES; do
+            if [ "$t" = "self" ]; then B=$N; break; fi
+          done
+          if [ -z "$B" ]; then B=$(echo $BASES | awk '{print $1}'); fi
           echo "{\"build\": $N, \"base\": $B}" > godot/data/build.json
-          echo "PATCH_BASE=$B" >> $GITHUB_ENV
+          echo "PATCH_BASES=$BASES" >> $GITHUB_ENV
           cat godot/data/build.json
       - name: Import assets
         run: $HOME/bin/godot --headless --path godot --import || true
@@ -48,22 +55,26 @@ jobs:
           ls -la godot/build
           cp godot/build/AshfallGodot.apk AshfallGodot.apk
       # the in-game updater's download: a base build keeps its whole pack; later builds ship only what changed since
-      - name: Export the update pack
+      - name: Export the update packs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           N=${{ github.run_number }}
-          if [ "$PATCH_BASE" = "$N" ]; then
-            $HOME/bin/godot --headless --path godot --export-pack "Android" build/base.pck
-            cp godot/build/base.pck base-$N.pck
-            echo "UPDATE_ASSET=base-$N.pck" >> $GITHUB_ENV
-          else
-            mkdir -p /tmp/base
-            gh release download "godot-$PATCH_BASE" -p "base-$PATCH_BASE.pck" -D /tmp/base --repo "${{ github.repository }}"
-            $HOME/bin/godot --headless --path godot --export-patch "Android" build/patch.pck --patches /tmp/base/base-$PATCH_BASE.pck
-            cp godot/build/patch.pck patch-b$PATCH_BASE.pck
-            echo "UPDATE_ASSET=patch-b$PATCH_BASE.pck" >> $GITHUB_ENV
-          fi
+          ASSETS=""
+          for t in $PATCH_BASES; do
+            if [ "$t" = "self" ]; then
+              $HOME/bin/godot --headless --path godot --export-pack "Android" build/base.pck
+              cp godot/build/base.pck base-$N.pck
+              ASSETS="$ASSETS base-$N.pck"
+            else
+              mkdir -p /tmp/base
+              gh release download "godot-$t" -p "base-$t.pck" -D /tmp/base --repo "${{ github.repository }}" --clobber
+              $HOME/bin/godot --headless --path godot --export-patch "Android" build/patch-b$t.pck --patches /tmp/base/base-$t.pck
+              cp godot/build/patch-b$t.pck patch-b$t.pck
+              ASSETS="$ASSETS patch-b$t.pck"
+            fi
+          done
+          echo "UPDATE_ASSETS=$ASSETS" >> $GITHUB_ENV
           ls -la *.pck
       - uses: actions/upload-artifact@v6
         with:
@@ -72,4 +83,4 @@ jobs:
       - name: Publish to Releases
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "godot-${{ github.run_number }}" AshfallGodot.apk "$UPDATE_ASSET" --title "Ashfall Godot test (build ${{ github.run_number }})" --notes "Native Godot test build of the Dustwell slice. Installs alongside the regular game. Tap AshfallGodot.apk below to download." --target "${{ github.sha }}"
+        run: gh release create "godot-${{ github.run_number }}" AshfallGodot.apk $UPDATE_ASSETS --title "Ashfall Godot test (build ${{ github.run_number }})" --notes "Native Godot test build of the Dustwell slice. Installs alongside the regular game. Tap AshfallGodot.apk below to download." --target "${{ github.sha }}"
