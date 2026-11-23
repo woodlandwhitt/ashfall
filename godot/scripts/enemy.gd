@@ -353,7 +353,12 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 	flash = 0.12
 	if ap and hp > 0.0:
 		_one_shot(["Hit_Chest", "Hit_Head"][randi() % 2], 0.45)
-	Game.main.blood(at, dir)
+	if def.get("robot", false) or type in MACHINES:
+		# machines spark and ring instead of bleeding
+		Game.main._puff(at, -dir, Color(1.0, 0.8, 0.35, 0.95), 10, 3.0)
+		Sfx.play_at("k_metal_click", at, -2.0, randf_range(1.2, 1.6))
+	else:
+		Game.main.blood(at, dir)
 	Sfx.play_at(("o_bark2" if quad else ["o_mhurt1", "o_mhurt2"][randi() % 2]), at, 0.0, randf_range(0.9, 1.1))
 	if hp <= 0.0 and essential:
 		if hostile:
@@ -374,7 +379,7 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 
 func die(dir: Vector3) -> void:
 	dead = true
-	if Game.perks.has("bloody_mess") and Game.main:
+	if Game.perks.has("bloody_mess") and Game.main and not def.get("robot", false):
 		for i in 4:
 			Game.main.blood(global_position + Vector3(randf() - 0.5, 0.6 + randf(), randf() - 0.5), Vector3(randf() - 0.5, 0.8, randf() - 0.5).normalized())
 	if npc != null and Game.main:
