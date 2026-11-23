@@ -224,7 +224,7 @@ func clear_all() -> void:
 # ---------------------------------------------------------------- spots
 # a placed piece of furniture: a seat to sit on, or something to stand at and use
 func add_piece(key: String, id: String, node: Node3D) -> void:
-	var yaw := node.rotation.y
+	var yaw := node.global_rotation.y
 	var fwd := Vector3(sin(yaw), 0, cos(yaw))        # pieces face +Z into the room
 	var ab := Furniture.aabb(id)
 	var base := node.global_position

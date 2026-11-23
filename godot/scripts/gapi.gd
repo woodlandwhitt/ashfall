@@ -89,6 +89,7 @@ func msg(t = "", b = null) -> void: Game.msg(vm.to_str(t))
 
 # ---------------------------------------------------------------- quests and flags
 func setFlag(f = "", v = true) -> void:
+	_refresh_people.call_deferred()
 	Game.flags[_s(f)] = v
 	Game.check_quests()
 func questKnown(id = "") -> bool: return Game.quests.has(_s(id))
@@ -164,6 +165,13 @@ func recruit(id = "") -> void:
 func dismiss(id = "") -> void:
 	if Game.main:
 		Game.main.dismiss(_s(id))
+# build 15: a conversation that ends in a fight (the person turns on you; it isn't murder to defend yourself)
+func fight(id = "") -> void:
+	if Game.main:
+		Game.main.story_fight(_s(id))
+func heal() -> void:
+	Game.hp = Game.hp_max
+	Game.stats_changed.emit()
 func addXp(n = 0) -> void: Game.add_xp(int(vm.num(n)))
 func approve(id = "", n = 0, why = "") -> void: Game.approve(_s(id), int(vm.num(n)), "" if why == null else _s(why))
 func approval(id = "") -> int: return Game.approval(_s(id))
@@ -268,3 +276,8 @@ class Nop:
 		return null
 	func js_call(_name: String, _a: Array):
 		return null
+
+# people who come and go on a flag (build 15's story: a rescued driver moves to town, a gang packs up and leaves)
+func _refresh_people() -> void:
+	if Game.main and Game.main.has_method("refresh_people"):
+		Game.main.refresh_people()

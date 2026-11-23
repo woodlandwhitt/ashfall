@@ -49,6 +49,7 @@ var disc_t := 1.0
 var auto_t := 180.0
 
 var town: TownLife
+var frontier: Frontier
 func _ready() -> void:
 	Game.main = self
 	var R: Dictionary = Game.region
@@ -60,6 +61,8 @@ func _ready() -> void:
 		chunks.on_built = vault_dress.brighten
 	elif Game.area == "cells":
 		chunks.on_built = _dress_cell
+	# build 15: the Ashwood's towns and ruins stand in the collision and the navigation from the start
+	Frontier.prepare()
 	_colliders()
 	_pools()
 	_lamps()
@@ -112,6 +115,11 @@ func _ready() -> void:
 				pn.global_position = Vector3(float(pr.x), Game.height(float(pr.x), float(pr.z)), float(pr.z))
 				pn.rotation.y = float(pr.get("rot", 0.0))
 	forge.setup.call_deferred(self)
+	if Game.area == "world":
+		frontier = Frontier.new()
+		frontier.name = "Frontier"
+		add_child(frontier)
+		frontier.setup(self)
 	chunks.on_enter = _spawn_chunk
 	chunks.on_leave = _despawn_chunk
 	player = preload("res://scripts/player.gd").new()
@@ -508,7 +516,7 @@ func _spawn_chunk(k: String) -> void:
 		var i: int = it[1]
 		if it[0] == "n":
 			var d: Dictionary = Game.region.npcs[i]
-			if live_npc.has(i) or Game.flags.has("npcDead_" + String(Game.region.npcs[i].id)):
+			if live_npc.has(i) or Game.flags.has("npcDead_" + String(Game.region.npcs[i].id)) or not Game.flag_allowed(d):
 				continue
 			var n = preload("res://scripts/npc.gd").new()
 			add_child(n)
@@ -657,7 +665,7 @@ const ESSENTIAL := ["overseer", "pell", "nan", "cass", "brannock", "wick", "hall
 const GUARDS := ["saltguard", "knuckles", "sheriff", "guard12", "renn2", "kess"]
 const CHILDREN := ["pip"]
 
-func provoke(n, dmg: float, dir: Vector3, chain := false) -> void:
+func provoke(n, dmg: float, dir: Vector3, chain := false, story := false) -> void:
 	if n.hostile or n.follow or String(n.id) in CHILDREN or not n.visible:
 		return
 	if dialog_npc == n:
@@ -666,11 +674,23 @@ func provoke(n, dmg: float, dir: Vector3, chain := false) -> void:
 	n.visible = false
 	n.collision_layer = 0
 	n.set_physics_process(false)
-	var guard: bool = String(n.id) in GUARDS
+	var guard: bool = String(n.id) in GUARDS or String(n.id) in Game.STORY.get("guards", [])
 	var type := "townguard" if guard else "townsfolk"
 	var src: Dictionary = Game.DB.enemies.get(type, {})
 	var td := {"hp": src.get("hp", 65), "name": n.display_name, "dmg": src.get("dmg", 6), "speed": src.get("spd", 4.0), "range": src.get("range", 2.0),
 		"xp": src.get("xp", 10), "ranged": src.get("ranged", false), "quad": false, "scale": 1}
+	# someone the story arms properly (a gang boss, a cornered zealot)
+	var fs = null
+	for sn in Game.STORY.get("npcs", []):
+		if String(sn.id) == String(n.id) and sn.has("fight"):
+			fs = sn.fight
+	if fs != null:
+		td.hp = float(fs.get("hp", td.hp))
+		td.dmg = float(fs.get("dmg", td.dmg))
+		td.ranged = bool(fs.get("ranged", false))
+		td.range = 36.0 if td.ranged else 2.0
+		td.xp = int(td.hp * 0.6)
+		guard = guard or td.ranged
 	var e = preload("res://scripts/enemy.gd").new()
 	add_child(e)
 	e.setup({"type": type, "x": n.global_position.x, "z": n.global_position.z, "y": n.global_position.y, "hostile": true, "id": "npc_" + String(n.id),
@@ -681,7 +701,8 @@ func provoke(n, dmg: float, dir: Vector3, chain := false) -> void:
 	e.face_yaw = n.face_yaw
 	enemies.append(e)
 	if not chain:
-		Game.add_karma(-6, "Attacked " + String(n.display_name))
+		if not story:
+			Game.add_karma(-6, "Attacked " + String(n.display_name))
 		Game.msg(String(n.display_name) + " turns on you!")
 		for o in npcs.duplicate():
 			if o != n and not o.hostile and not o.follow and o.visible and String(o.id) in GUARDS and o.global_position.distance_to(n.global_position) < 40.0:
@@ -858,7 +879,7 @@ func _calm(o) -> void:
 func npc_died(e) -> void:
 	var n = e.npc
 	Game.flags["npcDead_" + String(n.id)] = 1
-	if not (String(n.id) in GUARDS):
+	if not (String(n.id) in GUARDS) and not n.has_meta("story_fight"):
 		Game.add_karma(-10, "Murdered " + String(n.display_name))
 	Game.msg(String(n.display_name) + " is dead.")
 	Game.npc_lost(String(n.id))
@@ -874,6 +895,35 @@ func refresh_spawns() -> void:
 		return
 	for k in chunks.loaded_keys():
 		_spawn_chunk(k)
+
+# a flag changed: people whose story says they've gone, go (unless they're talking to you or in a fight), and
+# anybody who should now be here appears
+func refresh_people() -> void:
+	if chunks == null:
+		return
+	for i in live_npc.keys():
+		var n = live_npc[i]
+		if Game.flag_allowed(Game.region.npcs[i]) or n == dialog_npc or n.follow or n.hostile:
+			continue
+		npcs.erase(n)
+		live_npc.erase(i)
+		n.queue_free()
+	for i in live_enemy.keys():
+		var e = live_enemy[i]
+		if Game.flag_allowed(Game.region.enemies[i]) or (e.hostile and e.state == "chase"):
+			continue
+		enemies.erase(e)
+		live_enemy.erase(i)
+		e.queue_free()
+	refresh_spawns()
+
+# a conversation that ends with someone drawing on you: they fight with their own numbers if the story gives them
+func story_fight(id: String) -> void:
+	for n in npcs:
+		if String(n.id) == id and not n.hostile:
+			n.set_meta("story_fight", true)
+			provoke(n, 0.0, Vector3.ZERO, false, true)
+			return
 
 func make_hostile(id: String) -> void:
 	for e in enemies:
@@ -947,6 +997,8 @@ func _test_hooks() -> void:
 		await _ai_test()
 	if args.has("khtest"):
 		await _khole_test()
+	if args.has("ashtest"):
+		await _ash_test()
 	if args.has("storytest"):
 		await _story_test()
 	if args.has("forgetest"):
@@ -1710,6 +1762,120 @@ func _dlg(id: String, picks: Array) -> String:
 		said.append(dialog_node if in_dialog() else "end")
 	end_dialog()
 	return id + " ok " + str(said)
+
+# a conversation by option text (any part of it: skill checks put their stat in front)
+func _dlg2(id: String, picks: Array) -> String:
+	start_dialog(null, id)
+	var said := [dialog_node]
+	for pk in picks:
+		var idx := -1
+		for i in dialog_opts.size():
+			if String(dialog_opts[i].t).contains(pk):
+				idx = i
+				break
+		if idx < 0:
+			var at := dialog_node
+			var opts: Array = dialog_opts.map(func(o): return o.t)
+			end_dialog()
+			return "%s: no option '%s' at %s %s" % [id, pk, at, str(opts)]
+		choose(idx)
+		said.append(dialog_node if in_dialog() else "end")
+	end_dialog()
+	return id + " ok " + str(said)
+
+func _tp(x: float, z: float) -> void:
+	player.global_position = Vector3(x, Game.height(x, z) + 0.3, z)
+	chunks.load_now(player.global_position)
+	await _wait(25)
+
+func _live(ids: Array) -> String:
+	var have: Array = []
+	for n in npcs:
+		if String(n.id) in ids:
+			have.append(String(n.id))
+	return "%d/%d %s" % [have.size(), ids.size(), str(have)]
+
+# build 15: the Ashwood, its people and its four quests, start to finish
+func _ash_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	Game.dev["checks"] = true
+	Game.caps = 1000
+	await _wait(10)
+	out.append("map %dx%d, region x %.0f..%.0f; locs %s" % [Game.hw, Game.hd, Game.x0, Game.x0 + Game.hw - 1, str(["cinder_gap", "ashborn", "lookout", "mercy_falls", "drivein"].filter(func(k): return Game.DB.locs.has(k)).size())])
+	out.append("frontier: %d records, solids %d, chests %d, benches %d" % [Frontier.layout().size(), Game.region.solids.size(), Game.W.chests.filter(func(c): return String(c.id).begins_with("cg_") or String(c.id).begins_with("mf_") or String(c.id).begins_with("ab_") or String(c.id).begins_with("di_")).size(), Game.W.benches.size()])
+	await _tp(815, -40)
+	out.append("cinder gap people " + _live(["odile", "pike", "juno", "sorrel", "abe", "cg_guard1", "cg_guard2", "cg_folk1", "cg_folk2", "cg_folk3"]) + "; hester2 here %s" % str(_live(["hester2"]).begins_with("1")))
+	out.append("trees in a forest chunk: %s" % str(_trees_at(1150, -150)))
+	out.append(_dlg2("odile", ["You look like", "I'll find"]))
+	out.append(_dlg2("sorrel", ["You look short", "I'll see"]))
+	out.append(_dlg2("juno", ["You look like", "I'll bring", "I will"]))
+	out.append("started: mercy_road %s, mercy_ledger %s, last_call %s" % [str(Game.known("mercy_road")), str(Game.known("mercy_ledger")), str(Game.known("last_call"))])
+	await _tp(990, 168)
+	var wr = _obj_point("mr_wreck")
+	out.append("wreck point %s label %s" % [str(wr != null), str(objects.point_label(wr)) if wr else "-"])
+	if wr:
+		objects.point_use(wr)
+	out.append("caravan log %d, mercy_road stage %d" % [Game.count("caravan_log"), Game.stage("mercy_road")])
+	out.append(_dlg2("odile", ["About the caravans", "One more thing", "Only the last one", "I will"]))
+	await _tp(690, 228)
+	var rk := enemies.filter(func(e): return String(e.eid).begins_with("rk"))
+	out.append("drive-in: kings %d (hostile %d), people %s" % [rk.size(), rk.filter(func(e): return e.hostile).size(), _live(["marquee", "dex"])])
+	out.append(_dlg2("dex", ["She wants you home", "mother's ring", "Go on home"]))
+	await _wait(5)
+	out.append("dex gone from drive-in: %s, dexHome %s" % [str(not _live(["dex"]).begins_with("1")), str(Game.flags.get("dexHome"))])
+	out.append(_dlg2("marquee", ["Cinder Gap's caravans", "A dead road", "Pleasure"]))
+	out.append("rk_deal %s, mercy_road stage %d" % [str(Game.flags.get("rk_deal")), Game.stage("mercy_road")])
+	await _tp(1128, 300)
+	var mf := enemies.filter(func(e): return String(e.eid).begins_with("mf"))
+	out.append("mercy falls: ghouls %d, hester %s" % [mf.size(), _live(["hester"])])
+	await _tp(1124, 317)
+	out.append(_dlg2("hester", ["What happened", "I'll get you out"]))
+	var ph = _obj_point("mf_pharmacy")
+	out.append("pharmacy point %s label %s" % [str(ph != null), str(objects.point_label(ph)) if ph else "-"])
+	if ph:
+		objects.point_use(ph)
+	out.append("meds %d ledger %d, mercy_ledger stage %d, mercy_road stage %d" % [Game.count("mercy_meds"), Game.count("mercy_ledger"), Game.stage("mercy_ledger"), Game.stage("mercy_road")])
+	for i in 6:
+		Game.killed["mf%d" % i] = 1
+	Game.check_quests()
+	out.append("hospital cleared: mercy_road stage %d" % Game.stage("mercy_road"))
+	out.append(_dlg2("hester", ["Go. It's clear", "Safe road"]))
+	await _wait(5)
+	out.append("hester left hospital %s" % str(not _live(["hester"]).begins_with("1")))
+	await _tp(805, -45)
+	out.append("back in town: " + _live(["hester2", "dex2"]))
+	out.append(_dlg2("odile", ["I found Hester", "Tell them yourself"]))
+	out.append(_dlg2("sorrel", ["I found the Mercy", "Glad"]))
+	out.append(_dlg2("juno", ["Dex is home", "Glad"]))
+	out.append("done: mercy_road %s (%s), mercy_ledger %s, last_call %s; cinder rep %d, karma %d" % [str(Game.is_done("mercy_road")), str(Game.flags.get("mr_end")), str(Game.is_done("mercy_ledger")), str(Game.is_done("last_call")), Game.rep_of("cinder"), Game.karma])
+	await _tp(1296, -330)
+	out.append("ashborn people " + _live(["saba", "tull", "ira", "ab_guard1", "ab_guard2", "ab_folk1", "ab_folk2"]))
+	out.append(_dlg2("saba", ["Your wardens", "I'll go"]))
+	await _tp(986, -238)
+	out.append("lookout: " + _live(["crane"]))
+	out.append(_dlg2("crane", ["The Ashborn call you", "Their Ember-Speaker", "You think it's arson", "I'll look"]))
+	out.append("bm stage %d, bm_met %s, bm_hint %s" % [Game.stage("burning_man"), str(Game.flags.get("bm_met")), str(Game.flags.get("bm_hint"))])
+	await _tp(1328, -334)
+	var ca = _obj_point("bm_cache")
+	out.append("cache point %s label %s" % [str(ca != null), str(objects.point_label(ca)) if ca else "-"])
+	if ca:
+		objects.point_use(ca)
+	out.append("flint %d, bm stage %d" % [Game.count("tull_flint"), Game.stage("burning_man")])
+	out.append(_dlg2("saba", ["I've been to the tower", "oil rags", "What happens now", "Goodbye"]))
+	await _wait(5)
+	out.append("burning_man done %s (%s); tull fighting %s; ashborn rep %d" % [str(Game.is_done("burning_man")), str(Game.flags.get("bm_end")), str(enemies.any(func(e): return String(e.eid) == "npc_tull" and e.hostile)), Game.rep_of("ashborn")])
+	var ep: Array = Game.L.epilogue.filter(func(e): return e.has("if") and Game.vm.truthy(Game.vm.call_value(e["if"], [Game.G])))
+	out.append("epilogue lines that would show: %d" % ep.size())
+	for l in out:
+		print("ASHTEST ", l)
+	get_tree().quit()
+
+func _trees_at(x: float, z: float) -> int:
+	var k: String = chunks.key_of(Vector3(x, 0, z))
+	var ij := k.split("_")
+	return Flora.spots(int(ij[0]), int(ij[1]), 64.0, 0.85, chunks.mask_img).size()
 
 # build 10's story: the council and its pledge, both companion quests, factions and the epilogue
 func _story_test() -> void:
@@ -2506,6 +2672,7 @@ func _terrain() -> void:
 	var img: Image = (load("res://data/mask.png") as Texture2D).get_image()
 	if img.is_compressed():
 		img.decompress()
+	Flora.far_on = Quality.load_level() > 0
 	chunks = preload("res://scripts/chunks.gd").new()
 	add_child(chunks)
 	chunks.setup(terrain_full, img, _grass_mesh())
@@ -2934,7 +3101,7 @@ func broadcast(k: String) -> void:
 		Game.flags.heard.append(k)
 	Sfx.play("o_quest")
 	hud.screens.open_term(String(r.h), String(r.t))
-	speak(String(r.t), "overseer")
+	speak(String(r.t), String(r.get("who", "overseer")))
 
 # Two stations. Meridian Free Radio from the start (blues and frontier tunes between the DJ's notices), and KDST
 # Classics once Lark gets the old transmitter working (Dead Air): waltzes, and Lark between them. Music comes from

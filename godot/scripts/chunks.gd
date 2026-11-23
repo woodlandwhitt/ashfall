@@ -50,6 +50,8 @@ func setup(mat: Material, mask: Image, grass: Mesh) -> void:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mi)
 			coarse[k] = mi
+			if Game.area == "world":
+				Flora.far(mi, i, j, SIZE, mask)
 
 func set_material(mat: Material) -> void:
 	terrain_mat = mat
@@ -221,12 +223,57 @@ func _build(k: String, ps: PackedScene) -> void:
 		root.add_child(ps.instantiate())
 		if on_built.is_valid():
 			on_built.call(root)
+	if Game.area == "world":
+		Flora.plant(root, i, j, SIZE, mask_img)
 	add_child(root)
+	if ps and Game.area == "world" and Game.region.has("cut"):
+		_settle_cut(root)
 	loaded[k] = root
 	coarse[k].visible = false
 	_tune(root)
 	if on_enter.is_valid():
 		on_enter.call(k)
+
+# build 15 cut a road through the old east wall: the rocks and scrub that stood on the ground taken away there come
+# down with it, and great slabs of the old cliff are hidden (region.cut: how far the ground dropped, 4 m grid, dm)
+static func cut_at(x: float, z: float) -> float:
+	var C: Dictionary = Game.region.get("cut", {})
+	if C.is_empty():
+		return 0.0
+	var st := float(C.step)
+	var fx := (x - float(C.x0)) / st
+	var fz := (z - float(C.z0)) / st
+	var w := int(C.w)
+	var d := int(C.d)
+	if fx < 0.0 or fz < 0.0 or fx > w - 1 or fz > d - 1:
+		return 0.0
+	var ix := mini(int(fx), w - 2)
+	var iz := mini(int(fz), d - 2)
+	var tx := fx - ix
+	var tz := fz - iz
+	var v: Array = C.v
+	var a := lerpf(float(v[iz * w + ix]), float(v[iz * w + ix + 1]), tx)
+	var b := lerpf(float(v[(iz + 1) * w + ix]), float(v[(iz + 1) * w + ix + 1]), tx)
+	return lerpf(a, b, tz) * 0.1
+
+func _settle_cut(root: Node3D) -> void:
+	for c in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := c as MeshInstance3D
+		if mi.name == "Ground" or mi.mesh == null:
+			continue
+		var ab: AABB = mi.global_transform * mi.get_aabb()
+		var cc := ab.get_center()
+		if maxf(ab.size.x, ab.size.z) > 12.0:
+			var worst := 0.0
+			for fx in [0.0, 0.5, 1.0]:
+				for fz in [0.0, 0.5, 1.0]:
+					worst = maxf(worst, cut_at(ab.position.x + ab.size.x * fx, ab.position.z + ab.size.z * fz))
+			if worst > 3.0:
+				mi.visible = false
+			continue
+		var lo := cut_at(cc.x, cc.z)
+		if lo > 0.4:
+			mi.global_position.y -= lo
 
 func _tune(n: Node) -> void:
 	if Game.area == "world":

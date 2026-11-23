@@ -68,7 +68,7 @@ static func look_colors(look: Dictionary) -> Array:
 func setup(d: Dictionary) -> void:
 	id = d.id
 	display_name = Game.DIALOGUE[id].name if Game.DIALOGUE.has(id) else String(d.name).capitalize()
-	position = Vector3(d.x, Game.height(d.x, d.z), d.z)
+	position = Vector3(d.x, maxf(Game.height(d.x, d.z), Frontier.floor_at(d.x, d.z)), d.z)
 	home = position
 	face_yaw = float(d.rot)
 	if d.wander:

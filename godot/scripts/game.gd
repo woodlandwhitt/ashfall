@@ -621,8 +621,18 @@ func load_area(a: String) -> void:
 			W["spawns"] = []
 		for sp in STORY.get("spawns", []):
 			var d: Dictionary = sp.duplicate()
-			d["y"] = height(float(d.x), float(d.z))
+			d["y"] = maxf(height(float(d.x), float(d.z)), Frontier.floor_at(float(d.x), float(d.z)))
 			W.spawns.append(d)
+		# build 15: new people in new places
+		var have := {}
+		for n in region.npcs:
+			have[String(n.id)] = true
+		for n in STORY.get("npcs", []):
+			if have.has(String(n.id)):
+				continue
+			var d: Dictionary = n.duplicate(true)
+			d["y"] = maxf(height(float(d.x), float(d.z)), Frontier.floor_at(float(d.x), float(d.z)))
+			region.npcs.append(d)
 	if not interior():
 		_merge_spawns()
 	if area == "world":
@@ -1041,7 +1051,7 @@ func _merge_spawns() -> void:
 						if sp.get("neutral", false):
 							e["hostile"] = false
 			continue
-		if not (sp.has("req") or sp.has("onStart")):
+		if not (sp.has("req") or sp.has("onStart") or sp.get("always", false)):
 			continue
 		var t := String(sp.type)
 		if not region.etypes.has(t):
@@ -1049,9 +1059,20 @@ func _merge_spawns() -> void:
 			if not region.etypes.has(t):
 				continue
 		region.enemies.append({"type": t, "x": sp.x, "z": sp.z, "y": sp.y, "hostile": not sp.get("neutral", false), "id": id,
-			"req": sp.get("req"), "onStart": sp.get("onStart"), "name": sp.get("name")})
+			"req": sp.get("req"), "onStart": sp.get("onStart"), "name": sp.get("name"), "group": sp.get("group", ""),
+			"flag": sp.get("flag"), "unless": sp.get("unless")})
+
+# a person or a creature that only shows up once something has happened (flag), or goes once it has (unless)
+func flag_allowed(d: Dictionary) -> bool:
+	if d.get("flag") != null and not flags.has(String(d.flag)):
+		return false
+	if d.get("unless") != null and flags.has(String(d.unless)):
+		return false
+	return true
 
 func spawn_allowed(e: Dictionary) -> bool:
+	if not flag_allowed(e):
+		return false
 	if e.get("req") != null and not is_done(String(e.req)):
 		return false
 	if e.get("onStart") != null and not known(String(e.onStart)):
@@ -1101,6 +1122,12 @@ func _merge_story() -> void:
 		return
 	for k in STORY.get("quests", {}):
 		L.quests[k] = STORY.quests[k]
+	for k in STORY.get("locs", {}):
+		DB.locs[k] = STORY.locs[k]
+	if not L.has("vendors"):
+		L["vendors"] = {}
+	for k in STORY.get("vendors", {}):
+		L.vendors[k] = STORY.vendors[k]
 	for npc in STORY.get("dialogue", {}):
 		if L.dialogue.has(npc):
 			for nk in STORY.dialogue[npc].nodes:

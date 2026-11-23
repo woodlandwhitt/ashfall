@@ -287,8 +287,8 @@ func drive(dt: float, iv: Vector2) -> void:
 			Game.hurt((imp - 9.0) * 2.2)
 		v *= -0.25
 		to = from + (to - from) * maxf(0.0, frac[0] - 0.05)
-	to.x = clampf(to.x, -480.0, 480.0)
-	to.z = clampf(to.z, -480.0, 480.0)
+	to.x = clampf(to.x, Game.x0 + 20.0, Game.x0 + Game.hw - 21.0)
+	to.z = clampf(to.z, Game.z0 + 20.0, Game.z0 + Game.hd - 21.0)
 	var ng := Game.height(to.x, to.z)
 	if ng - from.y > absf(v) * dt * 1.4 + 0.35:
 		v *= 0.4

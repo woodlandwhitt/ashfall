@@ -67,7 +67,7 @@ func spot() -> Variant:
 		var dd := randf_range(45.0, 75.0)
 		var x := pp.x + sin(a) * dd
 		var z := pp.z + cos(a) * dd
-		if absf(x) > 460.0 or absf(z) > 460.0:
+		if x < Game.x0 + 40.0 or z < Game.z0 + 40.0 or x > Game.x0 + Game.hw - 41.0 or z > Game.z0 + Game.hd - 41.0:
 			continue
 		var near_town := false
 		for k in Game.DB.locs:

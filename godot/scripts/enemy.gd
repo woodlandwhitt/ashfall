@@ -96,7 +96,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 	hostile = bool(d.get("hostile", true))
 	eid = String(d.get("id", "")) if d.get("id") != null else ""
 	group = String(d.get("group", "")) if d.get("group") != null else ""
-	position = Vector3(d.x, Game.height(d.x, d.z), d.z)
+	position = Vector3(d.x, maxf(Game.height(d.x, d.z), Frontier.floor_at(d.x, d.z)), d.z)
 	home = position
 	face_yaw = randf() * TAU
 	collision_layer = 2

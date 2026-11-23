@@ -1131,22 +1131,31 @@ func _after_mod() -> void:
 func _map_image() -> ImageTexture:
 	if map_tex:
 		return map_tex
-	var N := 384
-	var img := Image.create(N, N, false, Image.FORMAT_RGB8)
+	var w := float(Game.hw - 1)
+	var dd := float(Game.hd - 1)
+	# one pixel every couple of metres, the map's own shape (it's wider than tall since the Ashwood opened up)
+	var N := 512 if w > dd else int(512.0 * w / dd)
+	var NH := int(N * dd / w)
+	var img := Image.create(N, NH, false, Image.FORMAT_RGB8)
 	var mask: Image = (load("res://data/mask.png") as Texture2D).get_image()
 	if mask.is_compressed():
 		mask.decompress()
-	var w := float(Game.hw - 1)
-	var dd := float(Game.hd - 1)
-	for y in N:
+	var flora: Image = null
+	if ResourceLoader.exists("res://data/flora.png"):
+		flora = (load("res://data/flora.png") as Texture2D).get_image()
+		if flora.is_compressed():
+			flora.decompress()
+	for y in NH:
 		for x in N:
 			var wx := Game.x0 + x / float(N) * w
-			var wz := Game.z0 + y / float(N) * dd
+			var wz := Game.z0 + y / float(NH) * dd
 			var h := Game.height(wx, wz)
 			var sl := Game.height(wx + 2.0, wz + 2.0) - h
 			var c := Color(0.08, 0.22, 0.1).lerp(Color(0.25, 0.6, 0.3), clampf(h / 40.0 + 0.4, 0.0, 1.0))
 			c = c.lightened(clampf(-sl * 0.25, -0.3, 0.3)) if sl < 0 else c.darkened(clampf(sl * 0.25, 0.0, 0.4))
-			var mk := mask.get_pixel(int(x / float(N) * (mask.get_width() - 1)), int(y / float(N) * (mask.get_height() - 1)))
+			var mk := mask.get_pixel(int(x / float(N) * (mask.get_width() - 1)), int(y / float(NH) * (mask.get_height() - 1)))
+			if flora and flora.get_pixel(int(x / float(N) * (flora.get_width() - 1)), int(y / float(NH) * (flora.get_height() - 1))).r > 0.45:
+				c = c.darkened(0.3)
 			if mk.r > 0.4:
 				c = Color(0.55, 0.95, 0.6)
 			img.set_pixel(x, y, c)
@@ -1165,7 +1174,7 @@ func _map() -> void:
 	body.add_child(h)
 	var map := MapView.new()
 	map.tex = _map_image()
-	map.custom_minimum_size = Vector2(430, 430)
+	map.custom_minimum_size = Vector2(430, 220)
 	map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	h.add_child(map)
@@ -1199,14 +1208,15 @@ func _map() -> void:
 class MapView extends Control:
 	var tex: Texture2D
 	func _draw() -> void:
-		var s := minf(size.x, size.y)
-		var r := Rect2(Vector2((size.x - s) * 0.5, 0), Vector2(s, s))
-		draw_texture_rect(tex, r, false)
 		var w := float(Game.hw - 1)
 		var dd := float(Game.hd - 1)
+		var asp := w / dd
+		var rs := Vector2(size.x, size.x / asp) if size.x / maxf(1.0, size.y) < asp else Vector2(size.y * asp, size.y)
+		var r := Rect2((size - rs) * Vector2(0.5, 0.0), rs)
+		draw_texture_rect(tex, r, false)
 		var f := ThemeDB.fallback_font
 		var to_map := func(x: float, z: float) -> Vector2:
-			return r.position + Vector2((x - Game.x0) / w, (z - Game.z0) / dd) * s
+			return r.position + Vector2((x - Game.x0) / w, (z - Game.z0) / dd) * rs
 		for k in Game.DB.locs:
 			var L: Dictionary = Game.DB.locs[k]
 			if not Game.main.in_region(float(L.x), float(L.z)):

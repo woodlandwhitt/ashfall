@@ -189,6 +189,21 @@ Keep every existing quest and line, then deepen them:
    Hollerback Holler, synths, guardbots and power-armoured Iron Wardens (`machine.gd`), and wearable power armour.
    The gunsmith (`gun_mods.gd`, Pip menu GUNSMITH): seventeen parts across six slots. Voices read for mood
    (`tools/voice/gen.py`).
-13. **godot-15:** a new game icon; then the map three times larger, region by region: roads, forests, unique terrain and buildings, tribes,
-   new settlements and interiors, more complex quests and deeper dialogue. At that point the Godot build replaces
-   the WebView build.
+13. **godot-15:** *Status: shipped as a new base (one reinstall, for the new launcher icon) plus a patch for
+   build 13 installs.* A new icon (ember sun, ridges, the relay tower). Townspeople no longer repeat themselves:
+   each sit, chat, stand or job is a beat of its own length, chats take turns, spots they've just used are avoided,
+   idles vary. **The map doubled, eastward** (`tools/terrain/expand.py`, keeping the original square as it was): the
+   Ashwood, 2 km by 1 km, reached by Kettle Pass, a road cut through the old east wall (props and colliders there
+   settle with the ground, `chunks.cut_at`). Roads, mesas, a dry river canyon, mountain edges, and a forest of
+   low-poly pines and dead snags (`flora.gd`, `data/flora.png`; near and far detail, a sparse horizon forest).
+   Settlements and ruins built in code (`frontier.gd`, `builds.gdshader`: boards, tin, canvas, logs, concrete), walls
+   in the solid list so both navigations route through the doors: **Cinder Gap** (store, saloon, clinic, town
+   hall, workshop with a bench, market, water tower, gate), the **Ashborn** camp (palisade, hide tents, longhouse,
+   totems, the Ember Mother), **Crane's Lookout** (a climbable fire tower and a cabin), **Mercy Falls** (ruins and
+   the hospital) and the **Sunset Drive-In**. Rooms are furnished and lit. Twenty-three new people
+   (`tools/story/story15.mjs`, with flag-gated people, story fights, guards, shops and places in the story format),
+   four quests that cross each other (The Mercy Road, The Burning Man, Mercy's Ledger, Last Call), new factions,
+   a fire-watch broadcast, twelve epilogue lines, voiced. The Pip map keeps the map's shape. `--ashtest` plays all of
+   it through.
+14. **godot-16:** the north band (z -1000..-500) to make the map three times its old size: more settlements and
+   interiors, more complex quests and deeper dialogue. At that point the Godot build replaces the WebView build.
