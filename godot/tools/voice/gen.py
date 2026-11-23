@@ -26,6 +26,32 @@ f0 = {int(k): v for k, v in json.load(open(F0)).items() if v > 0}
 male = sorted([s for s, v in f0.items() if v < 140], key=lambda s: f0[s])
 female = sorted([s for s, v in f0.items() if v > 175], key=lambda s: -f0[s])
 
+# how a line is said: each line is read for its mood from its words and punctuation, and voiced to match
+# (angry lines faster, louder and a touch higher; frightened ones quick and shaky; sad ones slower, lower and softer;
+# glad ones brighter). [length scale x, noise scale, ffmpeg filter]
+MOODS = {
+	"angry": [0.9, 0.86, "asetrate=22050*1.03,aresample=22050,atempo=0.971,volume=1.3"],
+	"afraid": [0.87, 0.9, "asetrate=22050*1.045,aresample=22050,atempo=0.957,vibrato=f=6.5:d=0.1"],
+	"sad": [1.13, 0.6, "asetrate=22050*0.965,aresample=22050,atempo=1.036,volume=0.85"],
+	"glad": [0.95, 0.8, "asetrate=22050*1.035,aresample=22050,atempo=0.966"],
+	"wry": [1.0, 0.78, ""],
+	"calm": [1.0, 0.72, ""],
+}
+CUES = {
+	"angry": r"\b(damn|hell|get out|back off|kill|shut up|idiot|fool|bastard|how dare|enough|liar|thief|rot|burn|move it|touch that|last warning|scum)\b",
+	"afraid": r"\b(please|help me|help us|don'?t hurt|scared|afraid|run\b|they'?re coming|oh god|no,? no|hide|monsters?|screaming)\b",
+	"sad": r"\b(sorry|died|dead|gone|lost|miss (him|her|them)|grave|buried|never came back|alone|tears|cried|mourn|funeral|last of)\b",
+	"glad": r"\b(ha(ha)*|great|wonderful|thank you|thanks|glad|welcome|good to see|cheers|lovely|brilliant|hooray|finally!|beautiful)\b",
+	"wry": r"\b(of course|naturally|sure you|right\.|figures|funny|joke)\b",
+}
+def mood(t):
+	low = t.lower()
+	score = {m: len(re.findall(rx, low)) for m, rx in CUES.items()}
+	score["angry"] += t.count("!") * 0.6 if score["glad"] == 0 else 0
+	score["sad"] += t.count("...") * 0.5
+	best = max(score, key=lambda m: score[m])
+	return best if score[best] >= 1 else "calm"
+
 def key(t):
 	return hashlib.md5(re.sub(r"[^a-z0-9]", "", t.lower()).encode()).hexdigest()[:16]
 
@@ -65,11 +91,13 @@ def work(job):
 	if voice is None:
 		voice = PiperVoice.load(MODEL)
 	spk, pace, fx = profile(who)
+	md = MOODS[mood(t)] if who not in ("radio", "core", "committee", "ferryman", "narrator") else MOODS["calm"]
 	buf = io.BytesIO()
 	with wave.open(buf, "wb") as w:
-		voice.synthesize_wav(t, w, syn_config=SynthesisConfig(speaker_id=spk, length_scale=pace, noise_scale=0.72, noise_w_scale=0.85))
+		voice.synthesize_wav(t, w, syn_config=SynthesisConfig(speaker_id=spk, length_scale=pace * md[0], noise_scale=md[1], noise_w_scale=0.85))
 	os.makedirs(os.path.dirname(out), exist_ok=True)
-	af = ("%s," % fx if fx else "") + "loudnorm=I=-17:TP=-1.5:LRA=9"
+	chain = [f for f in (md[2], fx) if f]
+	af = (",".join(chain) + "," if chain else "") + ("loudnorm=I=-17:TP=-1.5:LRA=9" if md is not MOODS["sad"] else "loudnorm=I=-19:TP=-1.5:LRA=9")
 	p = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "wav", "-i", "pipe:0", "-af", af, "-ac", "1", "-ar", "22050",
 		"-c:a", "libvorbis", "-q:a", "3", out], input=buf.getvalue())
 	return 1 if p.returncode == 0 else 0

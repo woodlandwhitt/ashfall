@@ -62,6 +62,7 @@ func _weapon() -> void:
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
 			held = Humanoid.hold_gun(body, load(mdl[0]), mdl[1], mdl[2])
+			GunMods.attach(held, mdl[1], Game.weapon)
 
 func update(d: float) -> void:
 	if not on:
