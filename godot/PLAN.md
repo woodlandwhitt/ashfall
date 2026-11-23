@@ -180,8 +180,15 @@ Keep every existing quest and line, then deepen them:
    when their giver dies. **In-app updates** (`patcher.gd`, `updater.gd`): each release carries a patch pack cut
    against the base build's full pack (`godot/patch_base.txt`; "self" makes a build the new base), downloaded from
    the title screen and mounted at the next start.
-12. **godot-14:** a fuller graphics settings menu, more perks, power armour, more synths and robots, hillbillies,
-   food, the weapon builder. Voice inflection by mood.
-13. **godot-15+:** the map three times larger, region by region: roads, forests, unique terrain and buildings, tribes,
+12. **godot-14:** *Status: shipped as the first in-game update (patch against build 13).* Navigation rebuilt for
+   townspeople (`town_life.gd`): their own navigation map, apart from the coarse one hostiles use; indoor rooms and
+   Haven 12 baked whole, the valley in 32 m tiles with trimmed borders so they join; gathering spots at wells,
+   fires, boards and gaming tables; neighbours stop to talk; people step round you; companions path round walls;
+   walkable-distance spot choice; stuck recovery; a Developer-menu navmesh view. A Graphics menu (presets to Ultra
+   plus thirteen settings, `quality.gd`). Fifteen perks with level gates. Sixteen foods. The Tuttle hill family at
+   Hollerback Holler, synths, guardbots and power-armoured Iron Wardens (`machine.gd`), and wearable power armour.
+   The gunsmith (`gun_mods.gd`, Pip menu GUNSMITH): seventeen parts across six slots. Voices read for mood
+   (`tools/voice/gen.py`).
+13. **godot-15:** a new game icon; then the map three times larger, region by region: roads, forests, unique terrain and buildings, tribes,
    new settlements and interiors, more complex quests and deeper dialogue. At that point the Godot build replaces
    the WebView build.
