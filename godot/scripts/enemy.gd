@@ -59,6 +59,10 @@ var windup := 0.0        # a melee blow on its way (you can step out of it)
 var slot := 0.0          # the side it comes at you from, so a pack spreads out instead of stacking
 var fled := false
 var seen_t := 0.0        # how long you've been in its sight
+var lost_t := 0.0        # how long since it last saw you while hunting
+var look_t := 0.0
+var saw := true
+var last_seen := Vector3.ZERO
 
 # outfit, cloth tint, skin tint for the human hostiles
 const PEOPLE := {
@@ -420,8 +424,44 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 		hostile = true
 		velocity += dir * 2.0
 
+func _give_up() -> void:
+	state = "idle"
+	tac = "advance"
+	lost_t = 0.0
+	last_seen = Vector3.ZERO
+	aiming = false
+	target = home
+	wait = randf_range(6.0, 10.0)
+	if bark_cd <= 0.0 and not quad:
+		bark_cd = 6.0
+		Sfx.play_at("o_creature1", global_position + Vector3.UP, -6.0, 1.2)
+
+# a gang that watches its own fall loses heart: the ones near a death may break and run for a few seconds (the
+# mindless don't: ghouls, glow-husks, machines; nor bosses)
+func _morale_hit(at: Vector3) -> void:
+	if dead or not hostile or state != "chase" or def.get("boss", false) or def.get("robot", false) or type in ["ghoul", "glowhusk", "brute"]:
+		return
+	if global_position.distance_to(at) > 22.0:
+		return
+	var fallen := 0
+	var standing := 0
+	for e in Game.main.enemies:
+		if is_instance_valid(e) and e.global_position.distance_to(at) < 25.0 and e.type == type:
+			if e.dead:
+				fallen += 1
+			else:
+				standing += 1
+	var p := 0.12 + 0.18 * fallen - 0.06 * standing + (0.25 if hp / hp_max < 0.5 else 0.0)
+	if randf() < p:
+		tac = "flee"
+		tac_t = randf_range(3.0, 6.0)
+
 func die(dir: Vector3) -> void:
 	dead = true
+	if Game.main:
+		for e in Game.main.enemies:
+			if e != self and is_instance_valid(e):
+				e._morale_hit(global_position)
 	if Game.perks.has("bloody_mess") and Game.main and not def.get("robot", false):
 		for i in 4:
 			Game.main.blood(global_position + Vector3(randf() - 0.5, 0.6 + randf(), randf() - 0.5), Vector3(randf() - 0.5, 0.8, randf() - 0.5).normalized())
@@ -613,6 +653,22 @@ func _physics_process(d: float) -> void:
 		"chase":
 			if dist > 70.0:
 				state = "idle"
+			# it hunts what it last saw, not you through the walls; lose it long enough, far enough from home,
+			# and it gives up and goes back (build 17: "mobs swarm you relentlessly")
+			look_t -= d
+			if look_t <= 0.0:
+				look_t = 0.25
+				saw = dist < 4.0 or foe != null or can_see(pp)
+			if saw:
+				lost_t = 0.0
+				last_seen = pp
+			else:
+				lost_t += d
+			if lost_t > 2.5 and last_seen != Vector3.ZERO:
+				pp = last_seen
+				dist = global_position.distance_to(pp)
+				if dist < 2.0 and lost_t > 6.0 or lost_t > 16.0 or global_position.distance_to(home) > 110.0 and lost_t > 4.0:
+					_give_up()
 			var r := _tactics(d, pp, dist)
 			spd = r[0]
 			aim = r[1]
