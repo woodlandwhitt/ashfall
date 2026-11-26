@@ -302,6 +302,11 @@ func _quests() -> void:
 			_btn(g, "TRACK", func(): Game.flags["track"] = id; Game.quest_changed.emit())
 
 func _areas() -> void:
+	var g0 := _row("Map", "Mark every place as found, so the map can travel anywhere")
+	_btn(g0, "DISCOVER ALL PLACES", func():
+		for k in Game.DB.locs:
+			Game.discover(k)
+		Game.msg("Every place is on your map."))
 	var g := _row("Teleport", "Closes this menu")
 	for k in Game.DB.locs:
 		_btn(g, String(Game.DB.locs[k].name).to_upper(), func():

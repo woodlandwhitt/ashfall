@@ -1163,7 +1163,14 @@ func _map_image() -> ImageTexture:
 	var w := float(Game.hw - 1)
 	var dd := float(Game.hd - 1)
 	# one pixel every couple of metres, the map's own shape (it's wider than tall since the Ashwood opened up)
-	var N := 512 if w > dd else int(512.0 * w / dd)
+	# drawn once at a size that stays sharp zoomed in, then kept on the device
+	var cache := "user://map17_%d_%d.png" % [Game.hw, Game.hd]
+	if FileAccess.file_exists(cache):
+		var ci := Image.load_from_file(cache)
+		if ci:
+			map_tex = ImageTexture.create_from_image(ci)
+			return map_tex
+	var N := 1000 if w > dd else int(1000.0 * w / dd)
 	var NH := int(N * dd / w)
 	var img := Image.create(N, NH, false, Image.FORMAT_RGB8)
 	var mask: Image = (load("res://data/mask.png") as Texture2D).get_image()
@@ -1188,6 +1195,7 @@ func _map_image() -> ImageTexture:
 			if mk.r > 0.4:
 				c = Color(0.55, 0.95, 0.6)
 			img.set_pixel(x, y, c)
+	img.save_png(cache)
 	map_tex = ImageTexture.create_from_image(img)
 	return map_tex
 
@@ -1200,15 +1208,34 @@ func _map() -> void:
 			_label(body, "\n" + String(o.title).to_upper() + "\n" + String(o.text), 19)
 		return
 	var h := HBoxContainer.new()
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(h)
+	var mv := VBoxContainer.new()
+	mv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mv.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	h.add_child(mv)
 	var map := MapView.new()
 	map.tex = _map_image()
 	map.custom_minimum_size = Vector2(430, 220)
 	map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	h.add_child(map)
+	map.zoom = map_zoom
+	mv.add_child(map)
+	var zr := HBoxContainer.new()
+	mv.add_child(zr)
+	for z in [["−", 1.0 / 1.5], ["+", 1.5]]:
+		var zf: float = z[1]
+		_button(zr, z[0], func():
+			map.set_zoom(map.zoom * zf)
+			map_zoom = map.zoom, 60)
+	_button(zr, "ME", func():
+		map.centre = Vector2(Game.player.global_position.x, Game.player.global_position.z)
+		map.set_zoom(maxf(map.zoom, 3.0))
+		map_zoom = map.zoom, 70)
+	var info := _label(zr, "Tap a place to pick it, again to travel.", 15, DIM)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var v := VBoxContainer.new()
-	v.custom_minimum_size = Vector2(300, 0)
+	v.custom_minimum_size = Vector2(280, 0)
 	h.add_child(v)
 	_label(v, "PLACES", 21)
 	var sc := ScrollContainer.new()
@@ -1216,10 +1243,21 @@ func _map() -> void:
 	v.add_child(sc)
 	var list := VBoxContainer.new()
 	sc.add_child(list)
+	var go_to := func(k: String):
+		Game.main.hud.toggle_pip()
+		Game.main.fast_travel(k)
+	map.travel.connect(go_to)
+	map.picked_changed.connect(func(k: String):
+		if k == "":
+			info.text = "Tap a place to pick it, again to travel."
+			return
+		var L: Dictionary = Game.DB.locs[k]
+		var dist := Vector2(float(L.x) - Game.player.global_position.x, float(L.z) - Game.player.global_position.z).length()
+		info.text = "%s, %.0f m. Tap again to travel." % [String(L.name), dist])
 	var any := false
-	for k in Game.DB.locs:
-		if not Game.discovered.has(k):
-			continue
+	var keys: Array = Game.DB.locs.keys().filter(func(k): return Game.discovered.has(k))
+	keys.sort_custom(func(a, b): return String(Game.DB.locs[a].name) < String(Game.DB.locs[b].name))
+	for k in keys:
 		any = true
 		var L: Dictionary = Game.DB.locs[k]
 		var inside: bool = Game.main.in_region(float(L.x), float(L.z))
@@ -1227,48 +1265,188 @@ func _map() -> void:
 		b.text = String(L.name) + ("" if inside else "  (not in this build)")
 		b.disabled = not inside
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.pressed.connect(func():
-			Game.main.hud.toggle_pip()
-			Game.main.fast_travel(k))
+		var kk: String = k
+		b.pressed.connect(func(): go_to.call(kk))
 		list.add_child(b)
 	if not any:
 		_label(list, "Explore to discover places. Tap a discovered place to travel there.", 18, DIM)
 
+var map_zoom := 1.0
+# the map (build 17): drag to pan, pinch or the +/- buttons to zoom, tap a place you've found to pick it and tap
+# it again (or GO) to travel there; a grid every 100 m, the roads, the towns, you, your objective
 class MapView extends Control:
 	var tex: Texture2D
+	var zoom := 1.0
+	var centre := Vector2.ZERO          # world x, z at the middle of the view
+	var picked := ""
+	var drag := false
+	var touches := {}
+	var pinch0 := 0.0
+	var zoom0 := 1.0
+	var moved := 0.0
+	signal travel(k: String)
+	signal picked_changed(k: String)
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		clip_contents = true
+		if Game.player:
+			centre = Vector2(Game.player.global_position.x, Game.player.global_position.z)
+		resized.connect(func():
+			_clamp()
+			queue_redraw())
+
+	func _scale() -> float:
+		# pixels per metre at zoom 1: the whole valley fits
+		var w := float(Game.hw - 1)
+		var dd := float(Game.hd - 1)
+		return minf(size.x / w, size.y / dd) * zoom
+
+	func to_map(x: float, z: float) -> Vector2:
+		return size * 0.5 + (Vector2(x, z) - centre) * _scale()
+
+	func to_world(p: Vector2) -> Vector2:
+		return centre + (p - size * 0.5) / _scale()
+
+	func set_zoom(z: float, about := Vector2(-1, -1)) -> void:
+		var at := about if about.x >= 0.0 else size * 0.5
+		var before := to_world(at)
+		zoom = clampf(z, 1.0, 8.0)
+		var after := to_world(at)
+		centre += before - after
+		_clamp()
+		queue_redraw()
+
+	func _clamp() -> void:
+		var half := size * 0.5 / _scale()
+		var lo := Vector2(Game.x0, Game.z0) + half
+		var hi := Vector2(Game.x0 + Game.hw - 1, Game.z0 + Game.hd - 1) - half
+		centre.x = clampf(centre.x, minf(lo.x, hi.x), maxf(lo.x, hi.x)) if lo.x < hi.x else Game.x0 + (Game.hw - 1) * 0.5
+		centre.y = clampf(centre.y, minf(lo.y, hi.y), maxf(lo.y, hi.y)) if lo.y < hi.y else Game.z0 + (Game.hd - 1) * 0.5
+
+	func _gui_input(e: InputEvent) -> void:
+		if e is InputEventScreenTouch:
+			if e.pressed:
+				touches[e.index] = e.position
+				moved = 0.0
+				if touches.size() == 2:
+					var ps: Array = touches.values()
+					pinch0 = (ps[0] as Vector2).distance_to(ps[1])
+					zoom0 = zoom
+			else:
+				touches.erase(e.index)
+				if touches.is_empty() and moved < 12.0:
+					_tap(e.position)
+			accept_event()
+		elif e is InputEventScreenDrag:
+			touches[e.index] = e.position
+			if touches.size() >= 2:
+				var ps: Array = touches.values()
+				var dnow := (ps[0] as Vector2).distance_to(ps[1])
+				if pinch0 > 10.0:
+					set_zoom(zoom0 * dnow / pinch0, ((ps[0] as Vector2) + (ps[1] as Vector2)) * 0.5)
+				moved += 99.0
+			else:
+				centre -= e.relative / _scale()
+				moved += e.relative.length()
+				_clamp()
+				queue_redraw()
+			accept_event()
+		elif e is InputEventMouseButton:
+			if e.button_index == MOUSE_BUTTON_WHEEL_UP and e.pressed:
+				set_zoom(zoom * 1.25, e.position)
+			elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN and e.pressed:
+				set_zoom(zoom / 1.25, e.position)
+			elif e.button_index == MOUSE_BUTTON_LEFT:
+				if e.pressed:
+					drag = true
+					moved = 0.0
+				else:
+					drag = false
+					if moved < 8.0:
+						_tap(e.position)
+			accept_event()
+		elif e is InputEventMouseMotion and drag:
+			centre -= e.relative / _scale()
+			moved += e.relative.length()
+			_clamp()
+			queue_redraw()
+		elif e is InputEventMagnifyGesture:
+			set_zoom(zoom * e.factor, e.position)
+
+	func _tap(at: Vector2) -> void:
+		var best := ""
+		var bd := 30.0
+		for k in Game.DB.locs:
+			if not Game.discovered.has(k):
+				continue
+			var L: Dictionary = Game.DB.locs[k]
+			var d := to_map(float(L.x), float(L.z)).distance_to(at)
+			if d < bd:
+				bd = d
+				best = k
+		if best != "" and best == picked:
+			travel.emit(best)
+			return
+		picked = best
+		picked_changed.emit(best)
+		queue_redraw()
+
 	func _draw() -> void:
 		var w := float(Game.hw - 1)
 		var dd := float(Game.hd - 1)
-		var asp := w / dd
-		var rs := Vector2(size.x, size.x / asp) if size.x / maxf(1.0, size.y) < asp else Vector2(size.y * asp, size.y)
-		var r := Rect2((size - rs) * Vector2(0.5, 0.0), rs)
-		draw_texture_rect(tex, r, false)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.06, 0.03))
+		var a := to_map(Game.x0, Game.z0)
+		draw_texture_rect(tex, Rect2(a, Vector2(w, dd) * _scale()), false)
 		var f := ThemeDB.fallback_font
-		var to_map := func(x: float, z: float) -> Vector2:
-			return r.position + Vector2((x - Game.x0) / w, (z - Game.z0) / dd) * rs
+		# a grid every 100 m (50 m when close in), with coordinates along the top
+		var step := 100.0 if zoom < 3.0 else 50.0
+		var b := to_map(Game.x0 + w, Game.z0 + dd)
+		var gx := ceilf(Game.x0 / step) * step
+		while gx < Game.x0 + w:
+			var x := to_map(gx, 0).x
+			if x > 0 and x < size.x:
+				draw_line(Vector2(x, maxf(a.y, 0)), Vector2(x, minf(b.y, size.y)), Color(0.6, 1.0, 0.65, 0.1), 1.0)
+			gx += step
+		var gz := ceilf(Game.z0 / step) * step
+		while gz < Game.z0 + dd:
+			var y := to_map(0, gz).y
+			if y > 0 and y < size.y:
+				draw_line(Vector2(maxf(a.x, 0), y), Vector2(minf(b.x, size.x), y), Color(0.6, 1.0, 0.65, 0.1), 1.0)
+			gz += step
 		for k in Game.DB.locs:
 			var L: Dictionary = Game.DB.locs[k]
 			if not Game.main.in_region(float(L.x), float(L.z)):
 				continue
-			var p: Vector2 = to_map.call(float(L.x), float(L.z))
+			var p := to_map(float(L.x), float(L.z))
+			if p.x < -40 or p.y < -40 or p.x > size.x + 40 or p.y > size.y + 40:
+				continue
 			var known := Game.discovered.has(k)
-			draw_circle(p, 5.0, Color(0.85, 1.0, 0.85) if known else Color(0.3, 0.55, 0.35))
+			var on: bool = k == picked
+			if known and zoom > 1.6:
+				draw_arc(p, float(L.get("r", 20)) * _scale(), 0, TAU, 32, Color(0.85, 1.0, 0.85, 0.18), 1.0)
+			draw_circle(p, 7.0 if on else 5.0, Color(1.0, 0.85, 0.35) if on else (Color(0.85, 1.0, 0.85) if known else Color(0.3, 0.55, 0.35)))
 			if known:
-				draw_string(f, p + Vector2(8, 5), String(L.name), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.85, 1.0, 0.85))
+				draw_string(f, p + Vector2(9, 5), String(L.name), HORIZONTAL_ALIGNMENT_LEFT, -1, 15 if on else 13, Color(1.0, 0.85, 0.4) if on else Color(0.85, 1.0, 0.85))
 		var qt = Game.quest_target()
 		if qt != null:
-			var q: Vector2 = to_map.call(qt.x, qt.z)
+			var q: Vector2 = to_map(qt.x, qt.z)
 			draw_arc(q, 9.0, 0, TAU, 24, Color(1.0, 0.82, 0.3), 2.5)
 			draw_circle(q, 3.0, Color(1.0, 0.82, 0.3))
 			var o := Game.current_objective()
 			if not o.is_empty():
 				draw_string(f, q + Vector2(12, -8), String(o.title), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.85, 0.4))
 		var pp: Vector3 = Game.player.global_position
-		var c: Vector2 = to_map.call(pp.x, pp.z)
+		var c: Vector2 = to_map(pp.x, pp.z)
 		var yaw: float = Game.player.yaw
 		var fw := Vector2(-sin(yaw), -cos(yaw))
 		var rt := Vector2(-fw.y, fw.x)
 		draw_colored_polygon(PackedVector2Array([c + fw * 11.0, c - fw * 7.0 + rt * 6.0, c - fw * 7.0 - rt * 6.0]), Color(1.0, 0.85, 0.3))
+		# a scale bar
+		var m := 100.0 if zoom < 3.0 else 25.0
+		var bl := m * _scale()
+		draw_line(Vector2(12, size.y - 14), Vector2(12 + bl, size.y - 14), Color(0.85, 1.0, 0.85), 2.0)
+		draw_string(f, Vector2(14 + bl, size.y - 9), "%d m" % int(m), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 1.0, 0.85))
 
 # ---------------------------------------------------------------- SYSTEM
 func _system() -> void:
