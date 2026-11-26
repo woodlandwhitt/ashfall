@@ -1013,7 +1013,10 @@ func _test_hooks() -> void:
 	if args.has("term"):
 		# the terminal screen: open, or locked (term=lock level)
 		var lv := int(String(args.term)) if String(args.term) != "" else 0
-		hud.term.open("MERIDIAN REACTOR // SHIFT LOG", [["Record 1 of 3", "Shift 4. Coolant pressure low again. Halloran says it's the gauge."], ["Record 2 of 3", "Shift 5. It is not the gauge."], ["Record 3 of 3", "Shift 6. Evacuation ordered."]], lv, "test_term")
+		var te := [["Record 1 of 3", "Shift 4. Coolant pressure low again. Halloran says it's the gauge."], ["Record 2 of 3", "Shift 5. It is not the gauge."], ["Record 3 of 3", "Shift 6. Evacuation ordered."]]
+		for i in int(args.get("termn", "0")):
+			te.append(["Extra record %d" % (i + 1), "Filler entry."])
+		hud.term.open("MERIDIAN REACTOR // SHIFT LOG", te, lv, "test_term")
 		await _wait(40)
 		if lv > 0 and args.has("guess"):
 			hud.term._guess("XXXXX")

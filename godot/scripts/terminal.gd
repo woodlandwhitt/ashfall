@@ -110,7 +110,7 @@ func open(header: String, items: Array, lock := 0, id := "", done := Callable())
 	if lock > 0 and Game.dev.get("locks", false):
 		Game.opened["t_" + id] = true
 	if lock > 0 and Game.flags.get("tlock_" + id) == Game.day:
-		_type("MERIDIAN ATOMICS DATANET v2.3\n\n> TERMINAL LOCKED\n> TOO MANY FAILED LOGON ATTEMPTS\n> CONTACT AN ADMINISTRATOR\n", func(): _exit_only())
+		_type("MERIDIAN ATOMICS DATANET v2.3\n\n> TERMINAL LOCKED\n> TOO MANY FAILED LOGON ATTEMPTS\n> LOCKOUT CLEARS AT THE NEXT DAILY RESET (TOMORROW)\n> OR CONTACT AN ADMINISTRATOR\n", func(): _exit_only())
 		return
 	if lock > 0 and not Game.opened.has("t_" + id):
 		_type("MERIDIAN ATOMICS DATANET v2.3\nCOPYRIGHT MERIDIAN ATOMICS POWER CO.\n\n> SET TERMINAL/INQUIRE\n> SET HALT RESTART/MAINT\n> RUN DEBUG/ACCOUNTS.F\n\nPASSWORD REQUIRED\n", _hack)
@@ -203,8 +203,17 @@ func _boot() -> void:
 func _menu() -> void:
 	_clear_foot()
 	_clear_dump()
+	# a long menu scrolls inside the screen instead of running off the bottom of it (build 17 report: the Meridian
+	# reactor's terminal)
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var room := get_viewport_rect().size.y * 0.5
+	sc.custom_minimum_size = Vector2(0, minf((entries.size() + 1) * 46.0, room))
+	foot.add_child(sc)
 	var col := VBoxContainer.new()
-	foot.add_child(col)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(col)
 	for e in entries:
 		var ee: Array = e
 		_btn("> " + String(ee[0]).to_upper(), func(): _read(ee), col)
@@ -311,4 +320,4 @@ func _guess(w: String) -> void:
 	if tries <= 0:
 		Game.flags["tlock_" + lock_id] = Game.day
 		_clear_dump()
-		_type("\n> TERMINAL LOCKED\n> PLEASE CONTACT AN ADMINISTRATOR\n", func(): _exit_only())
+		_type("\n> TERMINAL LOCKED\n> LOCKOUT CLEARS AT THE NEXT DAILY RESET (TOMORROW)\n> COME BACK AFTER YOU HAVE SLEPT, OR CONTACT AN ADMINISTRATOR\n", func(): _exit_only())
