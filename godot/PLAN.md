@@ -242,7 +242,19 @@ Keep every existing quest and line, then deepen them:
    quest's third act** at the **Camp of the Door** outside Haven 12 (The Long Way Home, Dials and Needles, Fish Glue
    and Tyre Rubber, Iron and Fire, Haven's Doubt, The Last Nine Days: 21 stages, so the main line runs 13 quests and
    39 stages); radio news that follows what you've done; voiced. `--b17test` plays it through.
-16. **godot-18:** carried over from the build 17 list: the main quest longer still (a fourth act between Meridian
+16. **godot-18:** *Status: shipped as a patch (to build 15, and to build 13).* **The roads' stair-steps are gone**
+   (`tools/terrain/destep.py`): build 15 and 16 laid roads from height samples 4 m apart, each cell taking its
+   nearest sample, so a road down a slope became a flight of treads (2 m risers into the Glass Bowl). Every road is
+   re-laid from a surface interpolated along it, the treads are rounded off, and a finer pass catches the small ones;
+   the original square's pass cuts are only smoothed, with cut grids so its props follow the ground down.
+   **Silo 9 for real** (`silo.gd`, `story18.mjs`): the two-man rule (the Iron Angel's key and Tobiah's override);
+   launch, and a klaxon counts forty-five seconds, the missile climbs out of the hatch on fire and smoke, rolls
+   north-east and bursts over the old test range: a white sky, a fireball, a mushroom cloud on the horizon for the
+   day, the rumble a dozen seconds later, fallout over the north for a day. Scuttle the core, and you have ninety
+   seconds to clear the Bowl's floor before the silo folds into the ground (rubble from then on). The Ash Wind follows a
+   launch (warn Nell, shut the reservoir sluice, get the Children under a roof, wait it out); an emergency broadcast,
+   radio news, epilogue lines. `--silo=launch|scuttle`, `--b18test`.
+17. **godot-19:** carried over from the build 17 list: the main quest longer still (a fourth act between Meridian
    and the door: the Overseer's secret, the other vaults), more settlements and ruins on the empty stretches, real
    road meshes and terrain variety (washes, rock shelves, erosion), better ground and building textures, more
    GitHub character models for townspeople, interiors (the Spire's upper floors, the silo shaft), companions from
