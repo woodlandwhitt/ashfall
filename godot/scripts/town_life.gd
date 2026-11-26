@@ -292,6 +292,12 @@ func pick(npc, home: Vector3, radius: float, avoid: Array = []) -> Dictionary:
 	choices = walkable
 	if choices.is_empty():
 		return best
+	# evenings, a seat appeals more than a job
+	var h := fposmod(Game.time * 24.0, 24.0)
+	if h >= 18.0 and randf() < 0.6:
+		var seats := choices.filter(func(c): return String(c.kind) == "sit")
+		if not seats.is_empty():
+			choices = seats
 	if OS.get_cmdline_user_args().has("--sitfirst"):
 		var sits := choices.filter(func(c): return String(c.kind) == "sit")
 		if not sits.is_empty():

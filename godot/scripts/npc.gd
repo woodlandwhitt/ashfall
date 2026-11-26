@@ -241,15 +241,23 @@ func _life(d: float) -> float:
 				_glance = randf_range(-0.7, 0.7) if randf() < 0.5 else 0.0
 			face_yaw = lerp_angle(face_yaw, home_yaw + _glance, 1.0 - exp(-2.0 * d))
 			if life_t <= 0.0:
-				life_t = randf_range(15.0, 40.0)
+				# a day has a shape (build 17): at night most stay put at home; evenings are for talk and a seat;
+				# working hours for the jobs about the place
+				var h := fposmod(Game.time * 24.0, 24.0)
+				var night := h >= 22.5 or h < 5.5
+				var evening := h >= 18.0 and h < 22.5
+				life_t = randf_range(15.0, 40.0) if not night else randf_range(60.0, 120.0)
 				if Game.main.town == null or not Game.main.town.ready_at(global_position):
+					return 0.0
+				if night and not id.begins_with("guard") and randf() < 0.85:
+					home_a = "Idle"
 					return 0.0
 				# vendors and guards don't stray far from their post
 				var r := 6.0 if (Game.DB.vendors.has(id) or id.begins_with("guard")) else LIFE_R
 				spot = {}
 				# now and then, a word with a neighbour who's at home too
-				if randf() < 0.35:
-					var mate = _neighbour(10.0)
+				if randf() < (0.6 if evening else 0.3):
+					var mate = _neighbour(14.0 if evening else 10.0)
 					if mate:
 						var cs: Array = Game.main.town.chat_spots(global_position, mate.global_position)
 						cs[0].who = self
@@ -287,7 +295,7 @@ func _life(d: float) -> float:
 					if String(spot.kind) == "chat":
 						life_t = randf_range(12.0, 22.0)
 					recent.append(spot.p)
-					if recent.size() > 3:
+					if recent.size() > 5:
 						recent.pop_front()
 					if String(spot.kind) == "sit":
 						sit_t = 1.4
