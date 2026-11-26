@@ -103,7 +103,7 @@ func setup(d: Dictionary) -> void:
 		rig = Rig.new(model, true)
 	else:
 		var role := ""
-		if id in ["sheriff", "deputy", "guard12", "lamp1"] or id.begins_with("guard"):
+		if id in ["sheriff", "deputy", "guard12", "lamp1"] or id.begins_with("guard") or "_guard" in id:
 			role = "guard"
 		elif id in ["mayor", "overseer", "brannock", "boss", "cass"]:
 			role = "boss"
@@ -129,6 +129,7 @@ func setup(d: Dictionary) -> void:
 	# town guards carry their gun in hand, not just in their story (build 17)
 	if ap and held == null and (id in ["saltguard", "knuckles", "sheriff", "guard12", "kess"] or id in Game.STORY.get("guards", [])):
 		held = Humanoid.hold_gun(model, load("res://guns/lp_pistol.glb"), Basis.IDENTITY, {"glb": "lp_pistol", "pistol": 1})
+		guard = true
 	# walking round furniture and each other: a navigation agent (TownLife bakes the floor it walks on)
 	if ap and not (id in ANIMALS):
 		agent = NavigationAgent3D.new()
@@ -180,6 +181,8 @@ func _physics_process(d: float) -> void:
 		if ap:
 			ap.active = near
 	if pd > 8100.0:
+		return
+	if not talking and _defend(d):
 		return
 	var spd := 0.0
 	if talking and Game.player:
@@ -452,6 +455,174 @@ func _go_home(stuck: bool) -> void:
 	last_p = global_position
 
 
+# ---------------------------------------------------------------- towns fight back (build 19)
+# Armed guards shoot the raiders, beasts and ghouls that come into town, and those shoot back (enemy.gd draws its
+# fight toward a defender closer than you). Everyone else runs from them. Nobody in town dies of it: at zero they go
+# down and get up again once it's quiet. A faction that hates you sends its guards for you on sight; one that
+# respects you watches your back from further off.
+var guard := false
+var g_think := 0.0
+var g_cool := 0.0
+var g_said := 0.0
+var fleeing := false
+const GUARD_FAC := {"saltguard": "saltreach", "knuckles": "gantry", "lr_guard": "lamplight"}
+
+func faction() -> String:
+	var f = Game.STORY.get("npc_faction", {}).get(id, GUARD_FAC.get(id))
+	return String(f) if f != null else ""
+
+func _reach() -> float:
+	var f := faction()
+	return 42.0 if f != "" and Game.rep_of(f) >= 6 else 34.0
+
+func _defend(d: float) -> bool:
+	if Game.main == null or hostile or ap == null or Game.hp <= 0.0 and down <= 0.0:
+		return false
+	if down > 0.0:
+		down -= d
+		velocity = Vector3(0, -6.0 if not is_on_floor() else -0.5, 0)
+		move_and_slide()
+		if down <= 0.0:
+			hp = maxhp * 0.5
+			Humanoid.play(ap, idle_anim)
+			if Game.player and global_position.distance_to(Game.player.global_position) < 40.0:
+				Game.msg(display_name + " picks themselves up.")
+		return true
+	g_think -= d
+	g_cool -= d
+	g_said -= d
+	if g_think <= 0.0:
+		g_think = 0.4 + randf() * 0.2
+		if guard and Game.player:
+			_hated_check()
+			if hostile:
+				return true
+		var reach := _reach() if guard else 20.0
+		if tgt != null and (not is_instance_valid(tgt) or tgt.dead or not tgt.hostile or tgt.get("npc") != null or tgt.global_position.distance_to(global_position) > reach + 8.0):
+			tgt = null
+		if tgt == null:
+			var best = null
+			var bd := reach
+			for e in Game.main.enemies:
+				if not is_instance_valid(e) or e.dead or not e.hostile or e.get("npc") != null or e.caged or e.fly:
+					continue
+				var ed: float = e.global_position.distance_to(global_position)
+				if ed < bd and (e.state == "chase" or ed < reach * 0.6):
+					bd = ed
+					best = e
+			tgt = best
+			if tgt and g_said <= 0.0 and Game.player and global_position.distance_to(Game.player.global_position) < 30.0:
+				g_said = 25.0
+				var lines := ["Contact! Hold the line!", "They're in the street! Shoot!", "Get inside, all of you!", "Raiders! On me!"] if guard else ["Run! They're coming!", "Help! Somebody help!", "Get away from here!"]
+				var ln: String = lines[randi() % lines.size()]
+				Game.msg(display_name + ": \"" + ln + "\"")
+		if tgt and guard:
+			var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 1.45, tgt.global_position + Vector3.UP * 1.0, 1)
+			los = get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+		var D: Array = Game.main.defenders
+		if tgt and guard:
+			if not D.has(self):
+				D.append(self)
+		else:
+			D.erase(self)
+	if tgt == null:
+		if fleeing:
+			fleeing = false
+			if agent:
+				_go_home(false)
+		if aim_hold:
+			aim_hold.target_w = 0.0
+		return false
+	if String(spot.get("kind", "")) == "sit" and life == "act":
+		_go_home(false)
+	var to: Vector3 = tgt.global_position - global_position
+	to.y = 0
+	var ad := maxf(0.01, to.length())
+	var mv := Vector3.ZERO
+	var spd := 0.0
+	var a := "Idle"
+	if guard:
+		face_yaw = lerp_angle(face_yaw, atan2(to.x, to.z), 1.0 - exp(-10.0 * d))
+		a = "Pistol_Aim_Neutral"
+		if not los and global_position.distance_to(home) < 12.0:
+			mv = _path_dir(tgt.global_position, to / ad)
+			spd = 3.4
+		elif ad < 4.0:
+			mv = -to / ad
+			spd = 2.0
+		if aim_hold == null:
+			_arm_aim()
+		if g_cool <= 0.0 and los and ad < _reach():
+			g_cool = randf_range(0.9, 1.4)
+			_guard_shot(ad)
+	else:
+		# away from it, round the furniture where the town's map allows
+		fleeing = true
+		var away := -to / ad
+		mv = _path_dir(global_position + away * 10.0, away)
+		spd = 3.6
+		face_yaw = lerp_angle(face_yaw, atan2(mv.x, mv.z), 1.0 - exp(-8.0 * d))
+		if ad > 18.0:
+			tgt = null
+	velocity.x = mv.x * spd
+	velocity.z = mv.z * spd
+	velocity.y = -6.0 if not is_on_floor() else -0.5
+	move_and_slide()
+	model.rotation.y = face_yaw
+	if near:
+		if spd > 3.0:
+			a = "Jog_Fwd"
+		elif spd > 0.3:
+			a = "Walk"
+		var sgn := LegTwist.drive(lt, face_yaw, velocity if spd > 0.3 else Vector3.ZERO) if lt else 1.0
+		Humanoid.play(ap, a, sgn)
+		if aim_hold:
+			aim_hold.target_w = 1.0 if guard else 0.0
+			var tp: Vector3 = tgt.global_position + Vector3.UP * 1.0
+			aim_hold.pitch = atan2(tp.y - global_position.y - 1.4, Vector2(tp.x - global_position.x, tp.z - global_position.z).length())
+	return true
+
+func _arm_aim() -> void:
+	var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if sk == null:
+		return
+	ap.play("Pistol_Aim_Neutral")
+	ap.seek(0.0, true)
+	sk.force_update_all_bone_transforms()
+	aim_hold = AimHold.new()
+	sk.add_child(aim_hold)
+	aim_hold.capture(sk)
+
+func _guard_shot(ad: float) -> void:
+	var from := global_position + Vector3.UP * 1.45 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5
+	var at: Vector3 = tgt.global_position + Vector3.UP * 1.0
+	var ok := randf() < clampf(0.8 - ad / 40.0 * 0.4, 0.3, 0.8)
+	ap.play("Pistol_Shoot", 0.05)
+	Sfx.play_at("pistol_far" if global_position.distance_to(Game.player.global_position) > 14.0 else "pistol", from, -4.0, randf_range(0.9, 1.0))
+	Game.main.tracer(from, at + (Vector3.ZERO if ok else Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 2.0), Color(1.0, 0.82, 0.5))
+	if ok:
+		var f := faction()
+		var dmg := randf_range(12.0, 18.0) * (1.25 if f != "" and Game.rep_of(f) >= 6 else 1.0)
+		Game.main.town_shot = true
+		tgt.hit(dmg, at, (at - from).normalized())
+		Game.main.town_shot = false
+
+# a faction that hates you: its guards come for you when they see you
+func _hated_check() -> void:
+	var f := faction()
+	if f == "" or Game.rep_of(f) > -6 or Game.main.in_dialog():
+		return
+	var pp: Vector3 = Game.player.global_position
+	if global_position.distance_to(pp) > 20.0:
+		return
+	var q := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 1.5, pp + Vector3.UP * 1.4, 1, [Game.player.get_rid()])
+	if not get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+		return
+	var nm := String(Game.STORY.factions[f].n) if Game.STORY.get("factions", {}).has(f) else f
+	Game.msg(display_name + ": \"You've got some nerve, showing your face here.\"")
+	Game.banner("HATED", nm + " guards attack on sight")
+	Game.main.provoke(self, 0.0, Vector3.ZERO, false, true)
+
 # ---------------------------------------------------------------- companions (main.js updParty)
 # shot, stabbed or blown up: the town turns on you (main.provoke)
 var hostile := false
@@ -515,9 +686,10 @@ func hurt(dmg: float) -> void:
 	hp -= dmg * (1.0 if comp.get("dog", false) else 0.8)
 	if hp <= 0.0:
 		hp = 0.0
-		down = 16.0
+		down = 16.0 if follow else 22.0
 		tgt = null
-		Game.msg(String(comp.n) + " is down! They'll get back up.")
+		if follow or (Game.player and global_position.distance_to(Game.player.global_position) < 40.0):
+			Game.msg(String(comp.get("n", display_name)) + " is down! They'll get back up.")
 		say("hurt")
 		if ap:
 			ap.play("Death01", 0.15)

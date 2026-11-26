@@ -238,6 +238,10 @@ func open_trade(id: String) -> void:
 	if v.is_empty():
 		Game.msg("They have nothing to trade.")
 		return
+	var hf = Game.STORY.get("vendor_faction", {}).get(id)
+	if hf != null and Game.rep_of(String(hf)) <= -6:
+		Game.msg("They won't trade with you. Your standing with %s is too low." % String(Game.STORY.get("factions", {}).get(String(hf), {}).get("n", hf)))
+		return
 	shop_id = id
 	shop_tab = "buy"
 	shop_qty = 1

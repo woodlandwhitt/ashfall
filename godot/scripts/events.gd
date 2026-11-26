@@ -18,6 +18,7 @@ func _physics_process(dt: float) -> void:
 	if Game.interior() or Game.paused or Game.player == null or not Game.booted and not OS.get_cmdline_user_args().has("--events"):
 		return
 	_hunt(dt)
+	_raid(dt)
 	var pp: Vector3 = Game.player.global_position
 	if not cur.is_empty():
 		cur.t += dt
@@ -272,3 +273,64 @@ func _hunt(dt: float) -> void:
 		e.state = "chase"
 	Game.banner("HUNTED" if bad else "AMBUSH", "Bounty hunters have tracked you down" if bad else "Kess has sent hired guns to stop you")
 	Sfx.play("o_creature1", -2.0)
+
+# ---------------------------------------------------------------- raids on the towns (build 19)
+# Now and then, while you're in a guarded settlement, raiders, a hound pack or a knot of ghouls come in from the
+# edge of it. The guards meet them (npc.gd _defend), the townsfolk run, and you can join in or keep your head down.
+var raid_t := -1.0
+func _raid(dt: float) -> void:
+	var force := OS.get_cmdline_user_args().has("--raid")
+	if raid_t < 0.0:
+		raid_t = 3.0 if force else randf_range(260.0, 480.0)
+	var pp: Vector3 = Game.player.global_position
+	var guards: Array = []
+	for n in main.npcs:
+		if is_instance_valid(n) and n.visible and n.get("guard") and not n.hostile and not n.follow and n.global_position.distance_to(pp) < 45.0:
+			guards.append(n)
+	if guards.is_empty() or main.in_dialog():
+		return
+	raid_t -= dt
+	if raid_t > 0.0:
+		return
+	raid_t = randf_range(620.0, 1100.0) if not force else 99999.0
+	for e in main.enemies:
+		if is_instance_valid(e) and not e.dead and e.hostile and e.global_position.distance_to(pp) < 70.0:
+			return
+	var c := Vector3.ZERO
+	for g in guards:
+		c += g.global_position
+	c /= guards.size()
+	var space: PhysicsDirectSpaceState3D = main.get_world_3d().direct_space_state
+	var kinds: Array = []
+	for k in ["raider", "raider", "hound", "ghoul", "marauder"]:
+		if Game.region.etypes.has(k):
+			kinds.append(k)
+	if kinds.is_empty():
+		return
+	var kind: String = kinds[randi() % kinds.size()]
+	var n := (2 if kind == "raider" or kind == "marauder" else 3) + (1 if Game.level > 6 else 0)
+	for tries in 24:
+		var a := randf() * TAU
+		var x := c.x + sin(a) * randf_range(44.0, 52.0)
+		var z := c.z + cos(a) * randf_range(44.0, 52.0)
+		if x < Game.x0 + 30.0 or z < Game.z0 + 30.0 or x > Game.x0 + Game.hw - 31.0 or z > Game.z0 + Game.hd - 31.0:
+			continue
+		var h := Game.height(x, z)
+		var q := PhysicsShapeQueryParameters3D.new()
+		var sh := SphereShape3D.new()
+		sh.radius = 2.0
+		q.shape = sh
+		q.transform = Transform3D(Basis(), Vector3(x, h + 2.4, z))
+		q.collision_mask = 1
+		if not space.intersect_shape(q, 1).is_empty():
+			continue
+		for i in n:
+			var e = _enemy(kind, x + randf_range(-3, 3), z + randf_range(-3, 3), true)
+			e.state = "chase"
+			e.home = c
+		var what: String = {"raider": "Raiders", "marauder": "Marauders", "hound": "A hound pack", "ghoul": "Ghouls"}.get(kind, "Raiders")
+		Game.banner("RAID", what + " are coming into town")
+		Game.msg(what + " are coming in! The guards are moving to meet them.")
+		Sfx.play("o_creature1", -2.0)
+		Game.flags["raids"] = int(Game.flags.get("raids", 0)) + 1
+		return

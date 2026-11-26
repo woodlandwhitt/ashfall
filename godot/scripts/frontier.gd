@@ -150,6 +150,7 @@ static func layout() -> Array:
 	L.append(R("chest", 674.0, 220.0, 0, {"id": "di_safe", "tier": "uncommon"}))
 	L.append(R("campfire", 701.0, 226.0, 0, {"s": 0.7}))
 	_north(L)
+	_dress(L)
 	# ---------------------------------------------------------------- build 17
 	# Lantern Row: a trading street east of Saltreach on the Kettle road, lamps on every post. The Lantern is its bar;
 	# behind the bar, the back room nobody admits is there: the Quiet Hands, the valley's thieves' guild
@@ -394,7 +395,8 @@ static func _ground(d: Dictionary) -> float:
 	var x := float(d.x)
 	var z := float(d.z)
 	match String(d.k):
-		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi", "banner", "shards", "rubble", "ufo", "crater":
+		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi", "banner", "shards", "rubble", "ufo", "crater", \
+				"sandbags", "washline", "crates", "watertank", "table", "scrap", "lamp":
 			return Game.height(x, z)
 	var g := -INF
 	for p in [Vector2(-w, -dd), Vector2(w, -dd), Vector2(-w, dd), Vector2(w, dd), Vector2.ZERO]:
@@ -728,6 +730,13 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 			kit.cyl("paint", Vector3(0, 0.42, 0.31), 0.1, 0.1, 0.03, 12, 0, Basis(Vector3.RIGHT, PI * 0.5))
 			kit.box("dark", Vector3(0.22, 0.42, 0.31), Vector3(0.05, 0.16, 0.03), 0)
 		"crater": _crater(kit, d)
+		"sandbags": _sandbags(kit, d)
+		"washline": _washline(kit, d)
+		"crates": _crates(kit, d)
+		"watertank": _watertank(kit, d)
+		"table": _table(kit, d)
+		"scrap": _scrap(kit, d)
+		"lamp": _lamp(kit, d)
 		"reactor_dress": _reactor_dress(kit)
 		"post":
 			kit.cyl("metal", Vector3.ZERO, 0.05, 0.05, 1.2, 6, 0)
@@ -1251,6 +1260,166 @@ static func _rubble(kit: Kit, d: Dictionary) -> void:
 # along the furrow. Every loose piece sits on the ground where it lies (the site's own ground, not one flat level).
 
 # how far the ground at a point of the site (local x, z) is above or below the site's origin
+# ---------------------------------------------------------------- build 19: the towns' clutter
+# Sandbag walls at the guard posts, washing lines, crate stacks, water tanks, tables, scrap heaps and lamp posts: the
+# lived-in detail the settlements were short of. Each piece follows the ground under it, part by part.
+static func _dress(L: Array) -> void:
+	# Camp of the Door: the vault folk's camp in front of Haven 12
+	L.append(R("sandbags", -5.5, 190.5, 0, {"len": 5.0, "yaw": 0.15}))
+	L.append(R("sandbags", 5.5, 190.5, 0, {"len": 5.0, "yaw": -0.15}))
+	L.append(R("lamp", -2.4, 189.6, 0))
+	L.append(R("lamp", 2.4, 189.6, 0))
+	L.append(R("washline", 0.0, 210.0, 0))
+	L.append(R("crates", -12.5, 206.5, 0, {"seed": 1}))
+	L.append(R("crates", 12.5, 203.0, 0, {"seed": 2}))
+	L.append(R("watertank", 13.5, 209.5, 0))
+	L.append(R("table", -7.0, 201.5, 0, {"yaw": 0.3}))
+	L.append(R("scrap", -14.5, 199.5, 0, {"seed": 3}))
+	L.append(R("kit", -12.4, 211.8, 0, {"id": "k:q_Barrel", "len": 0.9}))
+	L.append(R("kit", 15.5, 193.5, 0, {"id": "k:g_gravestone-cross", "len": 0.9, "yaw": PI}))
+	L.append(R("kit", 17.0, 194.0, 0, {"id": "k:g_gravestone-round", "len": 0.9, "yaw": PI + 0.2}))
+	L.append(R("kit", 9.5, 212.0, 0, {"id": "k:s_box-large", "len": 1.0, "yaw": 0.4}))
+	# Dustwell: posts on the north-west and south-east roads, a well-side market table
+	L.append(R("sandbags", -99.8, 73.2, 0, {"len": 4.0, "yaw": 0.38}))
+	L.append(R("lamp", -105.9, 75.6, 0))
+	L.append(R("sandbags", -81.2, 112.4, 0, {"len": 4.0, "yaw": 0.51}))
+	L.append(R("lamp", -86.8, 115.6, 0))
+	L.append(R("crates", -87.0, 101.0, 0, {"seed": 4}))
+	L.append(R("table", -103.5, 110.0, 0, {"yaw": 0.6}))
+	L.append(R("washline", -111.0, 89.0, 0, {"yaw": 0.2}))
+	L.append(R("scrap", -73.0, 98.0, 0, {"seed": 5}))
+	# Cinder Gap: the gate's sandbags, crates behind Pike's, a washing line behind the homes, lamps on the street
+	L.append(R("sandbags", 774.0, -44.0, 0, {"len": 4.0, "yaw": PI * 0.5}))
+	L.append(R("sandbags", 774.0, -37.5, 0, {"len": 3.0, "yaw": PI * 0.5}))
+	L.append(R("crates", 806.5, -60.5, 0, {"seed": 6}))
+	L.append(R("washline", 789.0, -20.5, 0))
+	L.append(R("lamp", 795.0, -49.0, 0))
+	L.append(R("lamp", 825.0, -49.0, 0))
+	L.append(R("lamp", 845.0, -49.0, 0))
+	L.append(R("table", 818.0, -45.0, 0, {"yaw": 0.0}))
+	L.append(R("watertank", 845.5, -19.5, 0))
+	L.append(R("scrap", 862.0, -40.0, 0, {"seed": 7}))
+	# Lantern Row
+	L.append(R("crates", 596.5, 98.0, 0, {"seed": 8}))
+	L.append(R("washline", 580.0, 142.0, 0))
+	L.append(R("table", 609.5, 125.5, 0, {"yaw": 0.2}))
+	L.append(R("scrap", 640.0, 135.0, 0, {"seed": 9}))
+	# Stillwater: nets and washing by the water, the co-op's stock, lamps along the shore path
+	L.append(R("washline", -70.0, -745.0, 0, {"yaw": 1.2}))
+	L.append(R("crates", -58.5, -780.5, 0, {"seed": 10}))
+	L.append(R("table", -60.0, -751.0, 0, {"yaw": 0.4}))
+	L.append(R("lamp", -70.0, -735.0, 0))
+	L.append(R("lamp", -50.0, -740.0, 0))
+	L.append(R("sandbags", -101.0, -679.0, 0, {"len": 3.0, "yaw": 0.1}))
+	L.append(R("watertank", -20.0, -766.0, 0))
+	# the Ashborn: meat racks have their tables, the gate its log wall
+	L.append(R("table", 1302.0, -321.0, 0, {"yaw": 0.9}))
+	L.append(R("crates", 1322.0, -349.0, 0, {"seed": 11}))
+	# the Garage market and the Children's camp
+	L.append(R("crates", 290.0, -712.0, 0, {"seed": 12}))
+	L.append(R("scrap", 283.0, -695.0, 0, {"seed": 13}))
+	L.append(R("table", 300.0, -699.0, 0, {"yaw": 0.0}))
+	L.append(R("washline", 1140.0, -620.0, 0, {"yaw": 0.3}))
+	L.append(R("crates", 1168.0, -612.0, 0, {"seed": 14}))
+
+# the ground under a point of a piece, against the ground at its middle (turning with the piece)
+static func _lifty(d: Dictionary, p: Vector3) -> float:
+	var w: Vector3 = Basis(Vector3.UP, float(d.get("yaw", 0.0)) + int(d.r) * PI * 0.5) * p
+	return Game.height(float(d.x) + w.x, float(d.z) + w.z) - _ground(d)
+
+static func _sandbags(kit: Kit, d: Dictionary) -> void:
+	var l := float(d.get("len", 4.0))
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	var n := maxi(2, int(l / 0.6))
+	for layer in 3:
+		var m := n - (layer % 2)
+		for i in m:
+			var x := (i - (m - 1) * 0.5) * (l / n)
+			var y := _lifty(d, Vector3(x, 0, 0)) + 0.12 + layer * 0.22
+			kit.box("canvas" if (i + layer) % 3 else "hide", b * Vector3(x, y, 0), Vector3(l / n * 0.96, 0.24, 0.44 - layer * 0.04), 0, b * Basis(Vector3.UP, sin(i * 3.1 + layer) * 0.08))
+	if not kit.solids_only:
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(l, 0.8, 0.46)
+		kit.cols.append([bs, Transform3D(b, Vector3(0, _lifty(d, Vector3.ZERO) + 0.4, 0))])
+
+static func _washline(kit: Kit, d: Dictionary) -> void:
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	var tops: Array = []
+	for sx in [-2.6, 2.6]:
+		var g := _lifty(d, Vector3(sx, 0, 0))
+		kit.cyl("log", b * Vector3(sx, g - 0.2, 0), 0.05, 0.04, 2.3, 5, 0)
+		tops.append(b * Vector3(sx, g + 2.0, 0))
+	kit.pole("dark", tops[0], tops[1], 0.008)
+	var cloth := ["canvas", "canvas_red", "mattress", "canvas_green", "hide"]
+	for i in 5:
+		var t := 0.12 + i * 0.19
+		var at: Vector3 = (tops[0] as Vector3).lerp(tops[1], t)
+		var sag := sin(t * PI) * 0.12
+		var hh := 0.55 + fmod(i * 0.37, 0.35)
+		var ww := 0.45 + fmod(i * 0.29, 0.3)
+		kit.box(cloth[i % cloth.size()], at + Vector3(0, -sag - hh * 0.5 - 0.02, 0), Vector3(ww, hh, 0.02), 0, b * Basis(Vector3.RIGHT, sin(i * 1.7) * 0.08))
+
+static func _crates(kit: Kit, d: Dictionary) -> void:
+	var sd := int(d.get("seed", 0))
+	var g := _lifty(d, Vector3.ZERO)
+	var lo := minf(g, minf(_lifty(d, Vector3(0.9, 0, 0)), _lifty(d, Vector3(-0.9, 0, 0))))
+	kit.box("plank", Vector3(-0.47, lo + 0.45, 0), Vector3(0.9, 0.9 + (g - lo) * 2.0, 0.9), 1)
+	kit.box("plank_dk", Vector3(0.47, lo + 0.4, 0.05), Vector3(0.8, 0.8 + (g - lo) * 2.0, 0.8), 1, Basis(Vector3.UP, 0.12 * (sd % 3 - 1)))
+	if sd % 2 == 0:
+		kit.box("plank", Vector3(-0.3, lo + 0.9 + (g - lo) + 0.32, 0.0), Vector3(0.64, 0.64, 0.64), 0, Basis(Vector3.UP, 0.4))
+	else:
+		kit.box("tin_teal", Vector3(0.0, lo + 0.9 + (g - lo) + 0.2, 0.1), Vector3(0.9, 0.4, 0.55), 0, Basis(Vector3.UP, -0.25))
+	for i in 2:
+		kit.box("dark", Vector3(-0.47 + i * 0.94, lo + 0.45, 0.455), Vector3(0.7, 0.05, 0.01), 0)
+
+static func _watertank(kit: Kit, d: Dictionary) -> void:
+	for p in [Vector3(-0.6, 0, -0.6), Vector3(0.6, 0, -0.6), Vector3(-0.6, 0, 0.6), Vector3(0.6, 0, 0.6)]:
+		var g := _lifty(d, p)
+		kit.box("log", Vector3(p.x, g * 0.5 + 0.6 - 0.05, p.z), Vector3(0.12, 1.3 - g, 0.12), 0)
+	kit.box("plank", Vector3(0, 1.22, 0), Vector3(1.5, 0.1, 1.5), 0)
+	kit.cyl("tin_teal", Vector3(0, 1.27, 0), 0.72, 0.72, 1.5, 14, 0)
+	kit.cyl("tin", Vector3(0, 2.77, 0), 0.74, 0.2, 0.18, 14, 0)
+	kit.cyl("metal", Vector3(0.55, 1.45, 0.45), 0.05, 0.05, 0.3, 6, 0, Basis(Vector3.RIGHT, PI * 0.5))
+	kit.box("tin", Vector3(0.6, 0.05 + _lifty(d, Vector3(0.6, 0, 0.9)), 0.9), Vector3(0.36, 0.1, 0.36), 0)
+	kit.solid_box(AABB(Vector3(-0.75, 0, -0.75), Vector3(1.5, 2.9, 1.5)))
+
+static func _table(kit: Kit, d: Dictionary) -> void:
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	for p in [Vector3(-0.72, 0, -0.33), Vector3(0.72, 0, -0.33), Vector3(-0.72, 0, 0.33), Vector3(0.72, 0, 0.33)]:
+		var g := _lifty(d, b * p)
+		kit.box("plank_dk", b * Vector3(p.x, (g + 0.76) * 0.5, p.z), Vector3(0.07, 0.76 - g, 0.07), 0, b)
+	kit.box("plank", b * Vector3(0, 0.78, 0), Vector3(1.7, 0.05, 0.8), 0, b)
+	for i in 3:
+		kit.box(["tin", "metal", "bone"][i], b * Vector3(-0.5 + i * 0.45, 0.85, 0.1 - i * 0.08), Vector3(0.12, 0.1 + i * 0.04, 0.12), 0, b)
+	for sx in [-1.0, 1.0]:
+		var g := _lifty(d, b * Vector3(0, 0, sx * 0.75))
+		kit.box("plank", b * Vector3(0, g + 0.22, sx * 0.75), Vector3(0.45, 0.44, 0.4), 0, b)
+	if not kit.solids_only:
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(1.7, 0.8, 0.8)
+		kit.cols.append([bs, Transform3D(b, Vector3(0, 0.4, 0))])
+
+static func _scrap(kit: Kit, d: Dictionary) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 900 + int(d.get("seed", 0))
+	for i in 9:
+		var a := rng.randf() * TAU
+		var r := rng.randf_range(0.0, 1.4)
+		var p := Vector3(cos(a) * r, 0, sin(a) * r)
+		var g := _lifty(d, p)
+		var sz := Vector3(rng.randf_range(0.5, 1.6), rng.randf_range(0.04, 0.4), rng.randf_range(0.4, 1.1))
+		var bb := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.BACK, rng.randf_range(-0.5, 0.5)) * Basis(Vector3.RIGHT, rng.randf_range(-0.3, 0.3))
+		kit.box(["tin", "tin_red", "metal", "tin_teal", "plank_dk"][i % 5], p + Vector3(0, g + sz.y * 0.3 + (0.8 - r * 0.5) * 0.35, 0), sz, 0, bb)
+	kit.cyl("dark", Vector3(1.3, _lifty(d, Vector3(1.3, 0, 0.4)) + 0.18, 0.4), 0.38, 0.38, 0.2, 12, 0, Basis(Vector3.RIGHT, PI * 0.5) * Basis(Vector3.BACK, 0.3))
+	kit.solid_box(AABB(Vector3(-1.2, 0, -1.2), Vector3(2.4, 0.7, 2.4)))
+
+static func _lamp(kit: Kit, d: Dictionary) -> void:
+	kit.cyl("log", Vector3(0, -0.3, 0), 0.07, 0.06, 3.6, 6, 0)
+	kit.box("log", Vector3(0.3, 3.15, 0), Vector3(0.7, 0.07, 0.07), 0)
+	kit.box("metal", Vector3(0.58, 2.9, 0), Vector3(0.2, 0.3, 0.2), 0)
+	kit.box("warm", Vector3(0.58, 2.88, 0), Vector3(0.14, 0.2, 0.21), 0)
+	kit.box("warm", Vector3(0.58, 2.88, 0), Vector3(0.21, 0.2, 0.14), 0)
+
 static func _lift(d: Dictionary, lx: float, lz: float) -> float:
 	return Game.height(float(d.x) + lx, float(d.z) + lz) - _ground(d)
 
@@ -1577,6 +1746,11 @@ static func _mat(k: String) -> Material:
 		if k == "glass":
 			st.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			st.albedo_color.a = 0.45
+		if k == "warm":
+			st.albedo_color = Color(1.0, 0.8, 0.5)
+			st.emission_enabled = true
+			st.emission = Color(1.0, 0.72, 0.38)
+			st.emission_energy_multiplier = 2.2
 		if k == "glow":
 			st.albedo_color = Color(0.35, 0.85, 0.3)
 			st.emission_enabled = true

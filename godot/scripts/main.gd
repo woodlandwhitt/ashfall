@@ -7,6 +7,8 @@ var hud
 var player
 var npcs: Array = []
 var enemies: Array = []
+var defenders: Array = []   # townspeople shooting at something right now (enemies fight back)
+var town_shot := false     # the hit being dealt is a guard's: no XP for you if it kills
 var sun: DirectionalLight3D
 var env: Environment
 var nav_region: NavigationRegion3D
@@ -1047,6 +1049,8 @@ func _test_hooks() -> void:
 		await _b17_test()
 	if args.has("b18test"):
 		await _b18_test()
+	if args.has("b19test"):
+		await _b19_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -2228,6 +2232,94 @@ func _b18_test() -> void:
 	out.append("done: still_waters %s, ash_wind %s; gc_end %s; news %d" % [str(Game.is_done("still_waters")), str(Game.is_done("ash_wind")), str(Game.flags.get("gc_end")), radio_news().size()])
 	for l in out:
 		print("B18TEST ", l)
+	get_tree().quit()
+
+# build 19: the towns fight back, and factions remember
+func _b19_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	Game.flags["gb_hello"] = 1
+	Game.dev["god"] = true
+	Game.flags.erase("radio")
+	await _wait(10)
+	var g = null
+	for n in npcs:
+		if String(n.id) == "sheriff":
+			g = n
+	out.append("sheriff found %s, guard %s" % [str(g != null), str(g.guard if g else false)])
+	if g == null:
+		for l in out:
+			print("B19TEST ", l)
+		get_tree().quit()
+		return
+	await _tp(g.global_position.x + 5.0, g.global_position.z + 5.0)
+	await _wait(30)
+	var xp0 := Game.xp
+	var civ = null
+	for n in npcs:
+		if n != g and not n.guard and n.ap and n.visible and n.global_position.distance_to(g.global_position) < 30.0:
+			civ = n
+	var civ0: Vector3 = civ.global_position if civ else Vector3.ZERO
+	var away: Vector3 = ((civ0 - g.global_position) * Vector3(1, 0, 1)).normalized() if civ else Vector3.RIGHT
+	var foes: Array = []
+	for i in 3:
+		var sp: Vector3 = (civ0 if civ else g.global_position) + away * 14.0 + Vector3(i * 2.0, 0, 0)
+		var e = events._enemy("raider", sp.x, sp.z, true)
+		e.state = "chase"
+		foes.append(e)
+	var shots := 0
+	var drawn := false
+	for f in 900:
+		await get_tree().physics_frame
+		if g.tgt != null:
+			shots += 1
+		for e in foes:
+			if is_instance_valid(e) and not e.dead and e.foe == g:
+				drawn = true
+		if foes.all(func(e): return not is_instance_valid(e) or e.dead):
+			break
+	var dead := foes.filter(func(e): return not is_instance_valid(e) or e.dead).size()
+	out.append("sheriff engaged %d frames, raiders dead %d/3, a raider fought the sheriff %s, sheriff hp %d down %s" % [shots, dead, str(drawn), int(g.hp), str(g.down > 0.0)])
+	out.append("xp from guard kills: %d (want 0)" % (Game.xp - xp0))
+	if civ:
+		out.append("civilian %s moved %.1f m (fled %s)" % [String(civ.id), civ.global_position.distance_to(civ0), str(civ.fleeing or civ.global_position.distance_to(civ0) > 2.0)])
+	for e in enemies.duplicate():
+		if is_instance_valid(e) and not e.dead and e.get("npc") == null and e.global_position.distance_to(player.global_position) < 90.0:
+			enemies.erase(e)
+			e.queue_free()
+	await _wait(5)
+	# a raid comes in on its own
+	events.raid_t = 0.01
+	await _wait(10)
+	out.append("raid flag %s, hostiles near %d" % [str(Game.flags.get("raids")), enemies.filter(func(e): return is_instance_valid(e) and not e.dead and e.hostile and e.global_position.distance_to(player.global_position) < 70.0).size()])
+	await _wait(1200)
+	out.append("after the raid: %d still standing; guards down %s" % [enemies.filter(func(e): return is_instance_valid(e) and not e.dead and e.hostile and e.global_position.distance_to(player.global_position) < 90.0).size(),
+		str(npcs.filter(func(n): return n.get("guard") and n.down > 0.0).map(func(n): return n.id))])
+	for e in enemies.duplicate():
+		if is_instance_valid(e) and not e.dead and e.get("npc") == null and e.global_position.distance_to(player.global_position) < 120.0:
+			enemies.erase(e)
+			e.queue_free()
+	# the new deputies are armed, and talk
+	for n in npcs:
+		if String(n.id) in ["dw_guard1", "dw_guard2"]:
+			out.append("%s armed %s at %s" % [n.id, str(n.guard), str(n.global_position.snapped(Vector3.ONE))])
+	out.append(_dlg2("dw_guard1", ["Raiders come", "Good to know"]))
+	# hated: folk turn you away, vendors won't trade, guards open fire
+	Game.flags["rep_dustwell"] = -9
+	Game.flags["rep"] = 0
+	var folk = null
+	for n in npcs:
+		if String(n.id) in ["duggan", "hollis"]:
+			folk = n
+	if folk:
+		hud.screens.open_trade(String(folk.id))
+		out.append("hated trade with %s refused %s" % [String(folk.id), str(hud.screens.shop_id != String(folk.id))])
+	await _tp(g.global_position.x + 6.0, g.global_position.z)
+	await _wait(60)
+	out.append("hated: sheriff hostile %s" % str(g.hostile))
+	for l in out:
+		print("B19TEST ", l)
 	get_tree().quit()
 
 func _trees_at(x: float, z: float) -> int:
@@ -3559,6 +3651,16 @@ func start_dialog(n, id: String) -> void:
 	if not Game.DIALOGUE.has(id):
 		Game.msg((String(n.display_name) if n else "They") + " has nothing to say.")
 		return
+	# a faction that hates you: its ordinary folk and guards won't give you the time of day (its leaders and the
+	# people the story needs still will - they have their reasons)
+	if n and n.has_method("faction") and not (id in ESSENTIAL):
+		var f: String = n.faction()
+		var plain: bool = "folk" in id or String(n.id) in GUARDS or String(n.id) in Game.STORY.get("guards", [])
+		if f != "" and plain and Game.rep_of(f) <= -6 and not (Game.STORY.get("factions", {}).get(f, {}).get("leader", "") == n.display_name):
+			var ln: String = ["Not a word. Not to you.", "Keep walking.", "We know what you did. Go.", "You're not welcome here."][randi() % 4]
+			Game.msg(String(n.display_name) + ": \"" + ln + "\"")
+			speak(ln, id)
+			return
 	dialog_npc = n if n else self
 	dialog_id = id
 	if n and "talking" in n:

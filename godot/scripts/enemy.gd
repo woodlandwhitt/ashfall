@@ -38,6 +38,8 @@ var essential := false   # they yield instead of dying
 var since_hit := 0.0
 var lt: LegTwist          # hips follow the feet when it strafes or backs off
 var aiming := false       # last frame it was aiming: it keeps facing you while it moves     # a provoked townsperson cools off when you stop hitting them and walk away
+var town_hit := false
+var you_hit := false     # only what you had a hand in killing pays XP (guards kill raiders too)
 var foe = null           # the companion it is fighting, or null for you
 var fly := false         # a vulture: airborne
 var fly_c := Vector3.ZERO     # the point it wheels round
@@ -398,6 +400,10 @@ func hit(amount: float, at: Vector3, dir: Vector3) -> void:
 	hp -= amount
 	since_hit = 0.0
 	flash = 0.12
+	if Game.main and Game.main.town_shot:
+		town_hit = true
+	else:
+		you_hit = true
 	if ap and hp > 0.0:
 		_one_shot(["Hit_Chest", "Hit_Head"][randi() % 2], 0.45)
 	if def.get("robot", false) or type in MACHINES:
@@ -475,7 +481,8 @@ func die(dir: Vector3) -> void:
 		Sfx.play_at("o_creature2", global_position, 0.0, 1.3)
 		_fall_from_sky()
 		Game.on_kill(type, eid)
-		Game.add_xp(int(def.get("xp", 24)) if def.get("xp") != null else 24)
+		if you_hit or not town_hit:
+			Game.add_xp(int(def.get("xp", 24)) if def.get("xp") != null else 24)
 		return
 	collision_layer = 0
 	Sfx.play_at("o_creature2" if quad else ["o_mdie1", "o_mdie2"][randi() % 2], global_position + Vector3.UP)
@@ -492,14 +499,16 @@ func die(dir: Vector3) -> void:
 		ap.play("Death01", 0.1)
 		ap.seek(0.0, true)
 		Game.on_kill(type, eid)
-		Game.add_xp(int(def.get("xp", 40)) if def.get("xp") != null else 40)
+		if you_hit or not town_hit:
+			Game.add_xp(int(def.get("xp", 40)) if def.get("xp") != null else 40)
 		return
 	var tw := create_tween()
 	var side := 1.0 if randf() < 0.5 else -1.0
 	tw.tween_property(model, "rotation:z", side * PI / 2.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.parallel().tween_property(model, "position:y", 0.25 if quad else 0.3, 0.45)
 	Game.on_kill(type, eid)
-	Game.add_xp(int(def.get("xp", 25 if quad else 40)) if def.get("xp") != null else (25 if quad else 40))
+	if you_hit or not town_hit:
+		Game.add_xp(int(def.get("xp", 25 if quad else 40)) if def.get("xp") != null else (25 if quad else 40))
 
 func hear(at: Vector3) -> void:
 	if not dead and hostile and global_position.distance_to(at) < 60.0:
@@ -610,6 +619,14 @@ func _physics_process(d: float) -> void:
 			if c.down <= 0.0:
 				var cd: float = global_position.distance_to(c.global_position)
 				if cd < dist * 0.8 and cd < 30.0:
+					foe = c
+					pp = c.global_position
+					dist = cd
+		# and so does a town guard who's shooting at it (build 19)
+		for c in Game.main.defenders:
+			if is_instance_valid(c) and c.visible and c.down <= 0.0 and not c.hostile:
+				var cd: float = global_position.distance_to(c.global_position)
+				if cd < dist * 0.8 and cd < 34.0:
 					foe = c
 					pp = c.global_position
 					dist = cd
