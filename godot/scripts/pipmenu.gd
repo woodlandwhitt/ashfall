@@ -665,7 +665,11 @@ func _item_card(R: VBoxContainer, id: String) -> void:
 			_cmp(R, "Accuracy", 100.0 - float(it.spread) * 600.0, (100.0 - float(eq.spread) * 600.0) if eq.has("spread") else null, "%.0f")
 		if it.has("mag"):
 			_cmp(R, "Magazine", float(it.mag), eq.get("mag") if not eq.is_empty() else null)
-			_row(R, "Ammunition", "%s  (%d carried)" % [Game.iname(it.get("ammo")), Game.count(String(it.get("ammo", "")))])
+			var am := []
+			for v in Ammo.variants(String(it.get("ammo", ""))):
+				if Game.count(v) > 0 or v == String(it.get("ammo", "")):
+					am.append("%s %d" % [Game.iname(v), Game.count(v)])
+			_row(R, "Ammunition", ", ".join(am))
 		_row(R, "Type", String(it.get("kind", "")).capitalize())
 	elif t == "armor":
 		var eqa := Game.item(Game.armor) if Game.armor != "" and Game.armor != id else {}

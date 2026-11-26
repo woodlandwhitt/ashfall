@@ -364,6 +364,13 @@ func _process(d: float) -> void:
 	if reload_t > 0.0:
 		reload_t -= d
 		if reload_t <= 0.0:
+			# a different type of round chosen: what's in the gun goes back in the box first
+			var want := Game.ammo_id()
+			if Game.mag > 0 and Game.loaded_ammo() != want and Game.count(want) > 0:
+				Game.give(Game.loaded_ammo(), Game.mag)
+				Game.mag = 0
+			if Game.count(want) > 0 or Game.mag == 0:
+				Game.magt[Game.weapon] = want
 			var n := mini(Game.mag_size - Game.mag, Game.reserve)
 			Game.mag += n
 			Game.reserve = Game.reserve - n
@@ -382,7 +389,9 @@ func toggle_view() -> void:
 	Game.msg("Third-person view" if tp.on else "First-person view")
 
 func reload() -> void:
-	if reload_t > 0.0 or Game.mag_size <= 0 or Game.mag >= Game.mag_size:
+	if reload_t > 0.0 or Game.mag_size <= 0:
+		return
+	if Game.mag >= Game.mag_size and (Game.loaded_ammo() == Game.ammo_id() or Game.count(Game.ammo_id()) <= 0):
 		return
 	if Game.reserve <= 0:
 		Game.msg("Out of " + Game.iname(Game.item(Game.weapon).get("ammo")))
@@ -423,8 +432,17 @@ func fire() -> void:
 	var pel := int(it.get("pellets", 1))
 	var dmg := weapon_damage() * (0.75 if pel > 1 else 1.0)
 	var moving := 1.5 if Vector2(velocity.x, velocity.z).length() > 1.0 else 1.0
+	var spread := float(it.get("spread", 0.02)) * moving * float(fxc.spread) * (0.7 if kind == "rifle" and Game.perks.has("sniper") else 1.0)
+	round_kind = Ammo.kind(Game.loaded_ammo())
+	if pel > 1 and round_kind == "fmj":
+		# a slug: one heavy ball, tight and far
+		dmg *= pel * 0.8
+		spread *= 0.3
+		pel = 1
 	for i in pel:
-		_ray(dmg, float(it.get("range", 100)), float(it.get("spread", 0.02)) * moving * float(fxc.spread) * (0.7 if kind == "rifle" and Game.perks.has("sniper") else 1.0), kind == "energy")
+		burst_ok = i == 0
+		_ray(dmg, float(it.get("range", 100)) * (1.6 if round_kind == "fmj" and int(it.get("pellets", 1)) > 1 else 1.0), spread, kind == "energy")
+	round_kind = ""
 	if Game.mag == 0:
 		reload()
 
@@ -443,6 +461,8 @@ func shot_fx(kind: String) -> void:
 	var snd: String = it.get("snd", SND.get(kind, "pistol"))
 	Sfx.play(snd, -17.0 if quiet else -3.0, randf_range(0.95, 1.05) * (1.4 if kind == "energy" else 1.0) * (1.5 if quiet else 1.0))
 
+var round_kind := ""     # the loaded round's type while a shot is fired ("", "fmj", "ex")
+var burst_ok := true     # explosive buckshot bursts once a shot, not once a pellet
 func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 	var sp := Vector2(randf() - 0.5, randf() - 0.5) * spread * 2.0
 	var from := cam.global_position
@@ -472,7 +492,10 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 				if Game.perks.has("ninja"):
 					dmg *= 1.5
 				Game.msg("Sneak attack!")
-			var ion := float(it.get("ion", 1.0)) if c.get("def") is Dictionary and c.def.get("robot", false) else 1.0
+			var machine: bool = c.get("def") is Dictionary and c.def.get("robot", false)
+			var ion := float(it.get("ion", 1.0)) if machine else 1.0
+			if round_kind != "":
+				ion *= Ammo.mult("x_" + round_kind, machine)
 			c.hit(dmg * ion * randf_range(0.9, 1.1) * (2.0 if crit else 1.0) * ((2.25 if Game.perks.has("sniper") else 1.5) if head else 1.0), hit.position, dir)
 			_stranger(c)
 			if it.has("burn") and c.get("bleed") != null and c.get("dead") == false:
@@ -485,6 +508,18 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 					Sfx.play("k_click", -10.0, 1.6)
 		else:
 			Game.main.impact(hit.position, hit.normal)
+		if round_kind == "ex" and burst_ok:
+			_ex_burst(hit.position, dmg * 0.35, c)
+
+# an explosive round bursting: a hand-span of fire that catches whoever stands right there
+func _ex_burst(at: Vector3, dmg: float, skip) -> void:
+	Game.main._puff(at, Vector3.UP, Color(1.0, 0.6, 0.25, 0.95), 10, 2.5)
+	Sfx.play_at("x_rock1", at, -2.0, 1.4)
+	for e in Game.main.enemies.duplicate():
+		if is_instance_valid(e) and not e.dead and e != skip and e.global_position.distance_to(at) < 1.8:
+			e.hit(dmg, e.global_position + Vector3.UP, (e.global_position - at).normalized())
+	if Game.main.get("barrels"):
+		Game.main.barrels.blast_near(at, 0.6)
 
 # a plasma bolt bursting where it lands: a little blast that catches anyone close by
 # Mysterious Stranger: something nearly dead, and sometimes a figure in a long coat finishes it for you

@@ -51,6 +51,8 @@ var nade := ""                 # the readied throwable (thrown first)
 var chem := ""                 # the readied chem or medicine, on its own quick button
 var armor := "vault_suit"
 var magd := {"pipe_pistol": 8}  # rounds loaded, per weapon
+var magt := {}                     # which round is loaded, per weapon (build 17 ammo types)
+var ammo_sel := {}                 # calibre -> the variant you chose to load
 var discovered: Dictionary = {}
 var dead: Dictionary = {}     # enemy spawn index -> true (they stay dead)
 var looted: Dictionary = {}
@@ -110,15 +112,48 @@ var mag_size: int:
 
 var reserve: int:
 	get:
-		var a = item(weapon).get("ammo")
-		return count(a) if a else 0
+		var a = ammo_id()
+		return count(a) if a != "" else 0
 	set(v):
-		var a = item(weapon).get("ammo")
-		if a:
+		var a = ammo_id()
+		if a != "":
 			if v <= 0:
 				inv.erase(a)
 			else:
 				inv[a] = v
+
+# the round the equipped gun will load next: the type you picked, or whatever of its calibre you still carry
+func ammo_id(w = null) -> String:
+	if w == null:
+		w = weapon
+	var b = item(w).get("ammo")
+	if b == null or String(b) == "":
+		return ""
+	var sel := String(ammo_sel.get(String(b), String(b)))
+	if count(sel) > 0:
+		return sel
+	for v in Ammo.variants(String(b)):
+		if count(v) > 0:
+			return v
+	return sel
+
+# the round in the gun now
+func loaded_ammo() -> String:
+	return String(magt.get(weapon, item(weapon).get("ammo", "")))
+
+# step to the next ammo type you carry for this gun; the player then reloads with it
+func cycle_ammo() -> String:
+	var b = item(weapon).get("ammo")
+	if b == null:
+		return ""
+	var V := Ammo.variants(String(b))
+	var cur := V.find(String(ammo_sel.get(String(b), loaded_ammo())))
+	for i in range(1, V.size() + 1):
+		var v: String = V[(cur + i) % V.size()]
+		if count(v) > 0 or v == loaded_ammo():
+			ammo_sel[String(b)] = v
+			return v
+	return ""
 
 # bare hands when nothing is equipped (a new resident leaves their quarters unarmed)
 const FISTS := {"n": "Fists", "t": "weapon", "kind": "melee", "dmg": 5, "range": 2.2, "rof": 0.5, "w": 0, "v": 0}
@@ -419,7 +454,7 @@ func save_game(slot: String) -> bool:
 		return false
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
 		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points, "perk_pts": perk_pts, "ap": ap, "name": player_name, "area": area, "rad": rad, "tod": time, "buffs": buffs, "drugs": drugs, "addict": addict,
-		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "chem": chem, "armor": armor, "magd": magd, "discovered": discovered,
+		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "chem": chem, "armor": armor, "magd": magd, "magt": magt, "ammo_sel": ammo_sel, "discovered": discovered,
 		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day, "mods": mods}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
 	if f == null:
@@ -446,6 +481,8 @@ func load_game(slot: String) -> bool:
 	for k in ["inv", "flags", "quests", "kills", "stats", "perks", "magd", "discovered", "dead", "looted"]:
 		set(k, s[k])
 	mods = s.get("mods", {})
+	magt = s.get("magt", {})
+	ammo_sel = s.get("ammo_sel", {})
 	_mod_cache.clear()
 	for k in ["killed", "shops", "upgrades", "opened"]:
 		set(k, s.get(k, {}))
@@ -534,6 +571,8 @@ func reset() -> void:
 	chem = ""
 	armor = "vault_suit"
 	magd = {"pipe_pistol": 8}
+	magt = {}
+	ammo_sel = {}
 	hp = hp_max
 	ap = ap_max
 	nav_ready = false
@@ -554,6 +593,7 @@ func _ready() -> void:
 	L = _json("res://data/logic.json")
 	_merge_story()
 	_merge_arsenal()
+	Ammo.merge(self)
 	CELLS = _json("res://data/cells.json")
 	vm = JsVM.new()
 	G = GApi.install(vm, L)
@@ -1110,9 +1150,14 @@ func _merge_arsenal() -> void:
 		DB.perks[k] = A.perks[k]
 		if L.get("consts", {}).has("PERKS"):
 			L.consts.PERKS[k] = A.perks[k]
+	# (the shops read L.vendors; before build 17 this went into DB.vendors, which nothing reads, so traders never
+	# stocked the build 13 guns)
 	for v in A.get("stock", {}):
-		if DB.vendors.has(v):
-			DB.vendors[v].stock.append_array(A.stock[v])
+		var vd: Dictionary = L.get("vendors", {}).get(v, {})
+		if not vd.is_empty():
+			if not vd.has("stock"):
+				vd["stock"] = []
+			vd.stock.append_array(A.stock[v])
 	for t in A.get("loot", {}):
 		if DB.loot.has(t):
 			DB.loot[t].append_array(A.loot[t])

@@ -2353,6 +2353,27 @@ func _selftest() -> void:
 		player.fire_cd = 0.0
 		player.fire()
 		out.append("weapon %s (%s): mag %d -> %d, model %s" % [w, Game.item(w).kind, m0, Game.mag, "arms+" + ("gun" if player.vm.gun else "fists")])
+	# ammo types: the 10mm pistol takes 10mm, and swapping to FMJ unloads the standard rounds back into the box
+	Game.give("service_pistol", 1)
+	Game.give("ammo_10", 20)
+	Game.give("ammo_10_fmj", 10)
+	Game.equip("service_pistol")
+	await _wait(2)
+	player.reload_t = 0.0
+	Game.mag = 0
+	Game.magt.erase("service_pistol")
+	player.reload()
+	player.reload_t = 0.001
+	for i in 4:
+		await get_tree().process_frame
+	var a0 := "%s %d/%d" % [Game.loaded_ammo(), Game.mag, Game.count("ammo_10")]
+	Game.cycle_ammo()
+	player.reload()
+	player.reload_t = 0.001
+	for i in 4:
+		await get_tree().process_frame
+	out.append("ammo10 %s -> %s %d, std %d, fmj %d, shop %s" % [a0, Game.loaded_ammo(), Game.mag, Game.count("ammo_10"), Game.count("ammo_10_fmj"),
+		str(Game.shop_state("brannock").stock.has("ridgeback")) + "/" + str(Game.shop_state("brannock").stock.has("ammo_10_fmj"))])
 	Game.equip("pipe_pistol")
 	# loot a corpse
 	var corpse = null

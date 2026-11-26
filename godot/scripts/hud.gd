@@ -156,6 +156,9 @@ func _ready() -> void:
 	ammo_l = _label(Vector2(0, 0), 26)
 	_place(ammo_l, Control.PRESET_BOTTOM_RIGHT, -190, -52, 170, 36)
 	ammo_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# tap the count to change ammo type (standard / FMJ / explosive)
+	ammo_l.mouse_filter = Control.MOUSE_FILTER_STOP
+	ammo_l.gui_input.connect(_ammo_tap)
 
 	weapon_l = _label(Vector2.ZERO, 17)
 	_place(weapon_l, Control.PRESET_BOTTOM_RIGHT, -244, -86, 226, 26)
@@ -254,6 +257,19 @@ func _place(c: Control, preset: int, x: float, y: float, w: float, h: float) -> 
 	c.offset_top = y
 	c.offset_right = x + w
 	c.offset_bottom = y + h
+
+func _ammo_tap(ev: InputEvent) -> void:
+	var down: bool = (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed)
+	if not down or Game.player == null:
+		return
+	var was := Game.loaded_ammo()
+	var v := Game.cycle_ammo()
+	if v == "" or (v == was and Game.mag >= Game.mag_size):
+		Game.msg("No other rounds for this gun")
+		return
+	Game.msg("Loading " + Game.iname(v))
+	Game.player.reload()
+	refresh()
 
 func _label(pos: Vector2, size: int) -> Label:
 	var l := Label.new()
@@ -405,6 +421,14 @@ func refresh() -> void:
 	ap_bar.value = Game.ap
 	var it := Game.item(Game.weapon)
 	ammo_l.text = (str(Game.mag) + " / " + str(Game.reserve)) if it.has("mag") else ""
+	if it.has("mag") and Ammo.CAL.has(String(it.get("ammo", ""))):
+		var tag := Ammo.label(Game.loaded_ammo())
+		var many := 0
+		for v in Ammo.variants(String(it.ammo)):
+			if Game.count(v) > 0:
+				many += 1
+		if tag != "STD" or many > 1:
+			ammo_l.text += "  " + tag
 	# bare hands and blades need no ammo box: just the name, small, in the corner
 	bot_r.visible = it.has("mag")
 	weapon_l.offset_top = -86.0 if it.has("mag") else -40.0
