@@ -126,6 +126,9 @@ func setup(d: Dictionary) -> void:
 		ap.seek(randf() * 2.0, true)
 	target = home
 	home_yaw = face_yaw
+	# town guards carry their gun in hand, not just in their story (build 17)
+	if ap and held == null and (id in ["saltguard", "knuckles", "sheriff", "guard12", "kess"] or id in Game.STORY.get("guards", [])):
+		held = Humanoid.hold_gun(model, load("res://guns/lp_pistol.glb"), Basis.IDENTITY, {"glb": "lp_pistol", "pistol": 1})
 	# walking round furniture and each other: a navigation agent (TownLife bakes the floor it walks on)
 	if ap and not (id in ANIMALS):
 		agent = NavigationAgent3D.new()
