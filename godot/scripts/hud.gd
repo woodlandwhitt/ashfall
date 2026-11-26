@@ -1,5 +1,6 @@
 # Everything on screen: crosshair, FPS, health and ammo, quest tracker, compass, messages, the interaction prompt,
 # dialogue, death and pause screens, and the touch controls (stick, look, fire, use, jump, reload, run).
+class_name HUD
 extends CanvasLayer
 
 var root: Control
@@ -11,6 +12,7 @@ var stat_l: Label
 var prompt_l: Label
 var msgs: VBoxContainer
 var compass: Control
+var radar: Control
 var dlg: PanelContainer
 var dlg_name: Label
 var dlg_text: Label
@@ -112,6 +114,11 @@ func _ready() -> void:
 	_place(compass, Control.PRESET_CENTER_TOP, -220, 10, 440, 34)
 	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(compass)
+	# build 17: a small radar under the corner buttons, enemies in red (and red ticks on the compass)
+	radar = Radar.new()
+	_place(radar, Control.PRESET_TOP_RIGHT, -150, 56, 130, 130)
+	radar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(radar)
 
 	# dark backing behind the corner readouts, so text stays legible over bright ground
 	for side in [0, 1]:
@@ -786,6 +793,7 @@ func _process(d: float) -> void:
 		fps_n = 0
 		fps_min = 999.0
 	compass.queue_redraw()
+	radar.queue_redraw()
 
 # ---------------------------------------------------------------- compass strip
 class HitMark extends Control:
@@ -841,6 +849,61 @@ class DmgDir extends Control:
 				pts.append(c + Vector2(cos(aa), sin(aa)) * (r - 16.0))
 			draw_colored_polygon(pts, col)
 
+# the hostiles you'd know about: anything already after you, or close enough for your Perception to pick out
+static func spotted(range_m := 0.0) -> Array:
+	var out := []
+	if Game.main == null or Game.player == null:
+		return out
+	var pp: Vector3 = Game.player.global_position
+	var sense := 28.0 + float(Game.stats.get("aim", 5)) * 4.0
+	if range_m > 0.0:
+		sense = minf(sense, range_m)
+	for e in Game.main.enemies:
+		if not is_instance_valid(e) or e.dead or not e.hostile or not e.visible:
+			continue
+		var d: float = e.global_position.distance_to(pp)
+		if (e.state == "chase" and d < 90.0) or d < sense:
+			out.append(e)
+	return out
+
+class Radar extends Control:
+	const RANGE := 60.0
+	func _draw() -> void:
+		if Game.player == null or Game.main == null or not Game.dev.get("hud", true):
+			return
+		var r := size.x * 0.5
+		var c := Vector2(r, r)
+		draw_circle(c, r, Color(0.02, 0.05, 0.03, 0.55))
+		draw_arc(c, r, 0, TAU, 48, Color(0.45, 1.0, 0.55, 0.5), 1.5, true)
+		draw_arc(c, r * 0.5, 0, TAU, 32, Color(0.45, 1.0, 0.55, 0.18), 1.0, true)
+		var yaw: float = Game.player.yaw
+		var pp: Vector3 = Game.player.global_position
+		# forward is up
+		var to_screen := func(w: Vector3) -> Vector2:
+			var dx := w.x - pp.x
+			var dz := w.z - pp.z
+			var lx := dx * cos(yaw) - dz * sin(yaw)
+			var lz := dx * sin(yaw) + dz * cos(yaw)
+			return Vector2(lx, lz) / RANGE * r
+		# north marker on the rim
+		var nv: Vector2 = to_screen.call(pp + Vector3(0, 0, -RANGE))
+		draw_string(ThemeDB.fallback_font, c + nv.limit_length(r - 8) - Vector2(5, -5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.95, 0.8, 0.5))
+		for n in Game.main.npcs:
+			if is_instance_valid(n) and n.visible:
+				var v: Vector2 = to_screen.call(n.global_position)
+				if v.length() < r - 3:
+					draw_circle(c + v, 2.2, Color(0.5, 0.9, 0.55, 0.7) if not n.get("follow") else Color(0.4, 0.75, 1.0))
+		var tp: Variant = Game.main.quest_target()
+		if tp != null:
+			var v: Vector2 = to_screen.call(tp)
+			draw_circle(c + v.limit_length(r - 4), 3.5, Color(1.0, 0.6, 0.2))
+		for e in HUD.spotted():
+			var v: Vector2 = to_screen.call(e.global_position)
+			var col := Color(1.0, 0.18, 0.12) if e.state == "chase" else Color(1.0, 0.45, 0.3, 0.8)
+			var df = e.get("def")
+			draw_circle(c + v.limit_length(r - 3), 5.0 if df is Dictionary and df.get("boss", false) else 3.4, col)
+		draw_colored_polygon(PackedVector2Array([c + Vector2(0, -7), c + Vector2(-5, 5), c + Vector2(5, 5)]), Color(0.95, 0.95, 0.85))
+
 class Compass extends Control:
 	func _draw() -> void:
 		if Game.player == null:
@@ -862,6 +925,14 @@ class Compass extends Control:
 			if absf(dx) < 1.2:
 				var x := w * 0.5 + dx / 1.2 * w * 0.5
 				draw_line(Vector2(x, 28), Vector2(x, 33), Color(0.9, 0.75, 0.5, 0.6), 1.0)
+		# hostiles you know about: red ticks under the strip
+		for e in HUD.spotted():
+			var te: Vector3 = e.global_position - Game.player.global_position
+			var ae := fposmod(atan2(te.x, -te.z), TAU)
+			var de := wrapf(ae - heading, -PI, PI)
+			if absf(de) < 1.2:
+				var xe := w * 0.5 + de / 1.2 * w * 0.5
+				draw_rect(Rect2(Vector2(xe - 2.5, 26), Vector2(5, 8)), Color(1.0, 0.2, 0.12, 0.95 if e.state == "chase" else 0.6))
 		var tp: Variant = Game.main.quest_target()
 		if tp != null:
 			var to: Vector3 = tp - Game.player.global_position
