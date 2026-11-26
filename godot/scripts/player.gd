@@ -111,6 +111,7 @@ static func world_model(id: String) -> Array:
 	return m
 
 func weapon_changed() -> void:
+	holstered = false
 	if vm:
 		if flash.get_parent():
 			flash.get_parent().remove_child(flash)
@@ -179,6 +180,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		match e.keycode:
 			KEY_E: Game.main.interact()
 			KEY_R: reload()
+			KEY_H: toggle_holster()
 			KEY_G: throw_nade()
 			KEY_H: Game.use_chem()
 			KEY_F5: toggle_view()
@@ -375,8 +377,10 @@ func _process(d: float) -> void:
 			Game.mag += n
 			Game.reserve = Game.reserve - n
 			Game.stats_changed.emit()
+	holster_k = move_toward(holster_k, 1.0 if holstered else 0.0, d * 4.0)
+	target += Vector3(0.06, -0.5, 0.12) * holster_k
 	gun.position = gun.position.lerp(target, 1.0 - exp(-20.0 * d))
-	gun.rotation.x = recoil * 0.06
+	gun.rotation.x = recoil * 0.06 - 1.0 * holster_k
 	if flash.light_energy > 0.0:
 		flash.light_energy = maxf(0.0, flash.light_energy - d * 60.0)
 		flash_q.visible = flash.light_energy > 0.5
@@ -388,7 +392,20 @@ func toggle_view() -> void:
 	ThirdPerson.save_on(tp.on)
 	Game.msg("Third-person view" if tp.on else "First-person view")
 
+# put the gun away (or draw it): lowered out of sight, it can't fire until it's drawn again
+var holstered := false
+var holster_k := 0.0
+func toggle_holster() -> void:
+	if Game.weapon == "" and not holstered:
+		return
+	holstered = not holstered
+	reload_t = 0.0
+	Sfx.play("k_draw" if not holstered else "k_belt", -6.0)
+	Game.msg("Weapon holstered." if holstered else "Weapon drawn.")
+
 func reload() -> void:
+	if holstered:
+		return
 	if reload_t > 0.0 or Game.mag_size <= 0:
 		return
 	if Game.mag >= Game.mag_size and (Game.loaded_ammo() == Game.ammo_id() or Game.count(Game.ammo_id()) <= 0):
@@ -403,6 +420,11 @@ func reload() -> void:
 const SND := {"energy": "carbine"}
 func fire() -> void:
 	if fire_cd > 0.0 or reload_t > 0.0 or Game.hp <= 0:
+		return
+	if holstered:
+		# pulling the trigger with it put away draws it first
+		toggle_holster()
+		fire_cd = 0.35
 		return
 	var it := Game.item(Game.weapon)
 	var kind := String(it.get("kind", "pistol"))

@@ -962,6 +962,7 @@ class TouchPad extends Control:
 			"reload": [Vector2(s.x - 240, s.y - 250), 40.0, "RLD"],
 			"run": [Vector2(370, s.y - 60), 38.0, "RUN"],
 			"swap": [Vector2(s.x - 360, s.y - 70), 36.0, "SWAP"],
+			"holster": [Vector2(s.x - 370, s.y - 305), 32.0, "HOLS"],
 			"nade": [Vector2(s.x - 255, s.y - 360), 34.0, "NADE"],
 			"focus": [Vector2(s.x - 370, s.y - 200), 38.0, "FOCUS"],
 			"sneak": [Vector2(470, s.y - 60), 36.0, "SNEAK"],
@@ -1053,6 +1054,7 @@ class TouchPad extends Control:
 			"jump": if on: p.jump()
 			"reload": if on: p.reload()
 			"swap": if on: Game.main.hud.swap_weapon()
+			"holster": if on: p.toggle_holster()
 			"nade": if on: p.throw_nade()
 			"chem": if on: Game.use_chem()
 			"focus": if on: Game.main.hud.focus.enter()
