@@ -396,9 +396,18 @@ func die(dir: Vector3) -> void:
 		return
 	collision_layer = 0
 	Sfx.play_at("o_creature2" if quad else ["o_mdie1", "o_mdie2"][randi() % 2], global_position + Vector3.UP)
+	# the pose helpers stop holding the body up: the aim on the arms, the twist through the hips and legs
+	# (left running, they kept some of the dead standing - build 17 report)
+	if aim_hold:
+		aim_hold.active = false
+	if lt:
+		lt.active = false
+	velocity = Vector3.ZERO
 	if ap:
 		ap.active = true
+		ap.speed_scale = 1.0
 		ap.play("Death01", 0.1)
+		ap.seek(0.0, true)
 		Game.on_kill(type, eid)
 		Game.add_xp(int(def.get("xp", 40)) if def.get("xp") != null else 40)
 		return
@@ -578,7 +587,10 @@ func _physics_process(d: float) -> void:
 				Humanoid.play(ap, a, (clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0) * sgn)
 			if aim_hold:
 				# in a fight the gun stays up and on you, whatever the legs are doing
-				var fighting: bool = hostile and state == "chase"
+				# (only while it's actually facing you to shoot: held up while it walked somewhere else, the gun pointed
+				# wherever its feet were going - build 17 report)
+				var off := absf(wrapf(atan2(Game.player.global_position.x - global_position.x, Game.player.global_position.z - global_position.z) - face_yaw, -PI, PI))
+				var fighting: bool = hostile and state == "chase" and aiming and off < 0.6
 				aim_hold.target_w = 1.0 if fighting and act_t <= 0.0 else 0.0
 				var tp: Vector3 = (foe.global_position if foe else Game.player.global_position) + Vector3.UP * 1.2
 				var fp := global_position + Vector3.UP * 1.4

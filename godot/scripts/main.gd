@@ -1027,6 +1027,32 @@ func _test_hooks() -> void:
 			if e:
 				e.face_yaw = atan2(-f.x, -f.z)
 				e.model.rotation.y = e.face_yaw
+	if args.has("aimprobe"):
+		# where each gunman's muzzle points, against where you are, through a fight
+		get_tree().create_timer(2.5, false).timeout.connect(func():
+			for k in 14:
+				await get_tree().create_timer(0.4, false).timeout
+				for e in enemies:
+					if not is_instance_valid(e) or e.dead or e.ap == null:
+						continue
+					# the gun arm: from the shoulder to the hand, against the line from the shoulder to you
+					var sk := e.model.find_child("Skeleton3D", true, false) as Skeleton3D
+					if sk == null:
+						continue
+					var sh: Vector3 = sk.global_transform * sk.get_bone_global_pose(sk.find_bone("upperarm_r")).origin
+					var hd: Vector3 = sk.global_transform * sk.get_bone_global_pose(sk.find_bone("hand_r")).origin
+					var fwd: Vector3 = (hd - sh).normalized()
+					var to: Vector3 = (player.global_position + Vector3.UP * 1.3 - sh).normalized()
+					var faceoff := rad_to_deg(absf(wrapf(atan2(player.global_position.x - e.global_position.x, player.global_position.z - e.global_position.z) - e.face_yaw, -PI, PI)))
+					var mf: Vector3 = e.model.global_basis.z
+					print("AIMP %s st=%s anim=%s act=%.2f w=%.2f ang=%.0f up=%.2f face=%.0f tw=%.2f modelz=%s fy=%.2f" % [e.type, e.state, e.ap.current_animation, e.act_t, e.aim_hold.weight if e.aim_hold else -1.0, rad_to_deg(fwd.angle_to(to)), fwd.y, faceoff, e.lt.twist if e.lt else 0.0, str(mf.snapped(Vector3.ONE * 0.01)), e.face_yaw])
+			get_tree().quit())
+	if args.has("killall"):
+		# everything in the lineup or the fight dies a second later (checking how they fall)
+		get_tree().create_timer(float(args.killall), false).timeout.connect(func():
+			for e in enemies.duplicate():
+				if is_instance_valid(e) and not e.dead:
+					e.hit(9999.0, e.global_position + Vector3.UP, Vector3.FORWARD))
 	if args.has("fight"):
 		# hostiles a little way off, coming for you (god mode on): checking how they move, aim and shoot
 		Game.dev.god = true
@@ -1034,7 +1060,7 @@ func _test_hooks() -> void:
 		var f := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
 		var r := Vector3(cos(player.yaw), 0, -sin(player.yaw))
 		for i in ts.size():
-			var p: Vector3 = player.global_position + f * 11.0 + r * (i - (ts.size() - 1) * 0.5) * 2.5
+			var p: Vector3 = player.global_position + f * float(args.get("fightd", 11.0)) + r * (i - (ts.size() - 1) * 0.5) * 2.5
 			var e = events._enemy(ts[i], p.x, p.z, true)
 			if e:
 				e.state = "chase"

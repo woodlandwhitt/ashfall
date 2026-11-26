@@ -17,11 +17,22 @@ var spine := -1
 func capture(sk: Skeleton3D) -> void:
 	ids.clear()
 	rots.clear()
+	# the pose comes straight from the aiming clip's first frame. (Read back off the skeleton it was sometimes the
+	# rest pose instead, if the clip hadn't been applied yet, and those gunmen held their pistols out to the side:
+	# build 17 report.)
+	var a: Animation = Humanoid.anim_library().get_animation("Pistol_Aim_Neutral")
 	for n in BONES:
 		var b := sk.find_bone(n)
-		if b >= 0:
-			ids.append(b)
-			rots.append(sk.get_bone_pose_rotation(b))
+		if b < 0:
+			continue
+		var q := sk.get_bone_pose_rotation(b)
+		if a:
+			for i in a.get_track_count():
+				if a.track_get_type(i) == Animation.TYPE_ROTATION_3D and String(a.track_get_path(i)).ends_with(":" + n):
+					q = a.rotation_track_interpolate(i, 0.0)
+					break
+		ids.append(b)
+		rots.append(q)
 	spine = sk.find_bone("spine_03")
 
 func _process_modification_with_delta(d: float) -> void:
