@@ -230,6 +230,7 @@ class Drum extends StaticBody3D:
 		var fm := StandardMaterial3D.new()
 		fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		fm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		fm.billboard_keep_scale = true
 		fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		fm.vertex_color_use_as_albedo = true
 		q.material = fm

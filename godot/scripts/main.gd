@@ -18,6 +18,7 @@ var objects: WorldObjects
 var pockets: Pockets
 var barrels: Barrels
 var reactor: Reactor
+var silo: Silo9
 var events: RoadEvents
 var forge: Forge
 var atmos: Atmos
@@ -69,6 +70,7 @@ func _ready() -> void:
 	# build 15: the Ashwood's towns and ruins stand in the collision and the navigation from the start
 	Frontier.prepare()
 	Reactor.prepare()
+	Silo9.prepare()
 	_colliders()
 	_pools()
 	_lamps()
@@ -131,6 +133,8 @@ func _ready() -> void:
 		frontier.setup(self)
 		reactor = Reactor.new(self)
 		add_child(reactor)
+		silo = Silo9.new(self)
+		add_child(silo)
 	chunks.on_enter = _spawn_chunk
 	chunks.on_leave = _despawn_chunk
 	player = preload("res://scripts/player.gd").new()
@@ -1011,6 +1015,19 @@ func _test_hooks() -> void:
 	if args.has("pausemenu"):
 		await _wait(5)
 		hud.toggle_pause()
+	if args.has("silo"):
+		# Silo 9's launch or scuttle on a short fuse, for looking at
+		Game.flags["gb_hello"] = 1
+		await _wait(20)
+		Game.flags.erase("radio")
+		hud.screens.close()
+		Game.dev["god"] = true
+		Game.flags["silo_end"] = "launched" if String(args.silo) == "launch" else "blown"
+		Game.flags["silo_seq"] = "launch" if String(args.silo) == "launch" else "scuttle"
+		Game.flags["silo_count"] = float(args.get("silocount", "3"))
+		if args.has("siloburst"):
+			Game.flags.erase("silo_seq")
+			silo._burst()
 	if args.has("startq"):
 		for q in String(args.startq).split(","):
 			Game.start(q)
@@ -1028,6 +1045,8 @@ func _test_hooks() -> void:
 		await _north_test()
 	if args.has("b17test"):
 		await _b17_test()
+	if args.has("b18test"):
+		await _b18_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -2158,6 +2177,57 @@ func _b17_test() -> void:
 	out.append("radio news lines now: %d" % radio_news().size())
 	for l in out:
 		print("B17TEST ", l)
+	get_tree().quit()
+
+# build 18: Silo 9's console, its launch, and the Ash Wind
+func _b18_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	Game.flags["gb_hello"] = 1
+	Game.dev["checks"] = true
+	Game.dev["god"] = true
+	await _wait(10)
+	Game.start("still_waters")
+	Game.give("slag_sample", 1)
+	Game.flags["tobiahTalked"] = 1
+	Game.flags["tobiahFree"] = 1
+	Game.check_quests()
+	Game.flags.erase("radio")
+	out.append("still_waters stage %d, codes %s" % [Game.stage("still_waters"), str(Game.flags.get("tobiahCodes"))])
+	await _tp(1146, -803)
+	out.append(_dlg2("silo_console", ["Bring up the launch", "Back away"]))
+	Game.give("silo_key", 1)
+	out.append(_dlg2("silo_console", ["Bring up the launch", "Confirm"]))
+	out.append("silo_end %s, seq %s, count %s, still_waters stage %d" % [str(Game.flags.get("silo_end")), str(Game.flags.get("silo_seq")), str(Game.flags.get("silo_count")), Game.stage("still_waters")])
+	Game.flags["silo_count"] = 1.0
+	await _wait(120)
+	out.append("missile up %s, seq left %s" % [str(silo.missile != null), str(Game.flags.get("silo_seq"))])
+	silo.mt = 30.0
+	await _wait(10)
+	out.append("burst: cloud %s, burst_day %s" % [str(silo.cloud != null), str(Game.flags.get("burst_day"))])
+	silo.cloud_t = 31.0
+	await _wait(10)
+	out.append("ash_wind known %s, radio %s" % [str(Game.known("ash_wind")), str(Game.flags.get("radio"))])
+	Game.flags.erase("radio")
+	hud.screens.close()
+	await _tp(-45, -735)
+	out.append(_dlg2("nell", ["It's done", "Your water"]))
+	out.append(_dlg2("nell", ["The flash in the north-east", "I'll shut it"]))
+	await _tp(-209, -844)
+	var sl = _obj_point("sw_sluice")
+	out.append("sluice point %s label %s" % [str(sl != null), str(objects.point_label(sl)) if sl else "-"])
+	if sl:
+		objects.point_use(sl)
+	await _tp(1163, -612)
+	out.append(_dlg2("amon", ["The ash is coming", "Go. Quickly"]))
+	Game.day += 1
+	Game.check_quests()
+	await _tp(-45, -735)
+	out.append(_dlg2("nell", ["The ash has stopped", "Glad"]))
+	out.append("done: still_waters %s, ash_wind %s; gc_end %s; news %d" % [str(Game.is_done("still_waters")), str(Game.is_done("ash_wind")), str(Game.flags.get("gc_end")), radio_news().size()])
+	for l in out:
+		print("B18TEST ", l)
 	get_tree().quit()
 
 func _trees_at(x: float, z: float) -> int:
@@ -3581,6 +3651,9 @@ const NEWS := [
 	["q:seals_and_gaskets", "Stillwater is making gaskets for a vault. Fish glue, apparently. The future is strange and smells of the lake."],
 	["q:havens_doubt", "Inside Haven 12 there's been shouting. Some want out for good, some want the door shut forever. The Overseer is still the Overseer. Just."],
 	["q:last_nine_days", "Haven 12's water recycler is running. Four hundred people won't die of thirst this year. Somebody walked a very long way for that."],
+	["f:silo_launched", "Bulletin. Silo 9 is empty. Something went up out of the Glass Bowl on a tail of fire and burst over the old test range. If you're in the north, stay under a roof, cover your water, and say something nice to someone."],
+	["f:silo_buried", "Silo 9 is gone. Folded into the ground like a tent with the pole pulled out. The Glass Bowl's floor is a mess of concrete and dust, and the Children say the Sleeper went back to sleep for good."],
+	["q:ash_wind", "Stillwater rode out the ash. Grey snow for a day, and the lake kept clean behind its sluice. Nell Okafor says the drinks are on the harbour. One drink. Each."],
 	["f:kess_raid", "Kess's Gantry boys hit the camp at Haven's door and came off worse. Sheriff Voss sends regards. Kess sends nothing, which is his way of saying ouch."],
 ]
 
