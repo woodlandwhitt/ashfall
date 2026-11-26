@@ -13,8 +13,9 @@ extends Node3D
 const MATS := [["Concrete", Color(0.6, 0.58, 0.54), 0.0, 0.9, "res://data/vault/world/tex/486a0094-ebfb.webp"],
 	["Steel", Color(0.62, 0.66, 0.7), 0.75, 0.35, ""], ["Rust", Color(0.8, 0.8, 0.8), 0.3, 0.8, "res://data/vault/world/tex/d91d753e-ac87.webp"],
 	["Wood", Color(0.95, 0.9, 0.85), 0.0, 0.8, "res://data/vault/world/tex/be81f7fd-3416.webp"], ["Haven teal", Color(0.2, 0.47, 0.46), 0.35, 0.5, ""],
-	["Cream", Color(0.86, 0.81, 0.7), 0.0, 0.7, ""], ["Brick red", Color(0.6, 0.25, 0.18), 0.0, 0.85, ""], ["Black", Color(0.08, 0.08, 0.09), 0.3, 0.6, ""],
-	["Hazard yellow", Color(0.92, 0.72, 0.15), 0.1, 0.6, ""], ["Sand", Color(0.72, 0.62, 0.45), 0.0, 0.95, ""]]
+	["Cream", Color(0.86, 0.81, 0.7), 0.0, 0.7, ""], ["Brick", Color(0.95, 0.92, 0.9), 0.0, 0.85, "res://data/world/tex/b9d5ff70-8b72.webp"], ["Black", Color(0.08, 0.08, 0.09), 0.3, 0.6, ""],
+	["Hazard yellow", Color(0.92, 0.72, 0.15), 0.1, 0.6, ""], ["Sand", Color(0.72, 0.62, 0.45), 0.0, 0.95, ""],
+	["Roof tile", Color(0.95, 0.92, 0.9), 0.0, 0.8, "res://data/world/tex/e75a405d-997f.webp"], ["Brick red", Color(0.6, 0.25, 0.18), 0.0, 0.85, ""]]
 # kind: [name, category, default finish]
 const KINDS := {
 	"wall": ["Wall 4 m", "BUILD", 0], "wall_low": ["Low wall", "BUILD", 0], "wall_door": ["Doorway", "BUILD", 0], "wall_window": ["Window wall", "BUILD", 0],
