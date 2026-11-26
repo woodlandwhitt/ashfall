@@ -254,8 +254,23 @@ Keep every existing quest and line, then deepen them:
    seconds to clear the Bowl's floor before the silo folds into the ground (rubble from then on). The Ash Wind follows a
    launch (warn Nell, shut the reservoir sluice, get the Children under a roof, wait it out); an emergency broadcast,
    radio news, epilogue lines. `--silo=launch|scuttle`, `--b18test`.
-17. **godot-19:** carried over from the build 17 list: the main quest longer still (a fourth act between Meridian
-   and the door: the Overseer's secret, the other vaults), more settlements and ruins on the empty stretches, real
-   road meshes and terrain variety (washes, rock shelves, erosion), better ground and building textures, more
-   GitHub character models for townspeople, interiors (the Spire's upper floors, the silo shaft), companions from
-   the north, a Forge tidy-up (brick and more materials), and the WebView build retired.
+17. **godot-19:** *Status: shipped as a patch (to build 15, and to build 13).* **Fixes:** road signs letter each line
+   to fit the board and only on their own side (no more mirrored text through the board); the vault's cog door turns
+   its spokes off the "12" and gains a backing plate; the corner radar is gone (the compass ticks stay); **hold SWAP
+   to holster** (tap to swap), the HOLS button removed. **Starfall remade:** a tilted saucer with tiers, rim ports, a
+   cracked dome, a breach and a soil berm, one leg torn off, and its plating and the furrow lying on the ground (every
+   piece follows the terrain). **Towns fight back** (`npc.gd _defend`): armed guards shoot the raiders, beasts and
+   ghouls that come into town (and draw their fire), townsfolk run, and nobody in town dies of it (they go down and get
+   up); kills by guards pay you no XP. **Raids** (`events.gd _raid`) hit a guarded settlement you're standing in now
+   and then. **Factions count:** a hated faction's guards attack on sight, its folk won't talk and its traders won't
+   trade; a respected one's guards cover you further out and hit harder. New guards: two Dustwell deputies and a vault
+   officer at the Camp of the Door (`story19.mjs`, voiced). **Settlement detail:** sandbag posts, washing lines, crate
+   stacks, water tanks, tables, scrap heaps and lamp posts in the Camp of the Door, Dustwell, Cinder Gap, Lantern Row,
+   Stillwater, the Ashborn camp, the Garage and the Children's camp. **Floating:** watchtower and water-tower legs reach
+   the ground on slopes; tents, shrines and parked wrecks settle into slopes (`--floataudit` lists what still hangs).
+   `--b19test`.
+18. **godot-20:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
+   Overseer's secret, the other vaults), more settlements and ruins on the empty stretches, real road meshes and
+   terrain variety (washes, rock shelves, erosion), better ground and building textures, more GitHub character models
+   for townspeople, interiors (the Spire's upper floors, the silo shaft), companions from the north, a Forge tidy-up
+   (brick and more materials), and the WebView build retired.

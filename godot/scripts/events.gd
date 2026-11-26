@@ -279,7 +279,10 @@ func _hunt(dt: float) -> void:
 # edge of it. The guards meet them (npc.gd _defend), the townsfolk run, and you can join in or keep your head down.
 var raid_t := -1.0
 func _raid(dt: float) -> void:
-	var force := OS.get_cmdline_user_args().has("--raid")
+	var force := OS.get_cmdline_user_args().has("--raid") or OS.get_cmdline_user_args().has("--b19test")
+	# the other test runs walk through towns on a script: a raid would only get in their way
+	if not force and " ".join(OS.get_cmdline_user_args()).contains("test"):
+		return
 	if raid_t < 0.0:
 		raid_t = 3.0 if force else randf_range(260.0, 480.0)
 	var pp: Vector3 = Game.player.global_position

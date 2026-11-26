@@ -394,6 +394,13 @@ static func _ground(d: Dictionary) -> float:
 		return float(d.y)
 	var x := float(d.x)
 	var z := float(d.z)
+	# a tent, a shrine or a parked wreck settles into a slope rather than standing on its highest corner (build 19)
+	if String(d.k) in ["tent", "shrine"] or (String(d.k) == "kit" and float(d.get("len", 1.0)) > 2.5):
+		var rr := 1.8 if String(d.k) != "kit" else float(d.len) * 0.4
+		var lo := Game.height(x, z)
+		for i in 8:
+			lo = minf(lo, Game.height(x + cos(i * TAU / 8.0) * rr, z + sin(i * TAU / 8.0) * rr))
+		return (lo + Game.height(x, z)) * 0.5 if String(d.k) == "kit" else lo + 0.04
 	match String(d.k):
 		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi", "banner", "shards", "rubble", "ufo", "crater", \
 				"sandbags", "washline", "crates", "watertank", "table", "scrap", "lamp":
@@ -680,8 +687,8 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 		"hall": _shack(kit, d, 3.4)
 		"cabin": _cabin(kit, d)
 		"stall": _stall(kit, d)
-		"water_tower": _water_tower(kit)
-		"tower": _watchtower(kit)
+		"water_tower": _water_tower(kit, d)
+		"tower": _watchtower(kit, d)
 		"fence": _fence(kit, d)
 		"sign": _signpost(kit)
 		"palisade": _palisade(kit, d)
@@ -866,9 +873,11 @@ static func _stall(kit: Kit, d: Dictionary) -> void:
 	for i in 5:
 		kit.box("canvas" if i % 2 == 0 else "plank", Vector3(-1.0 + i * 0.5, 1.03, 0.3 + sin(i * 2.0) * 0.12), Vector3(0.3, 0.16, 0.25), 0)
 
-static func _water_tower(kit: Kit) -> void:
+static func _water_tower(kit: Kit, d: Dictionary) -> void:
+	# each leg reaches down to the ground under it (build 19: on a slope the low legs hung in the air)
 	for p in [Vector2(-1.7, -1.7), Vector2(1.7, -1.7), Vector2(-1.7, 1.7), Vector2(1.7, 1.7)]:
-		kit.box("log", Vector3(p.x, 3.5, p.y), Vector3(0.25, 7.0, 0.25), 1)
+		var lo := minf(0.0, _lifty(d, Vector3(p.x, 0, p.y))) - 0.3
+		kit.box("log", Vector3(p.x, (7.0 + lo) * 0.5, p.y), Vector3(0.25, 7.0 - lo, 0.25), 1)
 	kit.box("log", Vector3(0, 3.0, -1.7), Vector3(3.4, 0.12, 0.12), 0, Basis(Vector3.BACK, 0.9))
 	kit.box("log", Vector3(0, 3.0, 1.7), Vector3(3.4, 0.12, 0.12), 0, Basis(Vector3.BACK, -0.9))
 	kit.box("plank_dk", Vector3(0, 7.05, 0), Vector3(4.2, 0.14, 4.2), 2)
@@ -876,9 +885,10 @@ static func _water_tower(kit: Kit) -> void:
 	kit.cone("tin_red", Vector3(0, 10.5, 0), 2.3, 0.6, 12)
 	kit.box("metal", Vector3(2.15, 3.6, 0), Vector3(0.06, 7.2, 0.45), 0)
 
-static func _watchtower(kit: Kit) -> void:
+static func _watchtower(kit: Kit, d: Dictionary) -> void:
 	for p in [Vector2(-1.3, -1.3), Vector2(1.3, -1.3), Vector2(-1.3, 1.3), Vector2(1.3, 1.3)]:
-		kit.box("log", Vector3(p.x, 2.9, p.y), Vector3(0.2, 5.8, 0.2), 1)
+		var lo := minf(0.0, _lifty(d, Vector3(p.x, 0, p.y))) - 0.3
+		kit.box("log", Vector3(p.x, (5.8 + lo) * 0.5, p.y), Vector3(0.2, 5.8 - lo, 0.2), 1)
 	kit.box("plank_dk", Vector3(0, 4.6, 0), Vector3(3.2, 0.14, 3.2), 2)
 	for s in [[Vector3(0, 5.15, -1.55), Vector3(3.2, 1.0, 0.08)], [Vector3(0, 5.15, 1.55), Vector3(3.2, 1.0, 0.08)],
 			[Vector3(-1.55, 5.15, 0), Vector3(0.08, 1.0, 3.2)], [Vector3(1.55, 5.15, 0), Vector3(0.08, 1.0, 3.2)]]:

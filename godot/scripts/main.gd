@@ -1051,6 +1051,8 @@ func _test_hooks() -> void:
 		await _b18_test()
 	if args.has("b19test"):
 		await _b19_test()
+	if args.has("floataudit"):
+		_float_audit()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -2232,6 +2234,27 @@ func _b18_test() -> void:
 	out.append("done: still_waters %s, ash_wind %s; gc_end %s; news %d" % [str(Game.is_done("still_waters")), str(Game.is_done("ash_wind")), str(Game.flags.get("gc_end")), radio_news().size()])
 	for l in out:
 		print("B18TEST ", l)
+	get_tree().quit()
+
+# build 19: anything in the frontier layout standing on a slope steep enough that one side of it hangs in the air
+func _float_audit() -> void:
+	for d in Frontier.layout():
+		var k := String(d.k)
+		if not k in ["kit", "seat", "chest", "bench", "post", "log_seat", "tent", "tipi", "totem", "banner", "stall", "rack", "outhouse", "tower", "water_tower", "cage", "shrine", "strongbox", "rig_cart", "furnace"]:
+			continue
+		var r := 1.2
+		if k == "kit":
+			r = float(d.get("len", 2.0)) * 0.5
+		elif k in ["tent", "tipi", "stall", "tower", "water_tower", "shrine"]:
+			r = 1.8
+		var g: float = Frontier._ground(d)
+		var lo := INF
+		for i in 8:
+			var a := i * TAU / 8.0
+			lo = minf(lo, Game.height(float(d.x) + cos(a) * r, float(d.z) + sin(a) * r))
+		if g - lo > 0.3:
+			print("FLOAT %s %s at %.1f,%.1f hangs %.2f m" % [k, String(d.get("id", "")), float(d.x), float(d.z), g - lo])
+	print("FLOAT done")
 	get_tree().quit()
 
 # build 19: the towns fight back, and factions remember
