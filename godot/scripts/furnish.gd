@@ -101,7 +101,89 @@ func _build(parent: Node3D, C: Dictionary) -> Node3D:
 	for p in Game.W.get("points", []):
 		if String(p.get("id", "")) == "cellout" and r0.grow(1.5).has_point(Vector2(float(p.x), float(p.z))):
 			doors.append(Vector2(float(p.x), float(p.z)))
+	if String(C.get("sign", "")) == "HANGAR 2":
+		hangar = true
 	return _area(parent, r0, String(C.get("kind", "office")), float(Game.L.consts.CELLS.y), doors, "room" + str(C.i))
+
+# ---------------------------------------------------------------- Hangar 2 (build 17)
+# The last relief plane out of Kestrel: it came down short and they dragged what was left inside. The fuselage lies on
+# its belly with a wing sheared off, and the tail section broke away at the far end; the flight recorder lies by the
+# tail, orange and blinking (until you take it). Before this the hangar was just a storeroom of shelves and the
+# recorder an invisible spot on the floor.
+var hangar := false
+func _hangar() -> void:
+	var y := fy
+	var kit := Frontier.Kit.new()
+	var fz := -320.0
+	var fx := 2768.0
+	var along := Basis(Vector3.RIGHT, PI * 0.5)       # a cylinder lying along z
+	kit.cyl("tin", Vector3(fx, 1.6, fz - 8.0), 1.6, 1.6, 15.0, 18, 2, along)
+	kit.cyl("tin", Vector3(fx, 1.6, fz + 7.0), 1.6, 1.1, 2.2, 18, 0, along)
+	kit.cyl("dark", Vector3(fx, 1.6, fz + 9.15), 1.12, 1.12, 0.05, 18, 0, along)
+	kit.box("tin_red", Vector3(fx, 1.6, fz), Vector3(3.26, 0.35, 15.0), 0)
+	for i in 6:
+		kit.box("glass", Vector3(fx - 1.55, 2.2, fz - 5.0 + i * 2.0), Vector3(0.06, 0.45, 0.5), 0)
+		kit.box("glass", Vector3(fx + 1.55, 2.2, fz - 5.0 + i * 2.0), Vector3(0.06, 0.45, 0.5), 0)
+	# the left wing, whole, and the stump of the right one; an engine fallen off on the floor
+	kit.box("tin", Vector3(fx - 6.5, 1.0, fz - 1.0), Vector3(10.0, 0.28, 3.0), 2, Basis(Vector3.FORWARD, -0.06))
+	kit.box("tin_red", Vector3(fx - 10.9, 1.25, fz - 1.0), Vector3(1.2, 0.3, 3.02), 0, Basis(Vector3.FORWARD, -0.06))
+	kit.box("tin", Vector3(fx + 2.6, 1.15, fz - 1.0), Vector3(2.2, 0.28, 2.6), 0)
+	kit.cyl("metal", Vector3(fx - 4.5, 0.75, fz - 3.6), 0.75, 0.6, 2.6, 14, 2, along)
+	kit.cyl("dark", Vector3(fx - 4.5, 0.75, fz - 3.62), 0.55, 0.55, 0.05, 14, 0, along)
+	kit.box("metal", Vector3(fx + 5.5, 0.55, fz + 2.0), Vector3(1.1, 1.1, 2.0), 2, Basis(Vector3.UP, 0.5))
+	# the tail section, broken off near the far wall, fin up
+	var tx := 2764.0
+	var tz := -303.6
+	kit.cyl("tin", Vector3(tx, 1.3, tz - 2.0), 1.3, 0.55, 4.0, 16, 2, along * Basis(Vector3.FORWARD, 0.0))
+	kit.box("tin_red", Vector3(tx, 2.8, tz + 0.6), Vector3(0.16, 1.9, 1.8), 0, Basis(Vector3.RIGHT, -0.35))
+	kit.box("tin", Vector3(tx, 1.5, tz + 1.2), Vector3(4.0, 0.12, 1.0), 0)
+	kit.cyl("dark", Vector3(tx, 1.3, tz - 2.02), 1.28, 1.28, 0.04, 16, 0, along)
+	# rubble of the impact, a tool cart, chocks
+	for i in 6:
+		kit.box("metal", Vector3(fx - 2.0 + i * 0.9, 0.12, fz + 10.5 + (i % 3) * 0.6), Vector3(0.6, 0.12, 0.9), 0, Basis(Vector3.UP, i * 0.7))
+	var n := Node3D.new()
+	n.name = "Hangar2"
+	kit.commit(n)
+	root.add_child(n)
+	n.position = Vector3(0, y, 0)
+	taken.append(Rect2(Vector2(fx - 12.0, fz - 9.5), Vector2(15.5, 20.0)))
+	taken.append(Rect2(Vector2(fx + 1.0, fz - 9.5), Vector2(6.5, 20.0)))
+	taken.append(Rect2(Vector2(tx - 2.5, tz - 4.5), Vector2(5.0, 6.5)))
+	# the recorder: an orange box by the tail with a blinking beacon, gone once it's in your pack
+	if not Game.has("black_box") and not Game.quests.get("black_box", {}).get("done", false):
+		var bp := Vector3(2762.23, y, -306.07)
+		for p in Game.W.get("points", []):
+			if String(p.get("id", "")) == "blackbox":
+				bp = Vector3(float(p.x), y, float(p.z))
+		var box := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.45, 0.32, 0.6)
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.95, 0.4, 0.05)
+		mat.roughness = 0.6
+		bm.material = mat
+		box.mesh = bm
+		box.name = "FlightRecorder"
+		root.add_child(box)
+		box.position = bp + Vector3(0, 0.16, 0)
+		box.rotation.y = 0.4
+		var beacon := OmniLight3D.new()
+		beacon.light_color = Color(1.0, 0.5, 0.15)
+		beacon.light_energy = 0.8
+		beacon.omni_range = 3.0
+		box.add_child(beacon)
+		beacon.position = Vector3(0, 0.4, 0)
+		var tw := beacon.create_tween().set_loops()
+		tw.tween_property(beacon, "light_energy", 0.0, 0.5)
+		tw.tween_property(beacon, "light_energy", 1.2, 0.5)
+		taken.append(Rect2(Vector2(bp.x, bp.z) - Vector2(1.2, 1.2), Vector2(2.4, 2.4)))
+		var tm := Timer.new()
+		tm.wait_time = 0.4
+		tm.autostart = true
+		box.add_child(tm)
+		tm.timeout.connect(func():
+			if Game.has("black_box"):
+				box.queue_free())
 
 func _area(parent: Node3D, r0: Rect2, kind: String, floor_y: float, doors: Array, key: String) -> Node3D:
 	root = Node3D.new()
@@ -129,8 +211,10 @@ func _area(parent: Node3D, r0: Rect2, kind: String, floor_y: float, doors: Array
 			keep_clear.append(Rect2(Vector2(float(n.x), float(n.z)) - Vector2(1.1, 1.1), Vector2(2.2, 2.2)))
 	# signs and posters on the walls stay readable: nothing stands in front of them
 	_find_signs(parent.get_tree().current_scene if parent.get_tree() else parent, floor_y)
+	if hangar:
+		_hangar()
 	_walls(K)
-	if String(C.get("kind", "")) in ["storage", "workshop", "store"]:
+	if String(C.get("kind", "")) in ["storage", "workshop", "store"] and not hangar:
 		_aisles(K, String(C.get("kind", "")))
 	_tables(K)
 	if not no_lights or kind in ["storage", "workshop"]:

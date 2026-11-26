@@ -997,6 +997,9 @@ func _test_hooks() -> void:
 		player.global_position = Vector3(float(v[0]), Game.height(float(v[0]), float(v[1])) + 0.1, float(v[1]))
 		player.yaw = float(v[2]) if v.size() > 2 else 0.0
 		player.pitch = float(v[3]) if v.size() > 3 else 0.0
+	if args.has("startq"):
+		for q in String(args.startq).split(","):
+			Game.start(q)
 	if args.has("selftest"):
 		await _selftest()
 	if args.has("newgame"):
