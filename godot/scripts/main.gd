@@ -997,6 +997,13 @@ func _test_hooks() -> void:
 		player.global_position = Vector3(float(v[0]), Game.height(float(v[0]), float(v[1])) + 0.1, float(v[1]))
 		player.yaw = float(v[2]) if v.size() > 2 else 0.0
 		player.pitch = float(v[3]) if v.size() > 3 else 0.0
+	if args.has("trade"):
+		await _wait(5)
+		Game.caps = 900
+		hud.screens.open_trade(String(args.trade))
+		if args.has("tradesel"):
+			hud.screens.shop_sel = String(args.tradesel)
+			hud.screens._render_trade()
 	if args.has("loadscreen"):
 		await _wait(5)
 		hud.screens.open_load(hud.screens.close)

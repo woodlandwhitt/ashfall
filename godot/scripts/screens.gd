@@ -337,7 +337,12 @@ func _trade(id: String) -> void:
 	Game.stats_changed.emit()
 	_render_trade()
 
+var shop_sel := ""
+var shop_scroll := 0
+var shop_list_sc: ScrollContainer
 func _render_trade() -> void:
+	if shop_list_sc and is_instance_valid(shop_list_sc):
+		shop_scroll = shop_list_sc.scroll_vertical
 	_clear()
 	var v: Dictionary = Game.vendor(shop_id)
 	var st: Dictionary = Game.shop_state(shop_id)
@@ -348,15 +353,13 @@ func _render_trade() -> void:
 	_button(top, "X", close, 60)
 	var chips := _row()
 	for k in [["buy", "BUY"], ["sell", "SELL"], ["back", "BUY BACK"]]:
-		var b := _button(chips, k[1], func(): shop_tab = k[0]; shop_info = ""; _render_trade(), 130)
+		var b := _button(chips, k[1], func():
+			shop_tab = k[0]
+			shop_info = ""
+			shop_sel = ""
+			shop_scroll = 0
+			_render_trade(), 130)
 		b.modulate = Color(1, 1, 1) if shop_tab == k[0] else Color(0.6, 0.6, 0.6)
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	chips.add_child(sp)
-	for q in [1, 5, 25]:
-		var b := _button(chips, "x" + str(q), func(): shop_qty = q; _render_trade(), 70)
-		b.modulate = Color(1, 1, 1) if shop_qty == q else Color(0.6, 0.6, 0.6)
-	var list := _scroll()
 	var rows := []
 	match shop_tab:
 		"buy":
@@ -374,18 +377,151 @@ func _render_trade() -> void:
 		var ta := order.find(String(Game.item(a[0]).get("t", "junk")))
 		var tb := order.find(String(Game.item(b[0]).get("t", "junk")))
 		return ta < tb if ta != tb else Game.iname(a[0]) < Game.iname(b[0]))
+	var have := rows.map(func(r): return r[0])
+	if not shop_sel in have:
+		shop_sel = String(rows[0][0]) if not rows.is_empty() else ""
+	# the list on the left (keeps its place when you buy or sell: build 17), the chosen item on the right
+	var split := HBoxContainer.new()
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_theme_constant_override("separation", 14)
+	body.add_child(split)
+	shop_list_sc = ScrollContainer.new()
+	shop_list_sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	shop_list_sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_list_sc.size_flags_stretch_ratio = 1.25
+	split.add_child(shop_list_sc)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 4)
+	shop_list_sc.add_child(list)
 	if rows.is_empty():
 		_label(list, {"buy": "Sold out until sunrise.", "sell": "Nothing they'd want.", "back": "Nothing to buy back."}[shop_tab], 18, DIM)
+	var sel_row := []
 	for r in rows:
-		var h := HBoxContainer.new()
-		h.add_theme_constant_override("separation", 8)
-		list.add_child(h)
 		var deal: bool = shop_tab == "buy" and st.get("deal") == r[0]
-		var nl := _label(h, Game.iname(r[0]) + ("  x" + str(r[1]) if r[1] > 1 else "") + ("   DEAL OF THE DAY" if deal else ""), 19, Color(1.0, 0.9, 0.5) if deal else GREEN)
-		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_label(h, str(r[2]) + " ch", 19, DIM)
-		_button(h, "SELL" if shop_tab == "sell" else "BUY", _trade.bind(r[0]), 100)
+		var on: bool = r[0] == shop_sel
+		if on:
+			sel_row = r
+		var b := Button.new()
+		b.text = "%s%s%s      %d ch" % [Game.iname(r[0]), ("  x" + str(r[1]) if r[1] > 1 else ""), ("   DEAL" if deal else ""), r[2]]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_font_size_override("font_size", 18)
+		b.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5) if deal else (Color(0.05, 0.1, 0.05) if on else GREEN))
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = GREEN if on else Color(0.1, 0.18, 0.1, 0.6)
+		sb.set_content_margin_all(8)
+		b.add_theme_stylebox_override("normal", sb)
+		b.add_theme_stylebox_override("hover", sb)
+		b.add_theme_stylebox_override("pressed", sb)
+		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		var rid: String = r[0]
+		b.pressed.connect(func():
+			shop_sel = rid
+			shop_qty = 1
+			_render_trade())
+		list.add_child(b)
+	var R := VBoxContainer.new()
+	R.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	R.add_theme_constant_override("separation", 6)
+	split.add_child(R)
+	if not sel_row.is_empty():
+		_trade_card(R, sel_row, st)
 	_label(body, shop_info if shop_info != "" else "Carrying %.0f / %.0f" % [Game.carry_now(), Game.carry_max()], 18, DIM)
+	_restore_scroll(shop_list_sc, shop_scroll)
+
+func _restore_scroll(sc: ScrollContainer, to: int) -> void:
+	for i in 2:
+		await get_tree().process_frame
+	if is_instance_valid(sc):
+		sc.scroll_vertical = to
+
+# the chosen item: what it is and does, and how many to buy or sell (a slider up to what you can afford or carry)
+func _trade_card(R: VBoxContainer, r: Array, st: Dictionary) -> void:
+	var id: String = r[0]
+	var it := Game.item(id)
+	_label(R, Game.iname(id), 22, Color(1.0, 0.85, 0.5))
+	var d := _label(R, String(it.get("desc", "")), 16, DIM)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD
+	for line in item_stats(id):
+		var h := HBoxContainer.new()
+		R.add_child(h)
+		var k := _label(h, String(line[0]), 16, DIM)
+		k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_label(h, String(line[1]), 16, line[2] if line.size() > 2 else GREEN)
+	var price: int = r[2]
+	var most: int = r[1]
+	if shop_tab == "sell":
+		most = mini(most, int(st.caps) / maxi(1, price))
+	else:
+		most = mini(most, Game.caps / maxi(1, price))
+	shop_qty = clampi(shop_qty, 1, maxi(1, most))
+	var qrow := HBoxContainer.new()
+	R.add_child(qrow)
+	var ql := _label(qrow, "", 18)
+	ql.custom_minimum_size = Vector2(190, 0)
+	var sl := HSlider.new()
+	sl.min_value = 1
+	sl.max_value = maxi(1, most)
+	sl.step = 1
+	sl.value = shop_qty
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sl.custom_minimum_size = Vector2(0, 40)
+	sl.editable = most > 1
+	qrow.add_child(sl)
+	var verb := "SELL" if shop_tab == "sell" else "BUY"
+	var go := _button(R, "", func(): _trade(id), 0, most >= 1)
+	var upd := func(q: float):
+		shop_qty = int(q)
+		ql.text = "x%d  =  %d ch" % [shop_qty, shop_qty * price]
+		go.text = "%s %d" % [verb, shop_qty] if most >= 1 else ("CAN'T AFFORD" if shop_tab != "sell" else "THEY CAN'T AFFORD IT")
+	sl.value_changed.connect(upd)
+	upd.call(float(shop_qty))
+	var row := HBoxContainer.new()
+	R.add_child(row)
+	for q in [["1", 1], ["10", 10], ["ALL", 99999]]:
+		var qq: int = q[1]
+		_button(row, q[0], func(): sl.value = mini(qq, maxi(1, most)), 80)
+
+# the numbers that matter for an item, for the trade screen (and anywhere else that wants them)
+static func item_stats(id: String) -> Array:
+	var it := Game.item(id)
+	var out := []
+	match String(it.get("t", "")):
+		"weapon":
+			var dmg := float(it.get("dmg", 0)) * float(it.get("pellets", 1))
+			out.append(["Damage", "%.0f" % dmg])
+			out.append(["Damage per second", "%.0f" % (dmg / maxf(0.05, float(it.get("rof", 0.5))))])
+			if it.has("range"):
+				out.append(["Range", "%.0f m" % float(it.range)])
+			if it.has("mag"):
+				out.append(["Magazine", str(int(it.mag))])
+				out.append(["Ammunition", Game.iname(it.get("ammo", ""))])
+			if Game.weapon != "" and Game.weapon != id:
+				var eq := Game.item(Game.weapon)
+				var ed := float(eq.get("dmg", 0)) * float(eq.get("pellets", 1))
+				out.append(["vs " + Game.iname(Game.weapon), "%+.0f damage" % (dmg - ed), Color(0.55, 1.0, 0.55) if dmg >= ed else Color(1.0, 0.5, 0.4)])
+		"armor":
+			out.append(["Damage resistance", str(int(it.get("dr", 0)))])
+			if Game.armor != "" and Game.armor != id:
+				var ea := int(Game.item(Game.armor).get("dr", 0))
+				out.append(["vs " + Game.iname(Game.armor), "%+d" % (int(it.get("dr", 0)) - ea), Color(0.55, 1.0, 0.55) if int(it.get("dr", 0)) >= ea else Color(1.0, 0.5, 0.4)])
+		"aid":
+			if it.has("heal"):
+				out.append(["Heals", "+%d HP" % int(it.heal)])
+			if it.has("rad"):
+				out.append(["Radiation", "%+d" % int(it.rad)])
+		"ammo":
+			var users := []
+			for w in Game.inv:
+				if String(Game.item(w).get("ammo", "")) == Ammo.base(id):
+					users.append(Game.iname(w))
+			out.append(["Fits", ", ".join(users) if not users.is_empty() else "nothing you carry"])
+			if Ammo.kind(id) != "":
+				out.append(["Type", {"fmj": "FMJ: +60% vs machines", "ex": "Explosive: +30%, bursts"}[Ammo.kind(id)]])
+	out.append(["Weight", "%s lbs" % str(it.get("w", 0))])
+	if Game.count(id) > 0:
+		out.append(["You carry", str(Game.count(id))])
+	return out
 
 # ================================================================ LOOT
 var loot_check: Callable          # (item, ...) -> bool: may this be taken? (pickpocketing rolls for each)
