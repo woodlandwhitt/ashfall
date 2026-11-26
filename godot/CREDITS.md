@@ -31,4 +31,8 @@ All third-party assets are free and need no sign-up.
     "Suonatore di Liuto" by Kevin MacLeod (incompetech.com / filmmusic.io)
   - "Waltz Primordial" by Kevin MacLeod feat. Alexander Nakarada (filmmusic.io)
   Licence: https://filmmusic.io/standard-license
+- **Biscuit** (chars/dog/): the "Fox" model from the Khronos glTF Sample Assets (github.com/KhronosGroup/glTF-Sample-Assets):
+  low-poly fox by PixelMannen (CC0); rigging and animation by tomkranis on Sketchfab (CC BY 4.0); glTF conversion by
+  @AsoboStudio and @scurest. Texture recoloured for this game as a tan mutt.
+- **Alarm klaxon** (sfx/alarm.wav) and the boot splash: made for this game (tools inline in the build 17 notes).
 - **Engine:** Godot Engine 4.5, MIT licence.

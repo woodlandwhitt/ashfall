@@ -12,6 +12,7 @@ var model: Node3D
 var ap: AnimationPlayer
 var lt: LegTwist
 var rig: Rig
+var dog_ap: AnimationPlayer
 var home := Vector3.ZERO
 var wander_r := 0.0
 var target := Vector3.ZERO
@@ -83,7 +84,21 @@ func setup(d: Dictionary) -> void:
 	cs.position.y = 0.88
 	add_child(cs)
 	look = d.get("look", {})
-	if id in ANIMALS:
+	if id == "biscuit" and ResourceLoader.exists("res://chars/dog/dog.gltf"):
+		# build 17: a real dog, rigged and animated (the low-poly fox of the glTF samples, recoated as a scruffy
+		# tan mutt), in place of the old block model
+		model = Node3D.new()
+		var dog: Node3D = (load("res://chars/dog/dog.gltf") as PackedScene).instantiate()
+		dog.scale = Vector3.ONE * 0.0092
+		model.add_child(dog)
+		dog_ap = dog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if dog_ap:
+			for an in ["Survey", "Walk", "Run"]:
+				var A := dog_ap.get_animation(an)
+				if A:
+					A.loop_mode = Animation.LOOP_LINEAR
+			dog_ap.play("Survey")
+	elif id in ANIMALS:
 		model = (load(Game.char_path("npc_" + id + ".glb")) as PackedScene).instantiate()
 		rig = Rig.new(model, true)
 	else:
@@ -208,6 +223,8 @@ func _physics_process(d: float) -> void:
 		Humanoid.play(ap, a)
 	elif rig:
 		rig.animate(d, spd, t)
+	elif dog_ap:
+		_dog(spd)
 
 const LIFE_R := 13.0
 func _life(d: float) -> float:
@@ -609,6 +626,15 @@ func _companion(d: float) -> void:
 				aim_hold.pitch = atan2(tp.y - global_position.y - 1.4, Vector2(tp.x - global_position.x, tp.z - global_position.z).length())
 	elif rig:
 		rig.animate(d, spd, t)
+	elif dog_ap:
+		_dog(spd)
+
+# trots, lopes and sniffs about (Survey) when standing
+func _dog(spd: float) -> void:
+	var a := "Survey" if spd < 0.3 else ("Walk" if spd < 4.0 else "Run")
+	if dog_ap.current_animation != a:
+		dog_ap.play(a, 0.25)
+	dog_ap.speed_scale = 1.0 if a == "Survey" else clampf(spd / (1.6 if a == "Walk" else 6.0), 0.6, 1.6)
 
 func _shoot(ad: float) -> void:
 	var from := global_position + Vector3.UP * 1.45 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5
