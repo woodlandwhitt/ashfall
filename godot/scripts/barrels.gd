@@ -87,6 +87,8 @@ func _spawn(b: Dictionary) -> void:
 		if not space.intersect_shape(sq, 1).is_empty():
 			b["bad"] = true
 			return
+	if OS.get_cmdline_user_args().has("--drumlog"):
+		print("DRUM ", b.id, " at ", Vector3(float(b.x), y, float(b.z)), " ground ", gy, " hit ", hit.collider)
 	var n := Drum.new()
 	n.owner_list = self
 	n.info = b

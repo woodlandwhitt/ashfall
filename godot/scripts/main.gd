@@ -3265,8 +3265,12 @@ func _colliders() -> void:
 
 func _pools() -> void:
 	# wait for the collision to be in, so the pools can lie on concrete pads as well as on the ground
-	await get_tree().physics_frame
-	await get_tree().physics_frame
+	for i in 2:
+		if not is_inside_tree():
+			return
+		await get_tree().physics_frame
+	if not is_inside_tree():
+		return
 	var sh := preload("res://scripts/water.gdshader")
 	for p in Game.region.pools:
 		var y := Game.height(p.x, p.z)

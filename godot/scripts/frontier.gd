@@ -188,6 +188,8 @@ static func layout() -> Array:
 	# Orrin Pike's camp on the rise where he watched it fall
 	L.append(R("crater", 684, -424, 0, {"rad": 12.5}))
 	L.append(R("ufo", 684, -424, 0))
+	L.append(R("campfire", 702.0, -420.5, 0, {"s": 0.35}))
+	L.append(R("campfire", 693.0, -431.0, 0, {"s": 0.28}))
 	L.append(R("tent", 650, -398, 0))
 	L.append(R("campfire", 654.0, -394.0, 0, {"s": 0.6}))
 	L.append(R("seat", 656.0, -392.0, 1, {"id": "Rockingchair_01"}))
@@ -392,7 +394,7 @@ static func _ground(d: Dictionary) -> float:
 	var x := float(d.x)
 	var z := float(d.z)
 	match String(d.k):
-		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi", "banner", "shards", "rubble":
+		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi", "banner", "shards", "rubble", "ufo", "crater":
 			return Game.height(x, z)
 	var g := -INF
 	for p in [Vector2(-w, -dd), Vector2(w, -dd), Vector2(-w, dd), Vector2(w, dd), Vector2.ZERO]:
@@ -492,18 +494,33 @@ func _after(n: Node3D, d: Dictionary) -> void:
 		main.town.add_piece("fr_" + str(roundi(float(d.x))), String(d.id), n)
 		return
 	if k == "sign":
-		# a road sign reads the same from both sides
+		# a road sign reads the same from both sides; each side's lettering only from its own side (it used to show
+		# mirrored through and past the board), each line sized to fit the board, the first line largest (build 19)
+		var lines := String(d.get("text", "")).split("\n")
+		var sizes: Array = []
+		var total := 0.0
+		for i in lines.size():
+			var ps := minf(0.0075 if i == 0 else 0.0058, 2.15 / (maxf(1.0, float(lines[i].length())) * 0.62 * 56.0))
+			sizes.append(ps)
+			total += ps * 56.0 * 1.18
+		var fit := minf(1.0, 0.98 / maxf(0.01, total))
 		for side in [0.0, PI]:
-			var lb := Label3D.new()
-			lb.text = String(d.get("text", ""))
-			lb.font_size = 56
-			lb.pixel_size = 0.0055
-			lb.modulate = Color(0.12, 0.09, 0.07)
-			lb.outline_size = 0
-			lb.position = Basis(Vector3.UP, side) * Vector3(0, 1.75, 0.075)
-			lb.rotation.y = side
-			lb.visibility_range_end = 45.0
-			n.add_child(lb)
+			var y := 1.75 + total * fit * 0.5
+			for i in lines.size():
+				var ps: float = sizes[i] * fit
+				y -= ps * 56.0 * 1.18 * 0.5
+				var lb := Label3D.new()
+				lb.text = lines[i]
+				lb.font_size = 56
+				lb.pixel_size = ps
+				lb.double_sided = false
+				lb.modulate = Color(0.12, 0.09, 0.07)
+				lb.outline_size = 0
+				lb.position = Basis(Vector3.UP, side) * Vector3(0, y, 0.075)
+				lb.rotation.y = side
+				lb.visibility_range_end = 45.0
+				n.add_child(lb)
+				y -= ps * 56.0 * 1.18 * 0.5
 		return
 	if d.has("sign"):
 		_sign_board(n, d)
@@ -522,6 +539,8 @@ func _sign_board(n: Node3D, d: Dictionary) -> void:
 	lb.outline_modulate = Color(0.1, 0.06, 0.04)
 	lb.outline_size = 10
 	lb.position = Vector3(0, h + (0.75 if d.k == "hall" else 0.42), dd * 0.5 + 0.16)
+	lb.double_sided = false
+	lb.pixel_size = minf(lb.pixel_size, (w * 0.92) / maxf(1.0, float(String(d.sign).length()) * 0.6 * 72.0))
 	lb.visibility_range_end = 60.0
 	n.add_child(lb)
 
@@ -689,7 +708,7 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 		"silo": _silo(kit)
 		"shards": _shards(kit, d)
 		"reactor_hall": _reactor_hall(kit)
-		"ufo": _ufo(kit)
+		"ufo": _ufo(kit, d)
 		"rig_cart":
 			kit.box("metal", Vector3(0, 0.45, 0), Vector3(1.4, 0.08, 0.8), 1)
 			for w in [Vector3(-0.55, 0.2, 0.42), Vector3(0.55, 0.2, 0.42), Vector3(-0.55, 0.2, -0.42), Vector3(0.55, 0.2, -0.42)]:
@@ -1225,43 +1244,81 @@ static func _rubble(kit: Kit, d: Dictionary) -> void:
 	for i in 8:
 		kit.pole("metal", Vector3(rng.randf_range(-w * 0.4, w * 0.4), 0.4, rng.randf_range(-dd * 0.4, dd * 0.4)), Vector3(rng.randf_range(-w * 0.4, w * 0.4), rng.randf_range(1.5, 3.5), rng.randf_range(-dd * 0.4, dd * 0.4)), 0.025)
 
-# ---------------------------------------------------------------- Starfall (build 17)
-# A saucer some 17 m across, come down at a shallow angle from the east and dug in on its leading edge: the upper
-# hull cracked open over the cockpit dome, the rim lights mostly dead, two still pulsing green
-static func _ufo(kit: Kit) -> void:
-	var tilt := Basis(Vector3.FORWARD, 0.22) * Basis(Vector3.RIGHT, -0.08)
-	var c := Vector3(0, 0.6, 0)
-	var R := 8.6
-	# lower and upper hull: two shallow cones rim to rim
-	kit.cyl("alien", c, R * 0.35, R, 1.1, 32, 2, tilt)
-	kit.cyl("alien", c + tilt * Vector3(0, 1.1, 0), R, R * 0.42, 1.3, 32, 0, tilt)
-	kit.cyl("dark", c + tilt * Vector3(0, 1.02, 0), R + 0.12, R + 0.12, 0.16, 32, 0, tilt)
-	# the cockpit dome, cracked: glass, with a dark wedge out of it
-	kit.cyl("glow", c + tilt * Vector3(0, 2.4, 0), R * 0.4, R * 0.22, 1.5, 20, 0, tilt)
-	kit.cyl("dark", c + tilt * Vector3(1.2, 2.5, 0.6), 0.9, 0.2, 1.0, 6, 0, tilt * Basis(Vector3.UP, 0.8))
-	# rim lights: most dead, three still on
-	for i in 16:
-		var a := i * TAU / 16.0
-		var p := c + tilt * Vector3(cos(a) * (R + 0.05), 1.04, sin(a) * (R + 0.05))
-		kit.box("glow" if i in [2, 3, 11] else "dark", p, Vector3(0.5, 0.18, 0.5), 0, tilt * Basis(Vector3.UP, -a))
-	# a torn panel standing off the hull, and the breach where you can get in (Starfall's point is there)
-	kit.box("alien", c + Vector3(-4.0, 2.4, 3.6), Vector3(3.0, 0.1, 1.8), 0, Basis(Vector3.FORWARD, 0.9) * Basis(Vector3.UP, 0.5))
-	kit.box("dark", c + tilt * Vector3(5.2, 0.9, -3.0), Vector3(2.2, 1.0, 1.4), 0, tilt * Basis(Vector3.UP, 0.6))
-	# debris along the way it came in
-	for i in 9:
-		var x := 10.0 + i * 3.2
-		var z := sin(i * 1.7) * 2.2
-		kit.box("alien" if i % 2 == 0 else "dark", Vector3(x, 0.15, z), Vector3(0.6 + (i % 3) * 0.4, 0.2 + (i % 2) * 0.2, 0.5 + (i % 4) * 0.3), 0, Basis(Vector3.UP, i * 0.9) * Basis(Vector3.RIGHT, 0.3))
+# ---------------------------------------------------------------- Starfall (build 17, remade in 19)
+# A saucer some 17 m across, come down at a shallow angle out of the east and dug in on its leading (west) edge: a
+# berm of earth shoved up in front of it, the upper hull stepped up to a cracked green-lit dome, a band of ports round
+# the rim (most dark, three still lit), a landing leg torn off and lying in the scar, and hull plating strewn back
+# along the furrow. Every loose piece sits on the ground where it lies (the site's own ground, not one flat level).
 
-# the scorched scar: a dark disc round the impact and a long furrow out to the east
+# how far the ground at a point of the site (local x, z) is above or below the site's origin
+static func _lift(d: Dictionary, lx: float, lz: float) -> float:
+	return Game.height(float(d.x) + lx, float(d.z) + lz) - _ground(d)
+
+static func _ufo(kit: Kit, d: Dictionary) -> void:
+	var tilt := Basis(Vector3.BACK, 0.2) * Basis(Vector3.RIGHT, -0.06)     # nose down to the west, a little roll
+	var c := Vector3(0, 0.3, 0)
+	var R := 8.6
+	var at := func(p: Vector3) -> Vector3: return c + tilt * p
+	# lower dish, the rim band, then the upper hull in two steps and the dome
+	kit.cyl("alien", at.call(Vector3(0, -0.2, 0)), R * 0.3, R, 1.0, 40, 2, tilt)
+	kit.cyl("dark", at.call(Vector3(0, 0.78, 0)), R + 0.06, R + 0.06, 0.34, 40, 0, tilt)
+	kit.cyl("alien", at.call(Vector3(0, 1.1, 0)), R, R * 0.64, 0.7, 40, 0, tilt)
+	kit.cyl("alien", at.call(Vector3(0, 1.8, 0)), R * 0.64, R * 0.4, 0.5, 32, 0, tilt)
+	kit.cyl("glass", at.call(Vector3(0, 2.3, 0)), R * 0.4, R * 0.08, 1.6, 24, 0, tilt)
+	kit.cyl("glow", at.call(Vector3(0, 2.25, 0)), R * 0.3, R * 0.3, 0.06, 24, 0, tilt)
+	# seams on the upper hull
+	for i in 12:
+		var a := i * TAU / 12.0
+		kit.box("dark", at.call(Vector3(cos(a) * R * 0.82, 1.48, sin(a) * R * 0.82)), Vector3(R * 0.34, 0.04, 0.08), 0, tilt * Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -0.22))
+	# ports in the rim band: most dead, three lit
+	for i in 24:
+		var a := i * TAU / 24.0
+		kit.box("glow" if i in [3, 4, 17] else "glass", at.call(Vector3(cos(a) * (R + 0.08), 0.95, sin(a) * (R + 0.08))), Vector3(0.7, 0.2, 0.12), 0, tilt * Basis(Vector3.UP, -a + PI * 0.5))
+	# the dome cracked open on one side
+	kit.box("dark", at.call(Vector3(1.6, 3.0, 0.8)), Vector3(1.6, 0.9, 0.12), 0, tilt * Basis(Vector3.UP, 0.7) * Basis(Vector3.RIGHT, 0.3))
+	# the hull breach on the east side, plating peeled back
+	kit.box("dark", at.call(Vector3(R - 1.2, 0.6, -2.6)), Vector3(2.2, 1.0, 1.6), 0, tilt * Basis(Vector3.UP, 0.5))
+	kit.box("alien", at.call(Vector3(R + 0.3, 1.5, -2.2)), Vector3(1.8, 0.08, 1.4), 0, tilt * Basis(Vector3.BACK, -1.0))
+	# the berm of earth it shoved up in front of it as it dug in (west), and soil thrown along its flanks
+	for i in 9:
+		var a := PI + (i - 4) * 0.16
+		var p := Vector3(cos(a) * (R + 1.0), 0.0, sin(a) * (R + 1.0))
+		p.y = _lift(d, p.x, p.z) - 0.3
+		kit.box("burnt" if i % 2 else "dark", p, Vector3(2.4, 1.2 + 0.5 * cos((i - 4) * 0.4), 1.8), 0, Basis(Vector3.UP, -a) * Basis(Vector3.BACK, 0.25))
+	# landing legs: one still under it, one torn off and thrown into the scar
+	kit.pole("metal", at.call(Vector3(-2.5, -0.1, 4.6)), at.call(Vector3(-3.2, -1.4, 5.6)), 0.14)
+	var lp := Vector3(17.0, 0.0, 3.4)
+	lp.y = _lift(d, lp.x, lp.z) + 0.15
+	kit.pole("alien", lp, lp + Vector3(2.6, 0.1, 0.8), 0.16)
+	kit.cyl("dark", lp + Vector3(2.7, -0.12, 0.8), 0.5, 0.42, 0.18, 10, 0)
+	# plating strewn back along the furrow, each piece lying on the ground where it landed
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	for i in 18:
+		var x := 11.0 + i * 2.2 + rng.randf_range(-1.0, 1.0)
+		var z := sin(i * 1.7) * 3.0 + rng.randf_range(-2.0, 2.0)
+		var sz := Vector3(rng.randf_range(0.5, 1.6), rng.randf_range(0.06, 0.25), rng.randf_range(0.4, 1.2))
+		var y := _lift(d, x, z) + sz.y * 0.5 - 0.04
+		kit.box(["alien", "dark", "alien", "metal"][i % 4], Vector3(x, y, z), sz, 0, Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.15, 0.15)))
+		if i % 5 == 2:
+			kit.box("glow", Vector3(x, y + sz.y * 0.5 + 0.01, z), Vector3(sz.x * 0.6, 0.02, 0.08), 0, Basis(Vector3.UP, rng.randf() * TAU))
+
+# the scorched ground round the impact and the long furrow out to the east, laid on the ground in short pieces
 static func _crater(kit: Kit, d: Dictionary) -> void:
 	var r := float(d.get("rad", 14.0))
 	kit.cyl("dark", Vector3(0, 0.03, 0), r, r, 0.04, 28, 0)
 	kit.cyl("burnt", Vector3(0, 0.05, 0), r * 0.75, r * 0.75, 0.04, 28, 0)
-	for i in 10:
-		kit.box("dark", Vector3(r * 0.7 + i * 3.4, 0.04, sin(i * 1.3) * 0.6), Vector3(3.6, 0.05, 2.4 - i * 0.12), 0)
-		kit.box("concrete_dk", Vector3(r * 0.7 + i * 3.4, 0.22, 1.5 + sin(i * 1.3) * 0.6), Vector3(3.2, 0.35, 0.7), 0)
-		kit.box("concrete_dk", Vector3(r * 0.7 + i * 3.4, 0.22, -1.5 + sin(i * 1.3) * 0.6), Vector3(3.2, 0.35, 0.7), 0)
+	var x := r * 0.6
+	while x < r * 0.6 + 34.0:
+		var z := sin(x * 0.12) * 0.8
+		var w := maxf(0.8, 3.0 - (x - r) * 0.06)
+		var g := _lift(d, x, z)
+		kit.box("dark", Vector3(x, g + 0.03, z), Vector3(2.1, 0.06, w), 0)
+		# the lips of the furrow: earth thrown up either side
+		for s in [-1.0, 1.0]:
+			var zz: float = z + s * (w * 0.5 + 0.35)
+			kit.box("burnt", Vector3(x, _lift(d, x, zz) + 0.12, zz), Vector3(2.1, 0.32, 0.6), 0, Basis(Vector3.RIGHT, -s * 0.35))
+		x += 2.0
 
 # ---------------------------------------------------------------- the Meridian reactor (build 17)
 # The containment hall behind the old reactor room, 16 x 14 m and 7 m high: the pressure vessel under its dome, the

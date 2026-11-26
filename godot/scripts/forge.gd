@@ -204,6 +204,7 @@ func build(k: String, mi: int) -> Node3D:
 			lb.modulate = Color(0.1, 0.08, 0.06)
 			lb.position = Vector3(0, 1.6, 0.04)
 			lb.outline_size = 0
+			lb.double_sided = false
 			root.add_child(lb)
 		"loot_common":
 			_box(root, Vector3(0.9, 0.5, 0.5), Vector3(0, 0.25, 0), m)

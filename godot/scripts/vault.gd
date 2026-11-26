@@ -457,7 +457,8 @@ void fragment(){
 	hm.position.z = -0.35
 	cog.add_child(hm)
 	for i in 3:
-		var a := i / 3.0 * TAU + 0.52
+		# (one spoke used to point straight down, through the painted 12)
+		var a := i / 3.0 * TAU + PI * 0.5
 		var spoke := box(Vector3(1.6, 0.32, 0.12), Vector3(cos(a) * 1.85, sin(a) * 1.85, -0.3), dark, cog)
 		spoke.rotation.z = a
 	# the painted number
@@ -469,7 +470,20 @@ void fragment(){
 	num.outline_size = 0
 	num.position = Vector3(0, -1.75, -0.27)
 	num.rotation.y = PI
+	num.double_sided = false
 	cog.add_child(num)
+	# a dark backing plate the width of the teeth: the bright tunnel no longer shows through between them
+	var back := CylinderMesh.new()
+	back.top_radius = 3.38
+	back.bottom_radius = 3.38
+	back.height = 0.06
+	back.radial_segments = 48
+	var bk := MeshInstance3D.new()
+	bk.mesh = back
+	bk.material_override = dark
+	bk.rotation.x = PI / 2
+	bk.position.z = 0.24
+	cog.add_child(bk)
 	# a hazard band across the floor in front of the door rail
 	box(Vector3(7.0, 0.3, 0.6), P(0, 0.15, 90.6), yel).visible = false
 

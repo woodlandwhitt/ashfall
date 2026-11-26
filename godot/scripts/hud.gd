@@ -114,11 +114,6 @@ func _ready() -> void:
 	_place(compass, Control.PRESET_CENTER_TOP, -220, 10, 440, 34)
 	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(compass)
-	# build 17: a small radar under the corner buttons, enemies in red (and red ticks on the compass)
-	radar = Radar.new()
-	_place(radar, Control.PRESET_TOP_RIGHT, -150, 56, 130, 130)
-	radar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(radar)
 
 	# dark backing behind the corner readouts, so text stays legible over bright ground
 	for side in [0, 1]:
@@ -793,7 +788,6 @@ func _process(d: float) -> void:
 		fps_n = 0
 		fps_min = 999.0
 	compass.queue_redraw()
-	radar.queue_redraw()
 
 # ---------------------------------------------------------------- compass strip
 class HitMark extends Control:
@@ -944,6 +938,9 @@ class Compass extends Control:
 
 # ---------------------------------------------------------------- touch controls: stick on the left, look anywhere else
 class TouchPad extends Control:
+	var swap_id := 0
+	var swap_held := false
+	var swap_down := false
 	var stick_id := -1
 	var stick_c := Vector2.ZERO
 	var stick_p := Vector2.ZERO
@@ -962,7 +959,6 @@ class TouchPad extends Control:
 			"reload": [Vector2(s.x - 240, s.y - 250), 40.0, "RLD"],
 			"run": [Vector2(370, s.y - 60), 38.0, "RUN"],
 			"swap": [Vector2(s.x - 360, s.y - 70), 36.0, "SWAP"],
-			"holster": [Vector2(s.x - 370, s.y - 305), 32.0, "HOLS"],
 			"nade": [Vector2(s.x - 255, s.y - 360), 34.0, "NADE"],
 			"focus": [Vector2(s.x - 370, s.y - 200), 38.0, "FOCUS"],
 			"sneak": [Vector2(470, s.y - 60), 36.0, "SNEAK"],
@@ -1053,8 +1049,22 @@ class TouchPad extends Control:
 			"use": if on: Game.main.interact()
 			"jump": if on: p.jump()
 			"reload": if on: p.reload()
-			"swap": if on: Game.main.hud.swap_weapon()
-			"holster": if on: p.toggle_holster()
+			"swap":
+				# tap to swap weapons, hold to holster (build 19: there's no HOLS button any more)
+				if on:
+					swap_id += 1
+					swap_held = false
+					var my := swap_id
+					get_tree().create_timer(0.45).timeout.connect(func():
+						if my == swap_id and not swap_held and swap_down:
+							swap_held = true
+							p.toggle_holster())
+					swap_down = true
+				else:
+					swap_down = false
+					if not swap_held:
+						Game.main.hud.swap_weapon()
+					swap_held = false
 			"nade": if on: p.throw_nade()
 			"chem": if on: Game.use_chem()
 			"focus": if on: Game.main.hud.focus.enter()

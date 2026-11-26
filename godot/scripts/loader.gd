@@ -29,7 +29,7 @@ const TIPS := [
 	"Explosive rounds are made at a workbench from standard rounds and blasting powder.",
 	"Break a pipe bomb down at a workbench and you have blasting powder.",
 	"Tap a place on the map to travel there, once you've found it.",
-	"HOLS puts your gun away (H on a keyboard); pull the trigger to draw it again.",
+	"Hold SWAP to holster your gun (H on a keyboard); pull the trigger to draw it again.",
 	"Hostiles show on the compass as red ticks once you've spotted them.",
 	"Anything you take with red text over it belongs to someone. They notice.",
 	"Haven 12's service pistol takes 10mm. Don't let anyone sell you 9mm for it.",
