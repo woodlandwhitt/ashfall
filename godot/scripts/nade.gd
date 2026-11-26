@@ -307,6 +307,8 @@ func _explode() -> void:
 		return
 	var pulse: bool = spec.get("pulse", false)
 	var plasma: bool = spec.get("plasma", false)
+	if not pulse and Game.main.get("barrels"):
+		Game.main.barrels.blast_near(at, r)
 	_flash(at, Color(0.4, 0.6, 1.0) if pulse else (Color(0.4, 1.0, 0.5) if plasma else Color(1.0, 0.6, 0.25)), r)
 	Sfx.play_at("shotgun_far", at, 6.0, 0.45 if not plasma else 0.7)
 	Sfx.play_at("shotgun", at, 4.0, 0.55)
@@ -344,7 +346,46 @@ func _explode() -> void:
 			Game.player.hurt_shake = maxf(Game.player.hurt_shake, 0.6 * (1.0 - pd / (r * 3.0)))
 	queue_free()
 
+# a plain blast with no grenade behind it (a fuel drum going up): hurts everything in reach, you included, sets off
+# other drums, and makes the whole neighbourhood look
+static func blast(at: Vector3, r: float, dmg: float, col: Color, by_enemy: bool) -> void:
+	_flash_at(at, col, r)
+	Sfx.play_at("shotgun_far", at, 7.0, 0.42)
+	Sfx.play_at("shotgun", at, 5.0, 0.5)
+	Sfx.play_at("x_rock1", at, 5.0, 0.55)
+	for e in Game.main.enemies.duplicate():
+		if not is_instance_valid(e) or e.dead:
+			continue
+		var dist: float = e.global_position.distance_to(at)
+		if dist > r:
+			continue
+		var k := 1.0 - dist / r * 0.6
+		var dir: Vector3 = (e.global_position - at).normalized()
+		e.hit(dmg * k, e.global_position + Vector3.UP, dir)
+		if not e.dead:
+			e.velocity += (dir + Vector3.UP * 0.4) * 6.0 * k
+			if e.get("bleed") != null:
+				e.bleed = [6.0, 4.0]
+	for e in Game.main.enemies:
+		if is_instance_valid(e):
+			e.hear(at)
+	if not by_enemy:
+		for n in Game.main.npcs.duplicate():
+			if is_instance_valid(n) and n.visible and not n.follow and n.global_position.distance_to(at) < r:
+				Game.main.provoke(n, dmg * (1.0 - n.global_position.distance_to(at) / r * 0.75), (n.global_position - at).normalized())
+	if Game.player:
+		var pd: float = Game.player.global_position.distance_to(at)
+		if pd < r:
+			Game.hurt(dmg * (1.0 - pd / r) * 0.6)
+		if pd < r * 3.0:
+			Game.player.hurt_shake = maxf(Game.player.hurt_shake, 0.7 * (1.0 - pd / (r * 3.0)))
+	if Game.main.get("barrels"):
+		Game.main.barrels.blast_near(at, r)
+
 func _flash(at: Vector3, col: Color, r: float) -> void:
+	_flash_at(at, col, r)
+
+static func _flash_at(at: Vector3, col: Color, r: float) -> void:
 	var main: Node = Game.main
 	var l := OmniLight3D.new()
 	l.light_color = col
@@ -376,6 +417,9 @@ class Fire extends Node3D:
 		f.by_enemy = enemy
 		Game.main.add_child(f)
 		f.global_position = at
+		if Game.main.get("barrels"):
+			for d in Game.main.barrels.find_at(at, radius + 0.4):
+				d.ignite(Barrels.FUSE)
 
 	func _ready() -> void:
 		light = OmniLight3D.new()

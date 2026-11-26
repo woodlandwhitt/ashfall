@@ -16,6 +16,7 @@ var dialog_node := ""
 var pending_trade := ""
 var objects: WorldObjects
 var pockets: Pockets
+var barrels: Barrels
 var events: RoadEvents
 var forge: Forge
 var atmos: Atmos
@@ -88,6 +89,8 @@ func _ready() -> void:
 			people[k] = []
 		people[k].append(["e", i])
 	pockets = Pockets.new(self)
+	barrels = Barrels.new(self)
+	add_child(barrels)
 	objects = WorldObjects.new()
 	add_child(objects)
 	objects.setup(self)
@@ -1047,6 +1050,13 @@ func _test_hooks() -> void:
 					var mf: Vector3 = e.model.global_basis.z
 					print("AIMP %s st=%s anim=%s act=%.2f w=%.2f ang=%.0f up=%.2f face=%.0f tw=%.2f modelz=%s fy=%.2f" % [e.type, e.state, e.ap.current_animation, e.act_t, e.aim_hold.weight if e.aim_hold else -1.0, rad_to_deg(fwd.angle_to(to)), fwd.y, faceoff, e.lt.twist if e.lt else 0.0, str(mf.snapped(Vector3.ONE * 0.01)), e.face_yaw])
 			get_tree().quit())
+	if args.has("shootdrum"):
+		# the nearest fuel drum takes a bullet after a delay (checking the burn, the blast and the chain)
+		get_tree().create_timer(float(args.shootdrum), false).timeout.connect(func():
+			var ds := barrels.find_at(player.global_position, 40.0)
+			print("DRUMS near ", ds.size(), " of ", barrels.all.size())
+			if not ds.is_empty():
+				ds[0].hit(5.0, ds[0].global_position + Vector3.UP * 0.5, Vector3.FORWARD))
 	if args.has("killall"):
 		# everything in the lineup or the fight dies a second later (checking how they fall)
 		get_tree().create_timer(float(args.killall), false).timeout.connect(func():

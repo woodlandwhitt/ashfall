@@ -293,6 +293,14 @@ func _settle_slabs(root: Node3D, fname: String) -> void:
 			continue
 		var m: Mesh = (mi as MeshInstance3D).mesh
 		var si := int(parts[1])
+		# baked explosive drums: the whole little mesh is the drum, so it just goes (live drums replace them)
+		var hide := false
+		for piece in settle[fname][key]:
+			if piece.size() > 2 and String(piece[2]) == "hide":
+				hide = true
+		if hide and m.get_surface_count() == 1:
+			mi.queue_free()
+			continue
 		var am := ArrayMesh.new()
 		var inv := (mi as MeshInstance3D).global_transform.basis.inverse()
 		for s in m.get_surface_count():
@@ -300,6 +308,11 @@ func _settle_slabs(root: Node3D, fname: String) -> void:
 			if s == si:
 				var V: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 				for piece in settle[fname][key]:
+					if piece.size() > 2:
+						var at: Vector3 = V[int(piece[0][0])]
+						for i in piece[0]:
+							V[int(i)] = at
+						continue
 					var off: Vector3 = inv * Vector3(0, -float(piece[1]), 0)
 					for i in piece[0]:
 						V[int(i)] += off
