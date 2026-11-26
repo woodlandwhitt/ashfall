@@ -100,7 +100,7 @@ SITES = {
 	"glass_camp": (1150, -612, 26, None), "silo9": (1150, -790, 22, None), "northgate": (-170, -505, 20, None),
 	"airfield_cut": (300, -505, 20, None), "ridge_gap": (1225, -500, 20, None),
 }
-h = np.where(N, flatten(-55, -745, 48, 48, WATER + 1.4, 30, h), h)
+h = np.where(N, flatten(-50, -748, 34, 40, WATER + 1.4, 18, h), h)
 h = np.where(N, flatten(1150, -612, 28, 28, h[1012 - 612, 1150 + 500] if False else 9.0, 25, h), h)
 
 # ---------------------------------------------------------------- roads

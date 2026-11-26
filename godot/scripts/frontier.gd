@@ -310,6 +310,21 @@ static func _ground(d: Dictionary) -> float:
 		g = maxf(g, Game.height(x + p.x, z + p.y))
 	return g
 
+# how far the ground falls away under a building from the floor it stands on (its footing goes down that far)
+static func _sink(d: Dictionary) -> float:
+	if d.has("y") or not d.has("w"):
+		return 0.0
+	var w := float(d.get("w", 2.0)) * 0.5
+	var dd := float(d.get("d", 2.0)) * 0.5
+	if int(d.r) % 2 == 1:
+		var t := w
+		w = dd
+		dd = t
+	var lo := INF
+	for p in [Vector2(-w, -dd), Vector2(w, -dd), Vector2(-w, dd), Vector2(w, dd), Vector2(0, -dd), Vector2(0, dd), Vector2(-w, 0), Vector2(w, 0)]:
+		lo = minf(lo, Game.height(float(d.x) + p.x, float(d.z) + p.y))
+	return maxf(0.0, _ground(d) - lo)
+
 # the walls standing on the ground, as world boxes for the region's solid list [x0, x1, z0, z1, y0, y1]
 static func _solids_of(d: Dictionary) -> Array:
 	var kit := Kit.new()
@@ -549,6 +564,7 @@ func _cot(n: Node3D, at: Vector3, yaw: float) -> void:
 
 # ---------------------------------------------------------------- shapes (local: origin on the ground at the middle, front to +Z)
 static func _shape(kit: Kit, d: Dictionary) -> void:
+	d["_sink"] = _sink(d)
 	match String(d.k):
 		"shack": _shack(kit, d, 2.7)
 		"hall": _shack(kit, d, 3.4)
@@ -623,7 +639,8 @@ static func _shack(kit: Kit, d: Dictionary, h: float) -> void:
 	var hd := dd * 0.5
 	var door := float(d.get("door", 0.0))
 	# a concrete footing down into the ground and a board floor
-	kit.box("concrete_dk", Vector3(0, -0.4, 0), Vector3(w + 0.1, 0.8, dd + 0.1), 1)
+	var ft := 0.8 + float(d.get("_sink", 0.0))
+	kit.box("concrete_dk", Vector3(0, -ft * 0.5, 0), Vector3(w + 0.1, ft, dd + 0.1), 1)
 	kit.box("plank_dk", Vector3(0, 0.08, 0), Vector3(w - 0.1, 0.16, dd - 0.1), 1)
 	var win := [0.0, 1.0, 1.05, 1.75]
 	_wall(kit, m, Vector3(-hw, 0, -hd), Vector3(hw, 0, -hd), h, [win] if w >= 7 else [])
@@ -671,7 +688,8 @@ static func _cabin(kit: Kit, d: Dictionary) -> void:
 	var hw := w * 0.5
 	var hd := dd * 0.5
 	var h := 2.5
-	kit.box("concrete_dk", Vector3(0, -0.35, 0), Vector3(w + 0.2, 0.7, dd + 0.2), 1)
+	var ft := 0.7 + float(d.get("_sink", 0.0))
+	kit.box("concrete_dk", Vector3(0, -ft * 0.5, 0), Vector3(w + 0.2, ft, dd + 0.2), 1)
 	kit.box("plank_dk", Vector3(0, 0.08, 0), Vector3(w - 0.1, 0.16, dd - 0.1), 1)
 	_wall(kit, "log", Vector3(-hw, 0, -hd), Vector3(hw, 0, -hd), h, [[1.2, 0.9, 1.0, 1.7]], 0.26)
 	_wall(kit, "log", Vector3(-hw, 0, -hd + 0.13), Vector3(-hw, 0, hd - 0.13), h, [], 0.26)
@@ -907,7 +925,8 @@ static func _hospital(kit: Kit, d: Dictionary) -> void:
 	var h := 4.0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1337
-	kit.box("concrete_dk", Vector3(0, -0.3, 0), Vector3(w + 0.4, 0.6, dd + 0.4), 1)
+	var ft := 0.6 + float(d.get("_sink", 0.0))
+	kit.box("concrete_dk", Vector3(0, -ft * 0.5, 0), Vector3(w + 0.4, ft, dd + 0.4), 1)
 	kit.box("concrete", Vector3(0, 0.06, 0), Vector3(w - 0.2, 0.12, dd - 0.2), 1)
 	var win := func(n: int, l: float) -> Array:
 		var o: Array = []
@@ -1043,7 +1062,8 @@ static func _highrise(kit: Kit, d: Dictionary) -> void:
 	rng.seed = int(d.get("seed", 1))
 	var lobby := bool(d.get("lobby", false))
 	var g := 4.0
-	kit.box("concrete_dk", Vector3(0, -0.5, 0), Vector3(w + 0.4, 1.0, dd + 0.4), 1)
+	var ft := 1.0 + float(d.get("_sink", 0.0))
+	kit.box("concrete_dk", Vector3(0, -ft * 0.5, 0), Vector3(w + 0.4, ft, dd + 0.4), 1)
 	kit.box("concrete", Vector3(0, 0.06, 0), Vector3(w - 0.3, 0.12, dd - 0.3), 1)
 	# the ground floor: real walls with a doorway and shopfront holes, so the lobby can be walked into
 	var front := [[0.0, 3.0, 0.0, 2.9]]
@@ -1176,7 +1196,8 @@ static func _blockhouse(kit: Kit, d: Dictionary) -> void:
 	var hw := w * 0.5
 	var hd := dd * 0.5
 	var h := 3.4
-	kit.box("concrete_dk", Vector3(0, -0.4, 0), Vector3(w + 0.6, 0.8, dd + 0.6), 1)
+	var ft := 0.8 + float(d.get("_sink", 0.0))
+	kit.box("concrete_dk", Vector3(0, -ft * 0.5, 0), Vector3(w + 0.6, ft, dd + 0.6), 1)
 	kit.box("concrete", Vector3(0, 0.06, 0), Vector3(w - 0.3, 0.12, dd - 0.3), 1)
 	_wall(kit, "concrete", Vector3(-hw, 0, -hd), Vector3(hw, 0, -hd), h, [], 0.5)
 	_wall(kit, "concrete", Vector3(-hw, 0, -hd + 0.25), Vector3(-hw, 0, hd - 0.25), h, [], 0.5)
