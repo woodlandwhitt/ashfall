@@ -12,7 +12,33 @@ extends Node3D
 # where the places are, and how far round them the forest is kept back
 const SITES := {"stillwater": [-60.0, -748.0, 52.0], "old_meridian": [420.0, -768.0, 165.0], "glass_camp": [1150.0, -612.0, 32.0], "silo9": [1150.0, -792.0, 34.0],
 	"cinder_gap": [820.0, -40.0, 62.0], "ashborn": [1310.0, -330.0, 40.0], "lookout": [990.0, -232.0, 22.0],
-	"mercy_falls": [1120.0, 300.0, 64.0], "drivein": [690.0, 232.0, 38.0]}
+	"mercy_falls": [1120.0, 300.0, 64.0], "drivein": [690.0, 232.0, 38.0],
+	"lantern_row": [604.0, 120.0, 54.0], "starfall": [676.0, -418.0, 40.0], "havens_door": [0.0, 205.0, 18.0]}
+
+# build 17: ground levelled under a site before the terrain is built (x, z, inner radius flat, outer radius blended)
+const FLAT := [[684.0, -424.0, 17.0, 32.0], [652.0, -397.0, 6.0, 12.0], [604.0, 120.0, 30.0, 46.0]]
+
+static func level_ground() -> void:
+	if Game.area != "world":
+		return
+	for f in FLAT:
+		var cx: float = f[0]
+		var cz: float = f[1]
+		var r0: float = f[2]
+		var r1: float = f[3]
+		var h0 := Game.height(cx, cz)
+		for z in range(int(cz - r1), int(cz + r1) + 1):
+			for x in range(int(cx - r1), int(cx + r1) + 1):
+				var dd := Vector2(x - cx, z - cz).length()
+				if dd > r1:
+					continue
+				var ix := x - int(Game.x0)
+				var iz := z - int(Game.z0)
+				if ix < 0 or iz < 0 or ix >= Game.hw or iz >= Game.hd:
+					continue
+				var w := 1.0 if dd <= r0 else smoothstep(r1, r0, dd)
+				var a := iz * Game.hw + ix
+				Game.hm[a] = lerpf(Game.hm[a], h0, w)
 
 static var _list: Array = []
 static var _mats: Dictionary = {}
@@ -124,6 +150,66 @@ static func layout() -> Array:
 	L.append(R("chest", 674.0, 220.0, 0, {"id": "di_safe", "tier": "uncommon"}))
 	L.append(R("campfire", 701.0, 226.0, 0, {"s": 0.7}))
 	_north(L)
+	# ---------------------------------------------------------------- build 17
+	# Lantern Row: a trading street east of Saltreach on the Kettle road, lamps on every post. The Lantern is its bar;
+	# behind the bar, the back room nobody admits is there: the Quiet Hands, the valley's thieves' guild
+	L.append(R("shack", 578, 107, 0, {"w": 6, "d": 5, "role": "home", "m": "plank", "roof": "tin"}))
+	L.append(R("shack", 589, 106, 0, {"w": 8, "d": 6, "role": "shop", "m": "tin_teal", "roof": "tin", "sign": "ROW SUPPLY"}))
+	L.append(R("hall", 604, 104, 0, {"w": 12, "d": 9, "role": "bar", "m": "plank", "roof": "tin_red", "sign": "THE LANTERN"}))
+	L.append(R("shack", 620, 107, 0, {"w": 7, "d": 6, "role": "shop", "m": "tin", "roof": "tin", "sign": "LOU'S PAWN"}))
+	L.append(R("cabin", 604, 89, 2, {"w": 6, "d": 5}))
+	L.append(R("shack", 580, 134, 2, {"w": 6, "d": 5, "role": "home", "m": "tin_red", "roof": "tin"}))
+	L.append(R("shack", 593, 135, 2, {"w": 8, "d": 6, "role": "office", "m": "plank", "roof": "tin", "sign": "ROW HALL"}))
+	L.append(R("stall", 606, 132, 2, {"goods": "food"}))
+	L.append(R("stall", 612, 132, 2, {"goods": "scrap"}))
+	L.append(R("shack", 623, 134, 2, {"w": 6, "d": 5, "role": "home", "m": "plank", "roof": "tin"}))
+	L.append(R("shack", 634, 133, 2, {"w": 7, "d": 6, "role": "workshop", "m": "tin", "roof": "tin_red", "sign": "TINKER"}))
+	L.append(R("water_tower", 640, 116, 0))
+	L.append(R("tower", 566, 112, 0))
+	L.append(R("tower", 566, 128, 0))
+	L.append(R("fence", 566, 104.5, 1, {"len": 12.0}))
+	L.append(R("fence", 566, 135.5, 1, {"len": 12.0}))
+	L.append(R("sign", 559, 117, 1, {"text": "LANTERN ROW\nLIGHTS ON\nHANDS IN POCKETS"}))
+	L.append(R("campfire", 600.0, 120.5, 0, {"s": 0.9}))
+	L.append(R("seat", 598.0, 122.5, 1, {"id": "Rockingchair_01"}))
+	L.append(R("seat", 602.4, 122.4, 3, {"id": "SchoolChair_01"}))
+	L.append(R("seat", 590.0, 110.2, 0, {"id": "ArmChair_01"}))
+	L.append(R("bench", 615.0, 125.0, 2))
+	L.append(R("bench", 585.0, 125.0, 2))
+	for i in 6:
+		L.append(R("post", 572 + i * 12.0, 116.5, 0))
+	L.append(R("kit", 646, 126, 0, {"id": "k:q_Vehicle_Pickup", "len": 5.0, "yaw": 1.1, "burnt": true}))
+	L.append(R("kit", 642, 104, 0, {"id": "k:q_Barrel", "len": 0.9}))
+	L.append(R("chest", 588.8, 103.8, 0, {"id": "lr_store", "tier": "uncommon", "owned": true}))
+	L.append(R("chest", 620.5, 104.6, 0, {"id": "lr_pawn", "tier": "rare", "owned": true}))
+	L.append(R("chest", 606.0, 87.4, 0, {"id": "qh_vault", "tier": "rare", "owned": true}))
+	L.append(R("sign", 540, 118, 1, {"text": "LANTERN ROW  50 M\nSALTREACH  250 M  WEST"}))
+	# Starfall: what came down over the eastern ridge, a saucer ploughed into the scrub with a long scar behind it, and
+	# Orrin Pike's camp on the rise where he watched it fall
+	L.append(R("crater", 684, -424, 0, {"rad": 12.5}))
+	L.append(R("ufo", 684, -424, 0))
+	L.append(R("tent", 650, -398, 0))
+	L.append(R("campfire", 654.0, -394.0, 0, {"s": 0.6}))
+	L.append(R("seat", 656.0, -392.0, 1, {"id": "Rockingchair_01"}))
+	L.append(R("post", 648, -394, 0))
+	L.append(R("kit", 645, -400, 0, {"id": "k:g_trunk", "len": 2.0, "yaw": 0.4}))
+	L.append(R("chest", 651.0, -401.0, 0, {"id": "orrin_box", "tier": "uncommon", "owned": true}))
+	L.append(R("sign", 640, -380, 2, {"text": "PRIVATE OBSERVATORY\nKEEP OUT\n(UNLESS YOU SAW IT TOO)"}))
+	# Haven's Door: the camp the vault folk pitched outside their own front door while they wait on the regulator
+	for t in [[-8.0, 206.0], [8.0, 206.0], [-4.0, 197.0], [6.0, 196.0]]:
+		L.append(R("tent", t[0], t[1], 0))
+	L.append(R("campfire", 0.0, 203.0, 0, {"s": 0.8}))
+	L.append(R("log_seat", -2.6, 203.6, 0, {"yaw": 1.3}))
+	L.append(R("log_seat", 2.6, 202.4, 0, {"yaw": -1.7}))
+	L.append(R("kit", -11, 199, 0, {"id": "k:q_Barrel", "len": 0.9}))
+	L.append(R("kit", 11, 199, 0, {"id": "k:g_debris-wood", "len": 1.8}))
+	L.append(R("chest", -10.0, 210.0, 0, {"id": "hd_supplies", "tier": "common", "owned": true}))
+	L.append(R("sign", 0, 216, 0, {"text": "HAVEN 12\nCAMP OF THE DOOR\nWATER BY RATION"}))
+	# the main quest's pieces out in the world: the instrument shop's rig cart at Kestrel, the old furnace at the
+	# Cinder Quarry, the salt factor's strongbox under Saltreach's weigh-scales
+	L.append(R("rig_cart", 292, -322, 0))
+	L.append(R("furnace", 158, 362, 0))
+	L.append(R("strongbox", 329, 58, 0))
 	# build 17: the Meridian reactor opens through its north wall into a containment hall (Reactor does the rest)
 	L.append(R("reactor_hall", 15, -221, 0, {"y": 5.218, "w": 16.0, "d": 14.0}))
 	L.append(R("reactor_dress", 15, -207, 0, {"y": 5.218}))
@@ -603,6 +689,26 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 		"silo": _silo(kit)
 		"shards": _shards(kit, d)
 		"reactor_hall": _reactor_hall(kit)
+		"ufo": _ufo(kit)
+		"rig_cart":
+			kit.box("metal", Vector3(0, 0.45, 0), Vector3(1.4, 0.08, 0.8), 1)
+			for w in [Vector3(-0.55, 0.2, 0.42), Vector3(0.55, 0.2, 0.42), Vector3(-0.55, 0.2, -0.42), Vector3(0.55, 0.2, -0.42)]:
+				kit.cyl("dark", w, 0.18, 0.18, 0.06, 10, 0, Basis(Vector3.RIGHT, PI * 0.5))
+			kit.box("tin_teal", Vector3(0, 0.82, 0), Vector3(1.0, 0.66, 0.6), 0)
+			for i in 3:
+				kit.cyl("paint", Vector3(-0.3 + i * 0.3, 0.95, 0.31), 0.1, 0.1, 0.02, 12, 0, Basis(Vector3.RIGHT, PI * 0.5))
+			kit.box("ochre", Vector3(0, 1.17, 0), Vector3(0.5, 0.05, 0.12), 0)
+		"furnace":
+			kit.cyl("concrete_dk", Vector3.ZERO, 1.6, 1.3, 2.6, 14, 1)
+			kit.cyl("concrete", Vector3(0, 2.6, 0), 0.5, 0.45, 3.4, 10, 0)
+			kit.box("dark", Vector3(0, 0.7, 1.32), Vector3(0.9, 0.8, 0.2), 0)
+			kit.box("metal", Vector3(1.9, 0.5, 0), Vector3(0.9, 1.0, 0.9), 1)
+			kit.box("burnt", Vector3(0, 0.03, 2.0), Vector3(2.6, 0.04, 1.6), 0)
+		"strongbox":
+			kit.box("metal", Vector3(0, 0.35, 0), Vector3(0.8, 0.7, 0.6), 1)
+			kit.cyl("paint", Vector3(0, 0.42, 0.31), 0.1, 0.1, 0.03, 12, 0, Basis(Vector3.RIGHT, PI * 0.5))
+			kit.box("dark", Vector3(0.22, 0.42, 0.31), Vector3(0.05, 0.16, 0.03), 0)
+		"crater": _crater(kit, d)
 		"reactor_dress": _reactor_dress(kit)
 		"post":
 			kit.cyl("metal", Vector3.ZERO, 0.05, 0.05, 1.2, 6, 0)
@@ -1119,6 +1225,44 @@ static func _rubble(kit: Kit, d: Dictionary) -> void:
 	for i in 8:
 		kit.pole("metal", Vector3(rng.randf_range(-w * 0.4, w * 0.4), 0.4, rng.randf_range(-dd * 0.4, dd * 0.4)), Vector3(rng.randf_range(-w * 0.4, w * 0.4), rng.randf_range(1.5, 3.5), rng.randf_range(-dd * 0.4, dd * 0.4)), 0.025)
 
+# ---------------------------------------------------------------- Starfall (build 17)
+# A saucer some 17 m across, come down at a shallow angle from the east and dug in on its leading edge: the upper
+# hull cracked open over the cockpit dome, the rim lights mostly dead, two still pulsing green
+static func _ufo(kit: Kit) -> void:
+	var tilt := Basis(Vector3.FORWARD, 0.22) * Basis(Vector3.RIGHT, -0.08)
+	var c := Vector3(0, 0.6, 0)
+	var R := 8.6
+	# lower and upper hull: two shallow cones rim to rim
+	kit.cyl("alien", c, R * 0.35, R, 1.1, 32, 2, tilt)
+	kit.cyl("alien", c + tilt * Vector3(0, 1.1, 0), R, R * 0.42, 1.3, 32, 0, tilt)
+	kit.cyl("dark", c + tilt * Vector3(0, 1.02, 0), R + 0.12, R + 0.12, 0.16, 32, 0, tilt)
+	# the cockpit dome, cracked: glass, with a dark wedge out of it
+	kit.cyl("glow", c + tilt * Vector3(0, 2.4, 0), R * 0.4, R * 0.22, 1.5, 20, 0, tilt)
+	kit.cyl("dark", c + tilt * Vector3(1.2, 2.5, 0.6), 0.9, 0.2, 1.0, 6, 0, tilt * Basis(Vector3.UP, 0.8))
+	# rim lights: most dead, three still on
+	for i in 16:
+		var a := i * TAU / 16.0
+		var p := c + tilt * Vector3(cos(a) * (R + 0.05), 1.04, sin(a) * (R + 0.05))
+		kit.box("glow" if i in [2, 3, 11] else "dark", p, Vector3(0.5, 0.18, 0.5), 0, tilt * Basis(Vector3.UP, -a))
+	# a torn panel standing off the hull, and the breach where you can get in (Starfall's point is there)
+	kit.box("alien", c + Vector3(-4.0, 2.4, 3.6), Vector3(3.0, 0.1, 1.8), 0, Basis(Vector3.FORWARD, 0.9) * Basis(Vector3.UP, 0.5))
+	kit.box("dark", c + tilt * Vector3(5.2, 0.9, -3.0), Vector3(2.2, 1.0, 1.4), 0, tilt * Basis(Vector3.UP, 0.6))
+	# debris along the way it came in
+	for i in 9:
+		var x := 10.0 + i * 3.2
+		var z := sin(i * 1.7) * 2.2
+		kit.box("alien" if i % 2 == 0 else "dark", Vector3(x, 0.15, z), Vector3(0.6 + (i % 3) * 0.4, 0.2 + (i % 2) * 0.2, 0.5 + (i % 4) * 0.3), 0, Basis(Vector3.UP, i * 0.9) * Basis(Vector3.RIGHT, 0.3))
+
+# the scorched scar: a dark disc round the impact and a long furrow out to the east
+static func _crater(kit: Kit, d: Dictionary) -> void:
+	var r := float(d.get("rad", 14.0))
+	kit.cyl("dark", Vector3(0, 0.03, 0), r, r, 0.04, 28, 0)
+	kit.cyl("burnt", Vector3(0, 0.05, 0), r * 0.75, r * 0.75, 0.04, 28, 0)
+	for i in 10:
+		kit.box("dark", Vector3(r * 0.7 + i * 3.4, 0.04, sin(i * 1.3) * 0.6), Vector3(3.6, 0.05, 2.4 - i * 0.12), 0)
+		kit.box("concrete_dk", Vector3(r * 0.7 + i * 3.4, 0.22, 1.5 + sin(i * 1.3) * 0.6), Vector3(3.2, 0.35, 0.7), 0)
+		kit.box("concrete_dk", Vector3(r * 0.7 + i * 3.4, 0.22, -1.5 + sin(i * 1.3) * 0.6), Vector3(3.2, 0.35, 0.7), 0)
+
 # ---------------------------------------------------------------- the Meridian reactor (build 17)
 # The containment hall behind the old reactor room, 16 x 14 m and 7 m high: the pressure vessel under its dome, the
 # coolant loop running round the walls to three tanks, the control desks, hazard paint, and the cell where the plant
@@ -1362,8 +1506,15 @@ static func _mat(k: String) -> Material:
 	else:
 		var st := StandardMaterial3D.new()
 		var cols := {"metal": Color(0.28, 0.28, 0.3), "bone": Color(0.84, 0.8, 0.7), "red": Color(0.5, 0.11, 0.08), "ochre": Color(0.72, 0.48, 0.16),
-			"dark": Color(0.06, 0.05, 0.05), "glass": Color(0.12, 0.15, 0.16)}
+			"dark": Color(0.06, 0.05, 0.05), "glass": Color(0.12, 0.15, 0.16), "alien": Color(0.6, 0.64, 0.68)}
 		st.albedo_color = cols.get(k, Color(0.5, 0.5, 0.5))
+		if k == "alien":
+			st.albedo_color = Color(0.72, 0.75, 0.78)
+			st.metallic = 0.45
+			st.roughness = 0.3
+			m = st
+			_mats[k] = m
+			return m
 		st.roughness = 0.2 if k == "glass" else (0.5 if k == "metal" else 0.85)
 		st.metallic = 0.6 if k == "metal" else (0.3 if k == "glass" else 0.0)
 		if k == "glass":

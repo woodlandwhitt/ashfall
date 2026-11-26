@@ -60,6 +60,7 @@ func _ready() -> void:
 	add_child(town)
 	_environment()
 	Reactor.level_ground()
+	Frontier.level_ground()
 	_terrain()
 	if vault_dress:
 		chunks.on_built = vault_dress.brighten
@@ -1025,6 +1026,8 @@ func _test_hooks() -> void:
 		await _khole_test()
 	if args.has("northtest"):
 		await _north_test()
+	if args.has("b17test"):
+		await _b17_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -2005,6 +2008,156 @@ func _north_test() -> void:
 	out.append("epilogue lines that would show: %d" % ep.size())
 	for l in out:
 		print("NORTHTEST ", l)
+	get_tree().quit()
+
+# build 17: Lantern Row and the Quiet Hands, Starfall and the Visitor, and the main quest's third act
+func _b17_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	Game.dev["checks"] = true
+	Game.caps = 3000
+	Game.flags["radio_row"] = 1
+	Game.flags["radio_starfall"] = 1
+	await _wait(10)
+	await _tp(600, 118)
+	out.append("lantern row people " + _live(["magpie", "dace", "hesper", "bo", "lr_clerk", "lr_guard", "lr_folk1", "lr_folk2"]))
+	out.append(_dlg2("magpie", ["I want work", "Easy"]))
+	var clerk = npcs.filter(func(n): return n.id == "lr_clerk")
+	out.append("clerk's pockets hold the watch: %s" % str(not clerk.is_empty() and pockets.items_of(clerk[0]).any(func(e): return String(e[0]) == "coyne_watch")))
+	Game.give("coyne_watch", 1)
+	out.append(_dlg2("magpie", ["Ezra's watch", "Glad"]))
+	out.append(_dlg2("magpie", ["Anything else", "I'll get it"]))
+	await _tp(329, 60)
+	var sb = _obj_point("sr_strongbox")
+	out.append("strongbox point %s label %s" % [str(sb != null), str(objects.point_label(sb)) if sb else "-"])
+	Game.give("renn_slip", 1)
+	if sb:
+		objects.point_use(sb)
+	out.append("ledger %d, collectors_safe stage %d" % [Game.count("salt_ledger"), Game.stage("collectors_safe")])
+	await _tp(600, 95)
+	out.append(_dlg2("magpie", ["About the salt ledger", "I burned it", "Thank you"]))
+	out.append(_dlg2("magpie", ["It's dealt with", "One of the Hands"]))
+	out.append("qh_member %s, collectors_safe done %s" % [str(Game.flags.get("qh_member")), str(Game.is_done("collectors_safe"))])
+	out.append(_dlg2("magpie", ["What happened with Silas", "I'll get it back"]))
+	await _tp(320, 300)
+	out.append("pilgrim's rest: " + _live(["silas"]))
+	out.append(_dlg2("silas", ["She wants the Book", "Kess got his", "Go somewhere"]))
+	out.append("book %d, silas_gone %s" % [Game.count("qh_book"), str(Game.flags.get("silas_gone"))])
+	await _tp(600, 95)
+	out.append(_dlg2("magpie", ["The Book of Hands", "Thank you"]))
+	out.append("quiet hands done: %s %s %s; rep %d" % [str(Game.is_done("light_fingers")), str(Game.is_done("collectors_safe")), str(Game.is_done("old_debts")), Game.rep_of("quiet_hands")])
+	# Starfall
+	await _tp(652, -400)
+	out.append("orrin's camp: " + _live(["orrin"]))
+	out.append(_dlg2("orrin", ["What happened last month", "I'll go"]))
+	await _tp(678, -415)
+	for id in ["ufo_breach", "ufo_pod", "ufo_cockpit"]:
+		var pt = _obj_point(id)
+		out.append("%s point %s label %s" % [id, str(pt != null), str(objects.point_label(pt)) if pt else "-"])
+		if pt:
+			objects.point_use(pt)
+	out.append("lights stage %d" % Game.stage("lights_over_ridge"))
+	await _tp(652, -400)
+	out.append(_dlg2("orrin", ["About the wreck", "I'll look"]))
+	await _tp(702, -438)
+	var tr = _obj_point("ufo_trail")
+	if tr:
+		objects.point_use(tr)
+	await _wait(5)
+	await _tp(718, -455)
+	out.append("visitor: " + _live(["visitor"]))
+	Game.give("stimpak", 2)
+	Game.give("radaway", 1)
+	out.append(_dlg2("visitor", ["Kneel slowly", "Leave it"]))
+	out.append(_dlg2("visitor", ["Splint the leg", "Nod"]))
+	await _tp(652, -400)
+	out.append(_dlg2("orrin", ["About the Visitor", "I will"]))
+	await _tp(682, -420)
+	var ck = _obj_point("ufo_cockpit")
+	out.append("cockpit label now %s" % (str(objects.point_label(ck)) if ck else "-"))
+	if ck:
+		objects.point_use(ck)
+	await _wait(5)
+	out.append("sentinel up %s" % str(enemies.any(func(e): return String(e.eid) == "sentinel")))
+	Game.killed["sentinel"] = 1
+	Game.check_quests()
+	await _tp(718, -455)
+	out.append(_dlg2("visitor", ["Give it the power cell", "Take the beacon"]))
+	await _tp(-166, -354)
+	var mast = _obj_point("kdst_mast")
+	if mast:
+		objects.point_use(mast)
+	out.append("beacon_set %s, signal_home stage %d" % [str(Game.flags.get("beacon_set")), Game.stage("signal_home")])
+	await _tp(718, -455)
+	out.append(_dlg2("visitor", ["Take its hand", "Watch the sky"]))
+	out.append("starfall done: %s %s %s; blaster %d" % [str(Game.is_done("lights_over_ridge")), str(Game.is_done("not_alone")), str(Game.is_done("signal_home")), Game.count("stellar_blaster")])
+	# act three
+	Game.flags["ending"] = "home"
+	Game.check_quests()
+	out.append("door call on the radio: %s" % str(Game.flags.get("radio")))
+	Game.flags.erase("radio")
+	await _wait(5)
+	await _tp(0, 212)
+	out.append("haven's door: %s; cracked_housing known %s" % [_live(["ruth", "calder", "hd_folk1", "hd_folk2"]), str(Game.known("cracked_housing"))])
+	out.append(_dlg2("ruth", ["What happened", "Show me"]))
+	await _tp(-3, 217)
+	out.append(_dlg2("hd_panel", ["Step back"]))
+	out.append(_dlg2("ruth", ["What's the plan", "I'll get them"]))
+	out.append("act three open: rig %s gaskets %s cast %s doubt %s" % [str(Game.known("calibration_rig")), str(Game.known("seals_and_gaskets")), str(Game.known("housing_cast")), str(Game.known("havens_doubt"))])
+	await _tp(292, -320)
+	var rg = _obj_point("kf_rig")
+	if rg:
+		objects.point_use(rg)
+	Game.give("fusion_cell", 1)
+	await _tp(604, 125)
+	out.append(_dlg2("bo", ["Can you make gaskets", "I'll get them"]))
+	Game.give("duct_tape", 2)
+	Game.give("fuel_can", 1)
+	out.append(_dlg2("bo", ["Here: two duct tape", "Tomorrow"]))
+	Game.day += 1
+	out.append(_dlg2("bo", ["Are the gaskets ready", "Thank you, Bo"]))
+	Game.give("scrap_metal", 6)
+	Game.give("fuel_can", 1)
+	await _tp(158, 366)
+	var fu = _obj_point("quarry_furnace")
+	out.append("furnace point %s label %s" % [str(fu != null), str(objects.point_label(fu)) if fu else "-"])
+	if fu:
+		objects.point_use(fu)
+	await _tp(0, 212)
+	out.append(_dlg2("calder", ["You want people to leave", "I hear you"]))
+	await _tp(-10, 209)
+	var cc = _obj_point("hd_cache")
+	if cc:
+		objects.point_use(cc)
+	out.append(_dlg2("calder", ["Someone's been cutting", "Then let them choose", "Don't tell her"]))
+	out.append(_dlg2("ruth", ["Here's the calibration rig", "Ha"]))
+	out.append(_dlg2("ruth", ["The rig's working", "Good"]))
+	out.append(_dlg2("ruth", ["Bo's gaskets", "Two down"]))
+	out.append(_dlg2("ruth", ["A new housing", "Three down"]))
+	out.append(_dlg2("ruth", ["About Calder", "It's done"]))
+	out.append(_dlg2("ruth", ["Let's build it", "Let them come"]))
+	await _wait(10)
+	var kr := enemies.filter(func(e): return String(e.eid).begins_with("kr"))
+	out.append("raid: %d raiders (hostile %d)" % [kr.size(), kr.filter(func(e): return e.hostile).size()])
+	for i in 6:
+		Game.killed["kr%d" % i] = 1
+	Game.check_quests()
+	await _tp(-3, 217)
+	out.append(_dlg2("hd_panel", ["Seat the new regulator", "Step back"]))
+	Game.check_quests()
+	out.append("haven on the radio: %s" % str(Game.flags.get("radio")))
+	Game.flags.erase("radio")
+	await _wait(5)
+	out.append(_dlg2("ruth", ["It's running", "Thank you, Ruth"]))
+	var main_q := ["exodus", "daylight", "bad_water", "signal", "keys", "council", "meridian", "cracked_housing", "calibration_rig", "seals_and_gaskets", "housing_cast", "havens_doubt", "last_nine_days"]
+	var stages := 0
+	for q in main_q:
+		stages += (Game.qdef(q).get("stages", []) as Array).size()
+	out.append("act three done: %s; main quest now %d quests, %d stages" % [str(["cracked_housing", "calibration_rig", "seals_and_gaskets", "housing_cast", "havens_doubt", "last_nine_days"].map(func(q): return Game.is_done(q))), main_q.size(), stages])
+	out.append("radio news lines now: %d" % radio_news().size())
+	for l in out:
+		print("B17TEST ", l)
 	get_tree().quit()
 
 func _trees_at(x: float, z: float) -> int:
@@ -3405,6 +3558,41 @@ var radio_on := false
 var radio_t := 6.0
 var radio_loop: AudioStreamPlayer
 
+# Meridian Free Radio's news desk: a line for each thing in the valley you've had a hand in, newest first
+const NEWS := [
+	["q:still_waters", "News from the north: Stillwater says the perch are back at the inlet. Somebody went down into the Glass Bowl and came back up. Drink up, valley."],
+	["q:the_spire", "Word from Old Meridian: Tobiah Fenn is out of the Spire and back at the Garage. The Duchess is reported to be furious, or possibly fine. Hard to tell with her."],
+	["q:children_of_glass", "The pilgrims on the Glass Bowl's rim have had a visitor. Whatever was said, the lanterns aren't lit the way they were."],
+	["q:meridian", "The Meridian core's been decided. Depending who you ask, that's the best or the worst news this valley's had in seventy years. I'm asking everybody."],
+	["q:council", "Five hands, one lever, and somebody finally pulled it. Sheriff Voss is still talking to everyone, which is more than most sheriffs do."],
+	["q:bad_water", "Doc Halloran says he's traced the green in Dustwell's wells. If you've been drinking it, stop. If you haven't, smug is not a good look."],
+	["q:signal", "That cold-start command through the relay? Somebody's following the trail. Our sources at the Burned Chapel are being very quiet about it."],
+	["q:dead_air", "KDST is back on the air, folks. Lark's playing waltzes on the old transmitter. Tune across if you like your music with fewer guitars."],
+	["q:toll_road", "The Underpass toll is down. You can walk under the highway without paying a man in a crown for the privilege. Progress."],
+	["q:black_box", "The flight recorder from Hangar 2 is out of the airfield. Wick says the last thing on it is a pilot humming. Make of that what you like."],
+	["q:light_fingers", "Lantern Row reports a run of very polite pickpocketing. Lock your pockets, everyone. Yes, pockets can lock now. No, I don't know how."],
+	["q:collectors_safe", "Somebody cracked the counting house safe in Saltreach and left a lantern drawn on the door. That's the Quiet Hands' mark, if you believe in them."],
+	["q:old_debts", "Silas Crow, late of the Quiet Hands, is no longer a problem for anyone. The Row is quieter. The Hands are louder. Funny how that works."],
+	["q:lights_over_ridge", "Strange lights over the eastern ridge, and now a hole in the ground where they came down. Orrin Pike says it's visitors. Orrin Pike says a lot of things."],
+	["q:not_alone", "Rumour from the east: something in the crash scrub is walking on two legs and it isn't a man. Folks, if it waves, be polite."],
+	["q:signal_home", "A light went up from the KDST mast last night, straight up, and didn't come down. Lark swears she didn't do it. I believe her. Mostly."],
+	["q:cracked_housing", "Haven 12's got the regulator home, and the regulator's got a crack in it. The vault folk are camped at their own front door. Spare a thought."],
+	["q:calibration_rig", "Kestrel Airfield's old calibration rig has been hauled out of the tower. If you saw someone carrying a filing cabinet with dials on it across the flats, now you know."],
+	["q:seals_and_gaskets", "Stillwater is making gaskets for a vault. Fish glue, apparently. The future is strange and smells of the lake."],
+	["q:havens_doubt", "Inside Haven 12 there's been shouting. Some want out for good, some want the door shut forever. The Overseer is still the Overseer. Just."],
+	["q:last_nine_days", "Haven 12's water recycler is running. Four hundred people won't die of thirst this year. Somebody walked a very long way for that."],
+	["f:kess_raid", "Kess's Gantry boys hit the camp at Haven's door and came off worse. Sheriff Voss sends regards. Kess sends nothing, which is his way of saying ouch."],
+]
+
+func radio_news() -> Array:
+	var out: Array = []
+	for n in NEWS:
+		var key: String = n[0]
+		var ok := Game.is_done(key.substr(2)) if key.begins_with("q:") else bool(Game.flags.get(key.substr(2), false))
+		if ok:
+			out.push_front(String(n[1]))
+	return out
+
 func broadcast(k: String) -> void:
 	var r: Dictionary = Game.L.get("radio", {}).get(k, {})
 	if r.is_empty():
@@ -3535,6 +3723,11 @@ func _radio_next(talk: bool) -> void:
 					var paras: Array = Array(String(r.t).split("\n\n")).filter(func(x): return not String(x).strip_edges().begins_with(">"))
 					if not paras.is_empty():
 						lines.append(String(paras[-1]))
+		# the news (build 17): what you've done gets talked about, and the newest gets talked about most
+		if st.id == "mfr":
+			var news := radio_news()
+			if not news.is_empty() and randf() < 0.6:
+				lines = news.slice(0, 3)
 		var line: String = lines[randi() % lines.size()]
 		radio_state = "talk"
 		radio_t = 1.0

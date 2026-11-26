@@ -38,13 +38,18 @@ func items_of(n) -> Array:
 			var e: Array = TABLE[rng.randi() % TABLE.size()]
 			if Game.DB.items.has(String(e[0])):
 				out.append([String(e[0]), rng.randi_range(int(e[1]), int(e[2]))])
-		# a few people carry something particular (keys and notes the story hands out)
-		for x in Game.STORY.get("pockets", {}).get(id, []):
-			if not Game.has(String(x[0])) and not Game.flags.has("ppgot_" + String(x[0])):
-				out.append([String(x[0]), int(x[1])])
 		Game.opened["pp_" + id] = out
 		Game.flags["ppd_" + id] = period
-	return Game.opened["pp_" + id]
+	# a few people carry something particular (keys and notes the story hands out): checked every time, so a quest
+	# that starts mid-week finds it there
+	var have: Array = Game.opened["pp_" + id]
+	for x in Game.STORY.get("pockets", {}).get(id, []):
+		var it := String(x[0])
+		if Game.has(it) or Game.flags.has("ppgot_" + it):
+			continue
+		if not have.any(func(e): return String(e[0]) == it):
+			have.append([it, int(x[1])])
+	return have
 
 func open(n) -> void:
 	var items := items_of(n)
@@ -57,6 +62,10 @@ func chance(n, it: Array) -> float:
 	if Game.perks.has("light_step"):
 		k += 0.12
 	k += 0.12 if (Game.time < 0.25 or Game.time > 0.8) else 0.0
+	# the Quiet Hands teach their own (build 17)
+	if Game.flags.get("qh_member", false):
+		k += 0.15
+	# a story item someone's been told to keep safe sits deeper in the pocket
 	var w: float = 0.0 if String(it[0]) == "caps" else float(Game.item(String(it[0])).get("w", 0.5)) * int(it[1])
 	k -= w * 0.05
 	if String(it[0]) == "caps":
