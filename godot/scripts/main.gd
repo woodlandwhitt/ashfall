@@ -3847,8 +3847,8 @@ func fast_travel(k: String) -> void:
 			p = q
 			break
 	p.y = Game.height(p.x, p.z) + 0.3
-	if Loader.begin("Travelling to " + String(L.name)):
-		Loader.progress(0.5)
+	if LoadScreen.it().begin("Travelling to " + String(L.name)):
+		LoadScreen.it().progress(0.5)
 		await get_tree().process_frame
 		await get_tree().process_frame
 	player.global_position = p
@@ -3982,10 +3982,10 @@ func restart_keep() -> void:
 	get_tree().paused = false
 	Game.paused = false
 	# the loading screen goes up and gets drawn before the frame freezes on the rebuild
-	if not Loader.quiet():
-		if not Loader.shown:
-			Loader.begin("Loading")
-		Loader.building()
+	if not LoadScreen.quiet():
+		if not LoadScreen.it().shown:
+			LoadScreen.it().begin("Loading")
+		LoadScreen.it().building()
 		await get_tree().process_frame
 		await get_tree().process_frame
 	get_tree().reload_current_scene()

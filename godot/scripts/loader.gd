@@ -3,7 +3,21 @@
 # The first launch plays it as the intro (scripts/boot.gd loads the game behind it); every load after that, a save,
 # a trip through a door to another area, a fast travel, brings it up again until the ground near you has streamed in.
 # It stays out of the way of the test hooks (any command-line arguments): screenshots never see it.
+class_name LoadScreen
 extends CanvasLayer
+
+# not an autoload (an in-game patch can't add one to an installed build): made on first use and kept on the root,
+# so it outlives scene reloads
+static var _it: LoadScreen
+static func it() -> LoadScreen:
+	if _it == null or not is_instance_valid(_it):
+		_it = LoadScreen.new()
+		_it.name = "LoadScreen"
+		(Engine.get_main_loop() as SceneTree).root.add_child.call_deferred(_it)
+	return _it
+
+func _init() -> void:
+	_build()
 
 const TIPS := [
 	"Crouch behind someone to pick their pocket. Get caught three times and they stop asking nicely.",
@@ -44,7 +58,7 @@ var waiting := false       # for the game scene to be up and its nearby ground s
 var chunk_total := 0
 var on_skip: Callable
 
-func _ready() -> void:
+func _build() -> void:
 	layer = 120
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	root = Control.new()

@@ -863,7 +863,7 @@ func open_load(back: Callable) -> void:
 			close()
 			if Game.main and Game.main.hud:
 				Game.main.hud.pause_panel.visible = false
-			Loader.begin("Loading " + nm.to_lower())
+			LoadScreen.it().begin("Loading " + nm.to_lower())
 			Game.load_game(sl))
 	if not any:
 		_label(box, "No saved games yet.", 18, DIM).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -902,7 +902,7 @@ func open_title() -> void:
 		_button(box, "CONTINUE  (" + Game.save_info(last) + ")", func():
 			Game.booted = true
 			close()
-			Loader.begin("Picking up where you left off")
+			LoadScreen.it().begin("Picking up where you left off")
 			Game.load_game(last))
 	if last != "":
 		_button(box, "LOAD GAME", func(): open_load(open_title))

@@ -8,12 +8,12 @@ var skipped := false
 var switching := false
 
 func _ready() -> void:
-	if Loader.quiet():
+	if LoadScreen.quiet():
 		get_tree().change_scene_to_file.call_deferred(MAIN)
 		set_process(false)
 		return
 	ResourceLoader.load_threaded_request(MAIN)
-	Loader.play_intro(func(): skipped = true)
+	LoadScreen.it().play_intro(func(): skipped = true)
 
 func _process(d: float) -> void:
 	if switching:
@@ -22,12 +22,12 @@ func _process(d: float) -> void:
 	var arr := []
 	var st := ResourceLoader.load_threaded_get_status(MAIN, arr)
 	if not arr.is_empty():
-		Loader.progress(float(arr[0]) * 0.55, "Loading")
+		LoadScreen.it().progress(float(arr[0]) * 0.55, "Loading")
 	var intro_done := skipped or t > 5.0
 	if st == ResourceLoader.THREAD_LOAD_LOADED and intro_done and not switching:
 		switching = true
-		Loader.intro = false
-		Loader.building()
+		LoadScreen.it().intro = false
+		LoadScreen.it().building()
 		await get_tree().process_frame
 		await get_tree().process_frame
 		get_tree().change_scene_to_packed(ResourceLoader.load_threaded_get(MAIN))

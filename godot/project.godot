@@ -24,7 +24,6 @@ general/text_to_speech=true
 Patcher="*res://scripts/patcher.gd"
 Sfx="*res://scripts/sfx.gd"
 Game="*res://scripts/game.gd"
-Loader="*res://scripts/loader.gd"
 
 [display]
 
