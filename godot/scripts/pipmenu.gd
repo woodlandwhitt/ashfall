@@ -1164,7 +1164,7 @@ func _map_image() -> ImageTexture:
 	var dd := float(Game.hd - 1)
 	# one pixel every couple of metres, the map's own shape (it's wider than tall since the Ashwood opened up)
 	# drawn once at a size that stays sharp zoomed in, then kept on the device
-	var cache := "user://map17_%d_%d.png" % [Game.hw, Game.hd]
+	var cache := "user://map18_%d_%d.png" % [Game.hw, Game.hd]
 	if FileAccess.file_exists(cache):
 		var ci := Image.load_from_file(cache)
 		if ci:

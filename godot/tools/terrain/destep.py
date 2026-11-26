@@ -14,13 +14,15 @@ X0, X1, Z0, Z1 = -500, 1500, -1012, 500
 W, D = X1 - X0 + 1, Z1 - Z0 + 1
 h = np.fromfile("data/height.f32", dtype=np.float32).reshape(D, W)
 
+THR = float(next((a.split("=")[1] for a in sys.argv if a.startswith("--thr=")), "0.45"))
+FLT = THR * 0.15
 def steps(a):
-	"""cells at the foot of a riser: a jump of more than 0.45 m between two flat runs, along x or z"""
+	"""cells at the foot of a riser: a jump of more than THR (0.45 m) between two flat runs, along x or z"""
 	out = np.zeros(a.shape, bool)
 	for ax in (0, 1):
 		d = np.abs(np.diff(a, axis=ax))
-		big = d > 0.45
-		flat = d < 0.06
+		big = d > THR
+		flat = d < FLT
 		if ax == 0:
 			m = big[1:-1, :] & flat[:-2, :] & flat[2:, :]
 			out[2:-1, :] |= m
@@ -91,6 +93,9 @@ newh = newh * (1 - wn) + soft * wn
 # only where there were treads: everywhere else the ground stays exactly as it was
 zone = ndimage.gaussian_filter(ndimage.binary_dilation(before, iterations=14).astype(np.float32), 4.0)
 newh = h * (1 - zone) + newh * zone
+# a second, finer pass only rounds off small treads: it never moves the ground more than --clamp metres
+CL = float(next((a.split("=")[1] for a in sys.argv if a.startswith("--clamp=")), "99"))
+newh = h + np.clip(newh - h, -CL, CL)
 # the original square: its buildings and props sit on its ground, so wherever the ground here comes down, a cut grid
 # (region.cuts, read by chunks.cut_at) lets the props there come down with it; it's never raised by more than 60 cm (only in the pass cuts)
 R = json.load(open("data/region.json"))
@@ -112,7 +117,7 @@ w_old = ndimage.gaussian_filter(ndimage.binary_dilation(before, iterations=5).as
 newh = np.where(old, h * (1 - w_old) + soft_old * w_old, newh)
 newh = np.where(old, np.minimum(newh, h + 0.6), newh)
 low = np.where(old, np.maximum(0.0, h - newh), 0.0)
-R["cuts"] = [C for C in R.get("cuts", []) if not C.get("destep")]
+# (grids from an earlier pass stay: a new one carries their depth plus this pass's)
 lab, n = ndimage.label(ndimage.binary_dilation(low > 0.02, iterations=4))
 for k in range(1, n + 1):
 	zi, xi = np.where(lab == k)
