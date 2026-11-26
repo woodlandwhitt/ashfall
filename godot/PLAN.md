@@ -216,5 +216,34 @@ Keep every existing quest and line, then deepen them:
    and its blockhouse at the bottom). Seventeen new people, three quests (Still Waters, The Spire, Children of the
    Glass) that all meet at the silo's console, a sermon on the shortwave, nine epilogue lines, voiced; world points
    can open a conversation (`G.talk`). `--northtest` plays it through.
-15. **godot-17:** more interiors (the Spire's upper floors, the silo shaft), companions from the north, the
-   WebView build retired.
+15. **godot-17:** *Status: shipped as a patch (to build 15, and to build 13); a fresh install also gets the new
+   intro.* Fixes from play: Dustwell's floating roof slab settled (`data/settle.json`, `tools/settle/`); the brown
+   "dust balls" are soft specks now (`dust.gdshader`); steps climb without a jump; run 8.6 m/s, higher jump; no
+   talking to the downed; red prompts for crimes, no stealing through walls, more to steal indoors; **pickpocketing**
+   (`pockets.gd`: crouch behind someone; caught three times and they fight); **storage** in any container, corpse or
+   safe (PUT IN); the chem button forgets what you've run out of; corpses drop cleanly; gunmen only hold their aim
+   facing you. **Explosive drums** (`barrels.gd`): the WebView build's baked red drums (and their glowing yellow
+   plate) folded away and replaced by live ones that burn when shot, blow and chain, plus one beside most raider
+   camps. **Ammo types** (`ammo.gd`): the 10mm pistol takes 10mm; FMJ (+60% on machines, slugs for shotguns) and
+   explosive (bursts) for every calibre, crafted, looted and sold; tap the ammo count to switch. The build 13 guns
+   finally reach traders (their stock had been merged into a table nothing read). Terminal menus scroll; a lockout
+   says it clears tomorrow. **The Meridian reactor** opens into a 16 x 14 m containment hall (`reactor.gd`, Frontier
+   `reactor_hall`): the vessel, coolant loop, tanks, desks; the Glow Brute starts caged, the klaxon goes when you
+   walk in and the cell lifts four seconds later; big enemies' collision now fits their models. **Hangar 2** has
+   the crashed relief plane and a blinking flight recorder. **Interface:** an animated Ashfall intro and themed
+   loading screen (`loader.gd`, `boot.gd`, `boot_splash.png`) in place of Godot's splash; Load Game on the title and
+   pause menus; quest ACTIVE/HISTORY tabs; a trade card with stats, comparison and a quantity slider, the list keeping
+   its place; a corner radar and red hostile ticks on the compass; the map pans, pinch-zooms and travels on a double
+   tap; holster (HOLS). **AI:** enemies hunt where they last saw you and give up and go home; gangs break when their
+   own fall; townsfolk keep hours. Biscuit is a rigged, animated dog (glTF sample Fox, CC0/CC-BY). **The story**
+   (`story17.mjs`): **Lantern Row**, a new trading street, and the **Quiet Hands** thieves' guild (Light Fingers, The
+   Collector's Safe, Old Debts; members pick pockets easier and Dace pays better); **Starfall**, a crashed saucer, Orrin
+   Pike and the Visitor (Lights Over the Ridge, Not Alone, The Signal Home, the Visitor's Blaster); **the main
+   quest's third act** at the **Camp of the Door** outside Haven 12 (The Long Way Home, Dials and Needles, Fish Glue
+   and Tyre Rubber, Iron and Fire, Haven's Doubt, The Last Nine Days: 21 stages, so the main line runs 13 quests and
+   39 stages); radio news that follows what you've done; voiced. `--b17test` plays it through.
+16. **godot-18:** carried over from the build 17 list: the main quest longer still (a fourth act between Meridian
+   and the door: the Overseer's secret, the other vaults), more settlements and ruins on the empty stretches, real
+   road meshes and terrain variety (washes, rock shelves, erosion), better ground and building textures, more
+   GitHub character models for townspeople, interiors (the Spire's upper floors, the silo shaft), companions from
+   the north, a Forge tidy-up (brick and more materials), and the WebView build retired.
