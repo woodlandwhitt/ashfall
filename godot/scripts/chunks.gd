@@ -30,12 +30,18 @@ func setup(mat: Material, mask: Image, grass: Mesh) -> void:
 	grass_mesh = grass
 	nx = int(ceil((Game.hw - 1) / SIZE))
 	nz = int(ceil((Game.hd - 1) / SIZE))
+	# the world's chunk files are named on the grid of the map they were exported with; the map has since grown
+	# north (build 16), so their row numbers move by however many chunks it grew
+	var go: Array = Game.region.get("glb_origin", [Game.x0, Game.z0])
+	var di := roundi((float(go[0]) - Game.x0) / SIZE)
+	var dj := roundi((float(go[1]) - Game.z0) / SIZE)
 	var dir := DirAccess.open(Game.dir() + "world")
 	if dir:
 		for f in dir.get_files():
 			f = f.trim_suffix(".import").trim_suffix(".remap")
 			if f.ends_with(".glb") and f.begins_with("c_"):
-				files[f.trim_prefix("c_").trim_suffix(".glb")] = Game.dir() + "world/" + f
+				var ij := f.trim_prefix("c_").trim_suffix(".glb").split("_")
+				files[str(int(ij[0]) + di) + "_" + str(int(ij[1]) + dj)] = Game.dir() + "world/" + f
 	for j in nz:
 		for i in nx:
 			var k := str(i) + "_" + str(j)
@@ -226,7 +232,7 @@ func _build(k: String, ps: PackedScene) -> void:
 	if Game.area == "world":
 		Flora.plant(root, i, j, SIZE, mask_img)
 	add_child(root)
-	if ps and Game.area == "world" and Game.region.has("cut"):
+	if ps and Game.area == "world" and (Game.region.has("cut") or Game.region.has("cuts")):
 		_settle_cut(root)
 	loaded[k] = root
 	coarse[k].visible = false
@@ -237,7 +243,12 @@ func _build(k: String, ps: PackedScene) -> void:
 # build 15 cut a road through the old east wall: the rocks and scrub that stood on the ground taken away there come
 # down with it, and great slabs of the old cliff are hidden (region.cut: how far the ground dropped, 4 m grid, dm)
 static func cut_at(x: float, z: float) -> float:
-	var C: Dictionary = Game.region.get("cut", {})
+	var lo := _cut_one(Game.region.get("cut", {}), x, z)
+	for C in Game.region.get("cuts", []):
+		lo = maxf(lo, _cut_one(C, x, z))
+	return lo
+
+static func _cut_one(C: Dictionary, x: float, z: float) -> float:
 	if C.is_empty():
 		return 0.0
 	var st := float(C.step)
