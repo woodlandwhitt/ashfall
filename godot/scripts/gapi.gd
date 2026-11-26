@@ -169,6 +169,10 @@ func dismiss(id = "") -> void:
 func fight(id = "") -> void:
 	if Game.main:
 		Game.main.story_fight(_s(id))
+# open a conversation with something that isn't a person (a console, a terminal) from a world point
+func talk(id = "") -> void:
+	if Game.main:
+		Game.main.call_deferred("start_dialog", null, _s(id))
 func heal() -> void:
 	Game.hp = Game.hp_max
 	Game.stats_changed.emit()

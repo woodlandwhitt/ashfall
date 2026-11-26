@@ -10,7 +10,8 @@ WORKERS = int(sys.argv[4]) if len(sys.argv) > 4 else 2
 MODEL = os.path.join(os.path.dirname(os.path.abspath(LINES)), "en-us-libritts-high.onnx")
 FEM = {"sheriff", "cass", "ro", "finch", "kess", "overseer", "nan", "tamsin", "sable", "vex", "trader", "della", "gambler2", "ines",
 	"hale", "maren", "lark", "teacher", "grower", "rook", "dot", "settler_b", "settler_d", "settler_f", "goosebumps", "tuesday", "mother_hum", "pip",
-	"odile", "juno", "saba", "ira", "hester", "hester2", "cg_guard2", "ab_guard2", "ab_folk2", "cg_folk1"}
+	"odile", "juno", "saba", "ira", "hester", "hester2", "cg_guard2", "ab_guard2", "ab_folk2", "cg_folk1",
+	"nell", "mara", "sw_folk1", "velma", "duchess", "gc_folk1", "gc_folk3"}
 # special voices: [pool, which (0 = lowest/most extreme), pace, ffmpeg filter]
 SPECIAL = {
 	"radio": ["m", 6, 0.9, "highpass=f=320,lowpass=f=3300,acrusher=bits=10:mix=0.25,volume=1.4"],
@@ -67,7 +68,7 @@ def spoken(t):
 	return re.sub(r"\s+", " ", t).strip()
 
 # the same person under two ids (someone who moves house mid-story) keeps one voice
-ALIAS = {"hester2": "hester", "dex2": "dex"}
+ALIAS = {"hester2": "hester", "dex2": "dex", "tobiah2": "tobiah"}
 
 def profile(who):
 	who = ALIAS.get(who, who)

@@ -205,5 +205,16 @@ Keep every existing quest and line, then deepen them:
    four quests that cross each other (The Mercy Road, The Burning Man, Mercy's Ledger, Last Call), new factions,
    a fire-watch broadcast, twelve epilogue lines, voiced. The Pip map keeps the map's shape. `--ashtest` plays all of
    it through.
-14. **godot-16:** the north band (z -1000..-500) to make the map three times its old size: more settlements and
-   interiors, more complex quests and deeper dialogue. At that point the Godot build replaces the WebView build.
+14. **godot-16:** *Status: shipped as a patch (to build 15, and to build 13).* **The map is three times its old
+   size**: a northern band 2 km by 512 m (`tools/terrain/north.py`; z0 is -1012 so the old chunk files keep their
+   grid, re-numbered at load by `region.glb_origin`). Three roads climb into it: Northgate above KDST Radio, the
+   Airfield Cut above Kestrel Airfield, and a gap through the Ashwood's northern ridge. **Stillwater** on its
+   reservoir (a real lake you can wade, piers, skiffs, a windmill, co-op, smokehouse, harbourmaster, boathouse),
+   **Old Meridian** (a street grid of ruined towers painted with empty windows, fallen blocks and burnt cars, the
+   Highrisers' **Spire** with its lobby and cage, and the **Garage** market under a parking deck) and the **Glass
+   Bowl** (a bomb crater floored with glass and glowing pools, the **Children of the Glass** on its rim, **Silo 9**
+   and its blockhouse at the bottom). Seventeen new people, three quests (Still Waters, The Spire, Children of the
+   Glass) that all meet at the silo's console, a sermon on the shortwave, nine epilogue lines, voiced; world points
+   can open a conversation (`G.talk`). `--northtest` plays it through.
+15. **godot-17:** more interiors (the Spire's upper floors, the silo shaft), companions from the north, the
+   WebView build retired.

@@ -2,6 +2,7 @@
 //   mode 0  weathered boards, laid flat (walls)      mode 1  boards standing up (fences, doors)
 //   mode 2  corrugated sheet metal, rust creeping in  mode 3  canvas and hide
 //   mode 4  bark (palisade logs, posts)               mode 5  cast concrete, stained and cracked
+//   mode 6  a tower's concrete face with its rows of empty windows
 shader_type spatial;
 render_mode cull_back;
 
@@ -96,6 +97,25 @@ void fragment() {
 		float crack = smoothstep(0.02, 0.0, abs(vn(uv * 1.7) - 0.5)) * step(0.55, vn(uv * 0.3));
 		col *= 1.0 - crack * 0.6;
 		rough = 0.95;
+	}
+	if (mode == 6) {
+		float n = fbm(uv * 0.9);
+		col = base * (0.8 + n * 0.3);
+		float stain = smoothstep(0.5, 0.85, fbm(vec2(uv.x * 1.2, uv.y * 0.2) + 5.0));
+		col = mix(col, col * vec3(0.5, 0.46, 0.42), stain);
+		if (an.y < 0.6) {
+			vec2 cell = vec2(uv.x / 2.6, (uv.y - 0.9) / 3.4);
+			vec2 f = fract(cell);
+			vec2 id = floor(cell);
+			float win = step(0.22, f.x) * step(f.x, 0.78) * step(0.18, f.y) * step(f.y, 0.7);
+			float lost = hash(id + 3.0);
+			vec3 wc = mix(vec3(0.03, 0.03, 0.035), vec3(0.12, 0.13, 0.13), step(0.8, lost));
+			col = mix(col, wc, win);
+			// soot licking up above the burnt-out ones
+			col *= 1.0 - (1.0 - win) * step(0.85, hash(id + 9.0)) * smoothstep(0.7, 1.0, f.y) * 0.5;
+			nw = normalize(wn - vec3(0.0, 0.0, 0.0) * win);
+			rough = mix(0.95, 0.35, win * step(0.8, lost));
+		}
 	}
 	ALBEDO = col;
 	ROUGHNESS = rough;

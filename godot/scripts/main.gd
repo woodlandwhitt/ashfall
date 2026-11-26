@@ -997,6 +997,8 @@ func _test_hooks() -> void:
 		await _ai_test()
 	if args.has("khtest"):
 		await _khole_test()
+	if args.has("northtest"):
+		await _north_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -1870,6 +1872,73 @@ func _ash_test() -> void:
 	out.append("epilogue lines that would show: %d" % ep.size())
 	for l in out:
 		print("ASHTEST ", l)
+	get_tree().quit()
+
+# build 16: the north, its people and its three quests, with the silo deciding all of them
+func _north_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	Game.dev["checks"] = true
+	Game.caps = 2000
+	await _wait(10)
+	out.append("map %dx%d z %.0f..%.0f; chunk files %d; locs %d/10" % [Game.hw, Game.hd, Game.z0, Game.z0 + Game.hd - 1, chunks.files.size(),
+		["stillwater", "reservoir", "northgate", "old_meridian", "the_garage", "the_spire", "airfield_cut", "glass_bowl", "glass_camp", "silo9"].filter(func(k): return Game.DB.locs.has(k)).size()])
+	# the old world still lines up: a chunk file under the start, and the ground under the player
+	await _tp(-95, 108)
+	out.append("old world at the start: chunk %s has a file %s; standing %.2f m above ground" % [chunks.key_of(player.global_position), str(chunks.files.has(chunks.key_of(player.global_position))), player.global_position.y - Game.height(-95, 108)])
+	await _tp(-50, -748)
+	out.append("stillwater people " + _live(["nell", "gus", "mara", "sw_guard", "sw_folk1", "sw_folk2"]))
+	out.append("lake %s" % str(frontier.get_node_or_null("Lake") != null))
+	out.append(_dlg2("nell", ["You look like", "I'll go"]))
+	await _tp(-212, -850)
+	var inl = _obj_point("sw_inlet")
+	out.append("inlet point %s" % str(inl != null))
+	if inl:
+		objects.point_use(inl)
+	out.append("sample %d, still_waters stage %d" % [Game.count("slag_sample"), Game.stage("still_waters")])
+	await _tp(300, -700)
+	out.append("garage people " + _live(["velma", "gr_guard"]))
+	out.append(_dlg2("velma", ["Something wrong", "I'll get him"]))
+	await _tp(445, -812)
+	var hr := enemies.filter(func(e): return String(e.eid).begins_with("hr"))
+	out.append("spire: highrisers %d (hostile %d), people %s" % [hr.size(), hr.filter(func(e): return e.hostile).size(), _live(["duchess", "tobiah"])])
+	out.append(_dlg2("tobiah", ["Stillwater's water", "Where do I find"]))
+	out.append("still_waters stage %d" % Game.stage("still_waters"))
+	out.append(_dlg2("duchess", ["I'm here for Tobiah", "worth more to you grateful", "Pleasure"]))
+	await _wait(5)
+	out.append("tobiahFree %s codes %s; tobiah gone from spire %s" % [str(Game.flags.get("tobiahFree")), str(Game.flags.get("tobiahCodes")), str(not _live(["tobiah"]).begins_with("1"))])
+	await _tp(300, -700)
+	out.append(_dlg2("velma", ["Tobiah's out", "Glad"]))
+	await _tp(1170, -604)
+	out.append("glass camp people " + _live(["sel", "amon", "gc_folk1", "gc_folk2", "gc_guard"]))
+	out.append(_dlg2("amon", ["I'm listening", "Give me the log"]))
+	out.append(_dlg2("sel", ["Tell me about the Sleeper", "I see", "Your people are dying", "Take them out of the Bowl", "I'll tell her"]))
+	await _wait(5)
+	out.append("gc_end %s; camp emptied %s" % [str(Game.flags.get("gc_end")), str(not _live(["sel", "gc_folk1"]).begins_with("1") and _live(["sel", "gc_folk1"]).begins_with("0"))])
+	out.append(_dlg2("amon", ["It's decided", "Goodbye"]))
+	await _tp(1150, -790)
+	var gb := enemies.filter(func(e): return String(e.eid).begins_with("gb") or String(e.eid) == "silobot")
+	out.append("glass bowl: %d hostiles incl. the Iron Angel %s; pools %d" % [gb.size(), str(gb.any(func(e): return String(e.eid) == "silobot")), Game.region.pools.size()])
+	await _tp(1146, -803)
+	var desk = _obj_point("silo_desk")
+	out.append("console point %s label %s" % [str(desk != null), str(objects.point_label(desk)) if desk else "-"])
+	if desk:
+		objects.point_use(desk)
+		await _wait(3)
+	out.append("console open %s at %s" % [str(in_dialog()), str(dialog_node)])
+	if in_dialog():
+		end_dialog()
+	out.append(_dlg2("silo_console", ["Seal the coolant", "Step away"]))
+	out.append("silo_end %s, still_waters stage %d" % [str(Game.flags.get("silo_end")), Game.stage("still_waters")])
+	await _tp(-45, -735)
+	out.append("stillwater again: " + _live(["tobiah2", "gc_folk3"]))
+	out.append(_dlg2("nell", ["It's done", "Your water"]))
+	out.append("done: still_waters %s, the_spire %s, children_of_glass %s; karma %d; rep stillwater %d children %d" % [str(Game.is_done("still_waters")), str(Game.is_done("the_spire")), str(Game.is_done("children_of_glass")), Game.karma, Game.rep_of("stillwater"), Game.rep_of("children")])
+	var ep: Array = Game.L.epilogue.filter(func(e): return e.has("if") and Game.vm.truthy(Game.vm.call_value(e["if"], [Game.G])))
+	out.append("epilogue lines that would show: %d" % ep.size())
+	for l in out:
+		print("NORTHTEST ", l)
 	get_tree().quit()
 
 func _trees_at(x: float, z: float) -> int:

@@ -79,10 +79,11 @@ north = flatten(420, -760, 190, 140, 9.0, 70, north)
 # the Glass Bowl: a crater with a raised rim and a fused floor
 CR = (1150.0, -790.0, 140.0)
 cd = np.sqrt((xx - CR[0]) ** 2 + (zz - CR[1]) ** 2) / CR[2]
-rim = np.exp(-((cd - 1.0) / 0.16) ** 2) * 12.0
-bowl = np.clip(1.0 - cd, 0, 1)
-north = north + rim - (bowl ** 0.5) * 20.0
-north = np.where(cd < 0.55, np.minimum(north, -8.0 + (fbm((D, W), 18, 2, 1604) - 0.5) * 0.8), north)
+rim = np.exp(-((cd - 1.0) / 0.18) ** 2) * 12.0
+north = north + rim - (1.0 - sstep(0.3, 1.02, cd)) * 22.0
+glassfloor = -8.0 + (fbm((D, W), 18, 2, 1604) - 0.5) * 0.8
+wfl = 1.0 - sstep(0.4, 0.62, cd)
+north = north * (1 - wfl) + np.minimum(north, glassfloor) * wfl
 north = flatten(1150, -790, 22, 22, -8.2, 12, north)                # Silo 9's pad
 # mountains round the outside
 edge = np.minimum.reduce([zz - Z0, xx - X0, X1 - xx])

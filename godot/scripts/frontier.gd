@@ -10,7 +10,8 @@ class_name Frontier
 extends Node3D
 
 # where the places are, and how far round them the forest is kept back
-const SITES := {"cinder_gap": [820.0, -40.0, 62.0], "ashborn": [1310.0, -330.0, 40.0], "lookout": [990.0, -232.0, 22.0],
+const SITES := {"stillwater": [-60.0, -748.0, 52.0], "old_meridian": [420.0, -768.0, 165.0], "glass_camp": [1150.0, -612.0, 32.0], "silo9": [1150.0, -792.0, 34.0],
+	"cinder_gap": [820.0, -40.0, 62.0], "ashborn": [1310.0, -330.0, 40.0], "lookout": [990.0, -232.0, 22.0],
 	"mercy_falls": [1120.0, 300.0, 64.0], "drivein": [690.0, 232.0, 38.0]}
 
 static var _list: Array = []
@@ -122,8 +123,93 @@ static func layout() -> Array:
 			L.append(R("post", 679.5 + c * 5.5, 236 - row * 9.0 + 2.6, 0))
 	L.append(R("chest", 674.0, 220.0, 0, {"id": "di_safe", "tier": "uncommon"}))
 	L.append(R("campfire", 701.0, 226.0, 0, {"s": 0.7}))
+	_north(L)
 	_list = L
 	return L
+
+# build 16: the north. Stillwater on its reservoir, the ruins of Old Meridian and the Highrisers' Spire, the Garage
+# market, the Children of the Glass on the crater rim, and Silo 9 at the bottom of the Glass Bowl
+static func _north(L: Array) -> void:
+	var wy := float(Game.region.get("lake", {}).get("y", 2.0))
+	# Stillwater: houses facing the water, the co-op, the smokehouse, the harbourmaster, the boathouse and its piers
+	L.append(R("hall", -48, -773, 0, {"w": 12, "d": 9, "role": "shop", "m": "plank", "roof": "tin_teal", "sign": "STILLWATER CO-OP"}))
+	L.append(R("shack", -80, -770, 3, {"w": 6, "d": 5, "role": "home", "m": "plank", "roof": "tin"}))
+	L.append(R("shack", -80, -754, 3, {"w": 6, "d": 5, "role": "home", "m": "tin_teal", "roof": "tin_red"}))
+	L.append(R("shack", -62, -727, 2, {"w": 7, "d": 6, "role": "smoke", "m": "plank", "roof": "tin", "sign": "SMOKEHOUSE"}))
+	L.append(R("shack", -40, -728, 2, {"w": 8, "d": 6, "role": "office", "m": "plank", "roof": "tin_red", "sign": "HARBOURMASTER"}))
+	L.append(R("shack", -24, -752, 1, {"w": 6, "d": 5, "role": "home", "m": "tin", "roof": "tin"}))
+	L.append(R("shack", -92, -738, 3, {"w": 8, "d": 7, "role": "boats", "m": "plank", "roof": "tin", "sign": "BOATS"}))
+	L.append(R("pier", -112, -748, 0, {"len": 26.0, "y": wy + 0.55}))
+	L.append(R("pier", -110, -726, 0, {"len": 20.0, "y": wy + 0.55}))
+	L.append(R("boat", -118, -744.5, 0, {"y": wy, "yaw": 0.15}))
+	L.append(R("boat", -114, -722.5, 0, {"y": wy, "yaw": -0.2}))
+	L.append(R("boat", -126, -751.5, 0, {"y": wy, "yaw": 0.4}))
+	L.append(R("windmill", -30, -778, 0))
+	L.append(R("rack", -70, -718, 0))
+	L.append(R("rack", -54, -716, 0))
+	L.append(R("campfire", -56.0, -756.0, 0, {"s": 0.8}))
+	L.append(R("log_seat", -56.0, -752.0, 0, {"yaw": 0.0}))
+	L.append(R("log_seat", -52.0, -757.5, 0, {"yaw": 1.4}))
+	L.append(R("seat", -76.2, -770.0, 3, {"id": "Rockingchair_01"}))
+	L.append(R("seat", -40.0, -731.4, 2, {"id": "ArmChair_01"}))
+	L.append(R("chest", -52.0, -776.4, 0, {"id": "sw_coop", "tier": "uncommon", "owned": true}))
+	L.append(R("chest", -95.5, -741.0, 0, {"id": "sw_boats", "tier": "common", "owned": true}))
+	L.append(R("bench", -89.0, -735.5, 3))
+	L.append(R("sign", -98, -668, 1, {"text": "STILLWATER\nCLEAN WATER  FAIR TRADE\nNO TROUBLE"}))
+	L.append(R("sign", -166, -560, 0, {"text": "NORTHGATE\nSTILLWATER  2 KM"}))
+	L.append(R("kit", -215, -856, 0, {"id": "k:q_Pipes", "len": 3.0, "yaw": 0.3}))
+	# Old Meridian: tower shells on every block, a few fallen; the Spire; the Garage market at the south-west gate
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1616
+	for bx in 6:
+		for bz in 4:
+			var cx := 295.0 + bx * 50.0
+			var cz := -702.5 - bz * 45.0
+			if bx == 0 and bz == 0:
+				continue                    # the Garage
+			if bx == 3 and bz == 2:
+				continue                    # the Spire
+			var roll := rng.randf()
+			if roll < 0.18:
+				L.append(R("rubble", cx, cz, 0, {"w": 30.0, "d": 26.0, "seed": bx * 7 + bz}))
+				continue
+			var w := snappedf(rng.randf_range(16, 30), 2.0)
+			var dd := snappedf(rng.randf_range(14, 24), 2.0)
+			L.append(R("highrise", cx + rng.randf_range(-3, 3), cz + rng.randf_range(-3, 3), rng.randi_range(0, 3), {"w": w, "d": dd,
+				"h": snappedf(rng.randf_range(10, 34), 3.4), "seed": bx * 11 + bz * 3, "broken": rng.randf() < 0.45}))
+			if rng.randf() < 0.6:
+				L.append(R("kit", cx + rng.randf_range(-20, 20), cz + 21.5 + rng.randf_range(-1, 1), 0, {"id": ["k:q_Vehicle_Sports", "k:q_Vehicle_Pickup", "k:q_Vehicle_Truck"][rng.randi() % 3], "len": 5.0, "yaw": PI * 0.5 + rng.randf_range(-0.4, 0.4), "burnt": true}))
+	L.append(R("highrise", 445, -792.5, 2, {"w": 24, "d": 20, "h": 44.2, "seed": 99, "broken": false, "lobby": true, "sign": "THE SPIRE"}))
+	L.append(R("cage", 438.5, -799.0, 0))
+	L.append(R("campfire", 452.0, -790.0, 0, {"s": 0.7}))
+	L.append(R("seat", 448.0, -796.6, 0, {"id": "ArmChair_01"}))
+	L.append(R("chest", 455.0, -800.0, 0, {"id": "om_spire", "tier": "rare", "owned": true}))
+	L.append(R("garage", 295, -702.5, 0, {"w": 30, "d": 26}))
+	L.append(R("stall", 288, -703, 0, {"goods": "scrap"}))
+	L.append(R("stall", 296, -703, 0, {"goods": "food"}))
+	L.append(R("campfire", 302.0, -696.0, 0, {"s": 0.6}))
+	L.append(R("chest", 284.0, -712.0, 0, {"id": "om_garage", "tier": "uncommon", "owned": true}))
+	L.append(R("bench", 305.0, -711.0, 0))
+	L.append(R("sign", 296, -652, 0, {"text": "OLD MERIDIAN\nCITY LIMIT\nPOP. 0"}))
+	L.append(R("sign", 300, -560, 0, {"text": "AIRFIELD CUT\nOLD MERIDIAN  2 KM"}))
+	# the Children of the Glass, camped on the Bowl's south rim
+	for i in 6:
+		var a := PI * 0.15 + i * PI * 0.14
+		L.append(R("tent", 1150 + cos(a + PI) * 15.0, -612 + sin(a) * 10.0 + 4.0, (i + 1) % 4))
+	L.append(R("shrine", 1150, -628, 0))
+	L.append(R("campfire", 1150.0, -612.0, 0, {"s": 1.0}))
+	for i in 4:
+		L.append(R("banner", 1150 + (i - 1.5) * 9.0, -600.0, 0))
+	L.append(R("chest", 1162.0, -606.0, 0, {"id": "gc_tithe", "tier": "uncommon", "owned": true}))
+	L.append(R("sign", 1222, -540, 1, {"text": "THE GLASS BOWL\nTURN BACK\nOR BE MADE CLEAN"}))
+	# Silo 9: the blockhouse, the silo's cap, glass growing out of the crater floor
+	L.append(R("blockhouse", 1146, -802, 0, {"w": 10, "d": 8}))
+	L.append(R("silo", 1164, -790, 0))
+	for i in 14:
+		var a := i * 2.4
+		var r := 30.0 + fmod(i * 13.7, 40.0)
+		L.append(R("shards", 1150 + cos(a) * r, -790 + sin(a) * r, 0, {"seed": i}))
+	L.append(R("sign", 1150, -668, 0, {"text": "SILO 9\nRESTRICTED AREA\nUSE OF DEADLY FORCE AUTHORIZED"}))
 
 # ---------------------------------------------------------------- setup: solids into the region, the world objects, then the meshes
 # (called by main before it builds colliders, so the walls are in the collision and the navigation from the start)
@@ -145,6 +231,8 @@ static func prepare() -> void:
 
 func setup(m) -> void:
 	main = m
+	if Game.region.has("lake"):
+		add_child(_lake(Game.region.lake))
 	for d in layout():
 		var n := build(d)
 		if n:
@@ -153,12 +241,44 @@ func setup(m) -> void:
 			n.rotation.y = int(d.r) * PI * 0.5
 			_after(n, d)
 
+# the reservoir: a flat sheet of water at its level, a little wider than the basin it fills (the shore hides the rest)
+func _lake(L: Dictionary) -> MeshInstance3D:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rx := float(L.rx) * 1.08
+	var rz := float(L.rz) * 1.08
+	var seg := 64
+	var rings := 6
+	for r in rings:
+		var f0 := float(r) / rings
+		var f1 := float(r + 1) / rings
+		for k in seg:
+			var a0 := k * TAU / seg
+			var a1 := (k + 1) * TAU / seg
+			var ps := [Vector3(cos(a0) * rx * f0, 0, sin(a0) * rz * f0), Vector3(cos(a1) * rx * f0, 0, sin(a1) * rz * f0),
+				Vector3(cos(a1) * rx * f1, 0, sin(a1) * rz * f1), Vector3(cos(a0) * rx * f1, 0, sin(a0) * rz * f1)]
+			var up := Vector3.UP
+			var w := Color.WHITE
+			Flora.tri(st, [ps[0], ps[1], ps[2]], [up, up, up], [w, w, w])
+			Flora.tri(st, [ps[0], ps[2], ps[3]], [up, up, up], [w, w, w])
+	var mi := MeshInstance3D.new()
+	mi.name = "Lake"
+	mi.mesh = st.commit()
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://scripts/lake.gdshader")
+	mat.set_shader_parameter("radii", Vector2(float(L.rx), float(L.rz)))
+	mat.set_shader_parameter("centre", Vector2(float(L.x), float(L.z)))
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = Vector3(float(L.x), float(L.y), float(L.z))
+	return mi
+
 # the floor under a spot, if it's inside one of the buildings (people and things placed indoors stand on it)
 static func floor_at(x: float, z: float) -> float:
 	if Game.area != "world":
 		return -INF
 	for d in layout():
-		if not String(d.k) in ["shack", "hall", "cabin", "hospital", "longhouse", "ruin", "outhouse"]:
+		if not String(d.k) in ["shack", "hall", "cabin", "hospital", "longhouse", "ruin", "outhouse", "highrise", "blockhouse", "garage"]:
 			continue
 		var w := float(d.get("w", 2.0)) * 0.5
 		var dd := float(d.get("d", 2.0)) * 0.5
@@ -167,7 +287,7 @@ static func floor_at(x: float, z: float) -> float:
 			w = dd
 			dd = t
 		if absf(x - float(d.x)) < w and absf(z - float(d.z)) < dd:
-			return _ground(d) + (0.12 if String(d.k) in ["hospital", "ruin"] else 0.16)
+			return _ground(d) + (0.12 if String(d.k) in ["hospital", "ruin", "highrise", "blockhouse", "garage"] else 0.16)
 	return -INF
 
 # the ground a building stands on: the highest point under its footprint, so no floor is ever buried
@@ -178,10 +298,12 @@ static func _ground(d: Dictionary) -> float:
 		var t := w
 		w = dd
 		dd = t
+	if d.has("y"):
+		return float(d.y)
 	var x := float(d.x)
 	var z := float(d.z)
 	match String(d.k):
-		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi":
+		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi", "banner", "shards", "rubble":
 			return Game.height(x, z)
 	var g := -INF
 	for p in [Vector2(-w, -dd), Vector2(w, -dd), Vector2(-w, dd), Vector2(w, dd), Vector2.ZERO]:
@@ -377,6 +499,26 @@ func _furnish(n: Node3D, d: Dictionary) -> void:
 			_put(n, "k:q_Wheels_Stack", Vector3(hw - 0.7, fl, hd - 0.9), 0.0)
 			_put(n, "k:q_Pipes", Vector3(hw - 0.6, fl, 0.6), 0.3)
 			_put(n, "caged_hanging_light", Vector3(0, float(d.get("h", 2.7)) - 0.05, 0), 0.0)
+		"smoke":
+			for i in 3:
+				_put(n, "k:s_barrel-open", Vector3(-hw + 0.6 + i * 1.1, fl, -hd + 0.5), 0.0)
+			_put(n, "WoodenTable_03", Vector3(hw - 0.8, fl, 0.0), PI * 0.5)
+			var kk := Kit.new()
+			for i in 5:
+				kk.box("hide", Vector3(-hw + 0.8 + i * 1.2, 2.0, -0.5), Vector3(0.25, 0.6, 0.05), 0)
+			kk.box("log", Vector3(0, 2.35, -0.5), Vector3(w - 0.6, 0.06, 0.06), 0)
+			var kn := Node3D.new()
+			n.add_child(kn)
+			kk.commit(kn)
+		"boats":
+			_put(n, "WoodenTable_03", Vector3(-hw + 0.8, fl, -hd + 0.6), 0.0)
+			_put(n, "k:q_Pipes", Vector3(hw - 0.7, fl, -hd + 0.7), 0.0)
+			var kb := Kit.new()
+			_boat(kb, {"yaw": 0.0}, Vector3(0.6, fl + 0.45, 0.6))
+			var bn := Node3D.new()
+			bn.rotation.y = PI * 0.5
+			n.add_child(bn)
+			kb.commit(bn)
 		"snack":
 			_counter(n, Vector3(0, fl, 0.6), w - 2.0)
 			_put(n, "Shelf_01", Vector3(0, fl, -hd + 0.2), 0.0)
@@ -428,6 +570,19 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 		"hospital": _hospital(kit, d)
 		"ruin": _ruin(kit, d)
 		"screen": _screen(kit)
+		"pier": _pier(kit, d)
+		"boat": _boat(kit, d)
+		"windmill": _windmill(kit)
+		"highrise": _highrise(kit, d)
+		"rubble": _rubble(kit, d)
+		"cage": _cage(kit)
+		"garage": _garage(kit, d)
+		"tent": _tent(kit)
+		"shrine": _shrine(kit)
+		"banner": _banner(kit)
+		"blockhouse": _blockhouse(kit, d)
+		"silo": _silo(kit)
+		"shards": _shards(kit, d)
 		"post":
 			kit.cyl("metal", Vector3.ZERO, 0.05, 0.05, 1.2, 6, 0)
 			kit.box("metal", Vector3(0, 1.25, 0), Vector3(0.3, 0.22, 0.14), 0)
@@ -835,6 +990,234 @@ static func _screen(kit: Kit) -> void:
 	kit.box("metal", Vector3(7.5, 12.8, 0.05), Vector3(4.0, 0.15, 0.24), 0, Basis(Vector3.FORWARD, 0.25))
 	kit.box("concrete_dk", Vector3(0, 0.8, -0.6), Vector3(20.0, 1.6, 1.0), 1)
 
+# ---------------------------------------------------------------- build 16's shapes
+static func _pier(kit: Kit, d: Dictionary) -> void:
+	# a board walk out over the water along local -x from the shore, on posts down into the lake bed
+	var l := float(d.get("len", 20.0))
+	kit.box("plank_dk", Vector3(l * 0.5 - l + 6.0, 0, 0), Vector3(l, 0.12, 2.2), 2)
+	var n := int(l / 2.5)
+	for i in n + 1:
+		var x := 6.0 - i * l / n
+		for zs in [-1.0, 1.0]:
+			kit.box("log", Vector3(x, -1.6, zs), Vector3(0.18, 3.2, 0.18), 0)
+	kit.box("log", Vector3(6.0 - l + 0.1, 0.45, -1.0), Vector3(0.12, 0.8, 0.12), 0)
+	kit.box("log", Vector3(6.0 - l + 0.1, 0.45, 1.0), Vector3(0.12, 0.8, 0.12), 0)
+
+static func _boat(kit: Kit, d: Dictionary, at := Vector3.ZERO) -> void:
+	# a flat-bottomed skiff: bottom, two flared sides, a transom and a pointed bow
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	kit.box("plank_dk", at + b * Vector3(0, -0.05, 0), Vector3(3.2, 0.06, 1.0), 0, b)
+	for sd in [-1.0, 1.0]:
+		var sb := b * Basis(Vector3.RIGHT, sd * 0.35)
+		kit.box("plank", at + b * Vector3(-0.2, 0.18, sd * 0.58), Vector3(2.8, 0.42, 0.05), 0, sb)
+		kit.box("plank", at + b * Vector3(1.45, 0.18, sd * 0.32), Vector3(0.75, 0.42, 0.05), 0, b * Basis(Vector3.UP, -sd * 0.55) * Basis(Vector3.RIGHT, sd * 0.35))
+	kit.box("plank", at + b * Vector3(-1.6, 0.18, 0), Vector3(0.05, 0.42, 1.25), 0, b)
+	kit.box("plank_dk", at + b * Vector3(0.1, 0.25, 0), Vector3(0.3, 0.05, 1.15), 0, b)
+	kit.box("log", at + b * Vector3(-0.3, 0.33, 0.3), Vector3(2.2, 0.05, 0.05), 0, b * Basis(Vector3.UP, 0.25))
+
+static func _windmill(kit: Kit) -> void:
+	for p in [Vector2(-1.4, -1.4), Vector2(1.4, -1.4), Vector2(-1.4, 1.4), Vector2(1.4, 1.4)]:
+		kit.pole("metal", Vector3(p.x, 0, p.y), Vector3(p.x * 0.18, 10.5, p.y * 0.18), 0.07)
+		kit.box("metal", Vector3(p.x, 0.15, p.y), Vector3(0.3, 0.3, 0.3), 1)
+	for y in [3.0, 6.0, 8.5]:
+		var k: float = 1.0 - y / 12.0
+		kit.box("metal", Vector3(0, y, -1.4 * k), Vector3(2.8 * k, 0.05, 0.05), 0)
+		kit.box("metal", Vector3(0, y, 1.4 * k), Vector3(2.8 * k, 0.05, 0.05), 0)
+	kit.box("tin_red", Vector3(0, 10.7, 0.2), Vector3(0.5, 0.5, 1.2), 0)
+	kit.box("tin", Vector3(0, 10.9, -1.2), Vector3(0.05, 1.0, 1.6), 0)
+	# the wheel: eighteen blades round a hub, standing still in the windless noon
+	for i in 18:
+		var a := i * TAU / 18.0
+		var bb := Basis(Vector3.BACK, a) * Basis(Vector3.UP, 0.35)
+		kit.box("tin", Vector3(0, 10.7, 0.9) + Basis(Vector3.BACK, a) * Vector3(0, 1.3, 0), Vector3(0.32, 1.9, 0.03), 0, bb)
+	kit.cyl("metal", Vector3(0, 10.7, 0.75), 0.2, 0.2, 0.3, 8, 0, Basis(Vector3.RIGHT, PI * 0.5))
+	kit.cyl("tin", Vector3(2.4, 0, 0.0), 1.3, 1.3, 1.6, 12, 1)
+
+static func _highrise(kit: Kit, d: Dictionary) -> void:
+	var w := float(d.get("w", 20))
+	var dd := float(d.get("d", 16))
+	var H := float(d.get("h", 20))
+	var hw := w * 0.5
+	var hd := dd * 0.5
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(d.get("seed", 1))
+	var lobby := bool(d.get("lobby", false))
+	var g := 4.0
+	kit.box("concrete_dk", Vector3(0, -0.5, 0), Vector3(w + 0.4, 1.0, dd + 0.4), 1)
+	kit.box("concrete", Vector3(0, 0.06, 0), Vector3(w - 0.3, 0.12, dd - 0.3), 1)
+	# the ground floor: real walls with a doorway and shopfront holes, so the lobby can be walked into
+	var front := [[0.0, 3.0, 0.0, 2.9]]
+	for i in int(hw / 4.0):
+		front.append([-hw + 2.5 + i * 4.0, 2.2, 0.9, 2.9])
+	_wall(kit, "concrete", Vector3(-hw, 0, hd), Vector3(hw, 0, hd), g, front, 0.35)
+	_wall(kit, "concrete", Vector3(-hw, 0, -hd), Vector3(hw, 0, -hd), g, [] if lobby else [[hw * 0.4, 1.6, 0.0, 2.4]], 0.35)
+	_wall(kit, "concrete", Vector3(-hw, 0, -hd + 0.17), Vector3(-hw, 0, hd - 0.17), g, [[0.0, 2.4, 0.9, 2.9]], 0.35)
+	_wall(kit, "concrete", Vector3(hw, 0, -hd + 0.17), Vector3(hw, 0, hd - 0.17), g, [] if lobby else [[1.0, 2.4, 0.9, 2.9]], 0.35)
+	# the storeys above: one shell painted with windows, broken back at the top
+	var top := H
+	if bool(d.get("broken", false)):
+		top = H * rng.randf_range(0.55, 0.8)
+	kit.box("facade", Vector3(0, g + (top - g) * 0.5, 0), Vector3(w, top - g, dd), 2)
+	kit.box("concrete_dk", Vector3(0, top + 0.15, 0), Vector3(w + 0.3, 0.3, dd + 0.3), 0)
+	for i in int(w / 2.0):
+		var x := -hw + 1.0 + i * 2.0
+		for zs in [-1.0, 1.0]:
+			var hh := rng.randf_range(0.0, 2.8) if rng.randf() < 0.7 else 0.0
+			if hh > 0.3:
+				kit.box("facade", Vector3(x, top + 0.3 + hh * 0.5, zs * (hd - 0.2)), Vector3(2.0, hh, 0.4), 0)
+	if bool(d.get("broken", false)):
+		# what came down lies at the foot of the tower
+		for i in 10:
+			var p := Vector3(rng.randf_range(-hw - 4, hw + 4), 0.3, (hd + rng.randf_range(1.5, 5.0)) * (1.0 if i % 2 == 0 else -1.0))
+			kit.box("concrete_dk", p, Vector3(rng.randf_range(0.8, 2.6), rng.randf_range(0.3, 1.1), rng.randf_range(0.6, 2.0)), 0, Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.3, 0.3)))
+	# the lobby inside: a ceiling, a desk, columns
+	kit.box("concrete_dk", Vector3(0, g - 0.1, 0), Vector3(w - 0.6, 0.2, dd - 0.6), 0)
+	for p in [Vector2(-hw * 0.5, -hd * 0.4), Vector2(hw * 0.5, -hd * 0.4), Vector2(-hw * 0.5, hd * 0.4), Vector2(hw * 0.5, hd * 0.4)]:
+		kit.box("concrete", Vector3(p.x, g * 0.5, p.y), Vector3(0.6, g, 0.6), 1)
+	if lobby:
+		kit.box("plank_dk", Vector3(0, 0.55, -hd + 3.0), Vector3(6.0, 1.1, 0.8), 1)
+		kit.box("tin_red", Vector3(-hw + 0.25, 2.2, 0), Vector3(0.05, 2.0, 6.0), 0)
+
+static func _rubble(kit: Kit, d: Dictionary) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(d.get("seed", 3)) * 31 + 7
+	var w := float(d.get("w", 24))
+	var dd := float(d.get("d", 20))
+	for i in 26:
+		var p := Vector3(rng.randf_range(-w * 0.45, w * 0.45), rng.randf_range(0.1, 0.9), rng.randf_range(-dd * 0.45, dd * 0.45))
+		var sz := Vector3(rng.randf_range(1.0, 4.0), rng.randf_range(0.4, 1.8), rng.randf_range(0.8, 3.0))
+		kit.box("concrete" if i % 3 else "concrete_dk", p, sz, 1 if sz.y > 1.2 and i % 2 == 0 else 0, Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.4, 0.4)))
+	for i in 3:
+		var x := rng.randf_range(-w * 0.3, w * 0.3)
+		var hh := rng.randf_range(4.0, 9.0)
+		kit.box("facade", Vector3(x, hh * 0.5, rng.randf_range(-dd * 0.3, dd * 0.3)), Vector3(rng.randf_range(3.0, 7.0), hh, 0.4), 1)
+	for i in 8:
+		kit.pole("metal", Vector3(rng.randf_range(-w * 0.4, w * 0.4), 0.4, rng.randf_range(-dd * 0.4, dd * 0.4)), Vector3(rng.randf_range(-w * 0.4, w * 0.4), rng.randf_range(1.5, 3.5), rng.randf_range(-dd * 0.4, dd * 0.4)), 0.025)
+
+static func _cage(kit: Kit) -> void:
+	# a cage of rebar and chain-link, door chained shut
+	for i in 9:
+		var t := i / 8.0
+		kit.box("metal", Vector3(-1.4 + t * 2.8, 1.2, -1.2), Vector3(0.04, 2.4, 0.04), 0)
+		kit.box("metal", Vector3(-1.4 + t * 2.8, 1.2, 1.2), Vector3(0.04, 2.4, 0.04), 0)
+		kit.box("metal", Vector3(-1.4, 1.2, -1.2 + t * 2.4), Vector3(0.04, 2.4, 0.04), 0)
+		kit.box("metal", Vector3(1.4, 1.2, -1.2 + t * 2.4), Vector3(0.04, 2.4, 0.04), 0)
+	kit.box("metal", Vector3(0, 2.42, 0), Vector3(2.9, 0.06, 2.5), 0)
+	kit.box("metal", Vector3(0, 0.03, 0), Vector3(2.9, 0.06, 2.5), 0)
+	kit.solid_box(AABB(Vector3(-1.45, 0, -1.25), Vector3(0.1, 2.4, 2.5)))
+	kit.solid_box(AABB(Vector3(1.35, 0, -1.25), Vector3(0.1, 2.4, 2.5)))
+	kit.solid_box(AABB(Vector3(-1.45, 0, -1.25), Vector3(2.9, 2.4, 0.1)))
+	kit.solid_box(AABB(Vector3(-1.45, 0, 1.15), Vector3(2.9, 2.4, 0.1)))
+	kit.box("metal", Vector3(0.3, 1.1, 1.25), Vector3(0.3, 0.3, 0.06), 0)
+
+static func _garage(kit: Kit, d: Dictionary) -> void:
+	# a two-storey parking deck: the market lives underneath, sandbags and scrap across its open sides
+	var w := float(d.get("w", 30))
+	var dd := float(d.get("d", 26))
+	var hw := w * 0.5
+	var hd := dd * 0.5
+	kit.box("concrete", Vector3(0, 0.06, 0), Vector3(w, 0.12, dd), 1)
+	for ix in 5:
+		for iz in 4:
+			var x := -hw + 1.0 + ix * (w - 2.0) / 4.0
+			var z := -hd + 1.0 + iz * (dd - 2.0) / 3.0
+			kit.box("concrete", Vector3(x, 1.75, z), Vector3(0.6, 3.5, 0.6), 1)
+			kit.box("concrete", Vector3(x, 5.25, z), Vector3(0.6, 3.5, 0.6), 0)
+	kit.box("concrete_dk", Vector3(0, 3.65, 0), Vector3(w, 0.3, dd), 2)
+	kit.box("concrete_dk", Vector3(0, 7.1, 0), Vector3(w, 0.3, dd), 2)
+	for sd in [-1.0, 1.0]:
+		kit.box("concrete", Vector3(0, 4.3, sd * hd), Vector3(w, 1.0, 0.25), 0)
+		kit.box("concrete", Vector3(sd * hw, 4.3, 0), Vector3(0.25, 1.0, dd), 0)
+	# the barricade: three sides closed, a gate on the south
+	for side in [[Vector3(0, 0, -hd), Vector3(1, 0, 0), w], [Vector3(-hw, 0, 0), Vector3(0, 0, 1), dd], [Vector3(hw, 0, 0), Vector3(0, 0, 1), dd]]:
+		var c: Vector3 = side[0]
+		var u: Vector3 = side[1]
+		var l: float = side[2]
+		var n := int(l / 2.0)
+		for i in n:
+			var p: Vector3 = c + u * (-l * 0.5 + (i + 0.5) * l / n)
+			kit.box(["tin", "tin_red", "plank_v", "tin_teal"][i % 4], p + Vector3(0, 1.0, 0), Vector3(absf(u.x) * l / n + 0.12, 2.0, absf(u.z) * l / n + 0.12), 1)
+	for i in 6:
+		var x := -hw + 1.5 + i * 2.2 if i < 3 else hw - 1.5 - (i - 3) * 2.2
+		kit.box("canvas", Vector3(x, 0.45, hd), Vector3(2.0, 0.9, 0.7), 1)
+
+static func _tent(kit: Kit) -> void:
+	# a canvas A-frame on a ridge pole, its back closed and its front flaps tied open
+	var l := 3.6
+	var w := 2.6
+	var h := 2.1
+	var ang := atan2(h, w * 0.5)
+	var sl := sqrt(h * h + w * w * 0.25)
+	for sd in [-1.0, 1.0]:
+		kit.box("canvas", Vector3(sd * w * 0.25, h * 0.5, 0), Vector3(sl, 0.04, l), 0, Basis(Vector3.BACK, -sd * ang))
+	kit.cyl("log", Vector3(0, h, -l * 0.5 - 0.2), 0.04, 0.04, l + 0.4, 5, 0, Basis(Vector3.RIGHT, PI * 0.5))
+	kit.tri3("canvas", Vector3(-w * 0.5, 0, -l * 0.5), Vector3(w * 0.5, 0, -l * 0.5), Vector3(0, h, -l * 0.5))
+	kit.solid_box(AABB(Vector3(-w * 0.45, 0, -l * 0.5), Vector3(w * 0.9, h * 0.8, l)))
+
+static func _shrine(kit: Kit) -> void:
+	# a cairn of fused green glass dragged up out of the Bowl, hung with dosimeters like prayer bells
+	kit.box("concrete_dk", Vector3(0, 0.3, 0), Vector3(3.0, 0.6, 2.0), 1)
+	_shards(kit, {"seed": 77}, Vector3(0, 0.6, 0), 1.6)
+	for i in 5:
+		kit.box("metal", Vector3(-1.2 + i * 0.6, 1.9 + sin(i) * 0.2, 0.9), Vector3(0.12, 0.18, 0.05), 0)
+	kit.box("log", Vector3(-1.5, 1.2, 0.9), Vector3(0.1, 2.4, 0.1), 0)
+	kit.box("log", Vector3(1.5, 1.2, 0.9), Vector3(0.1, 2.4, 0.1), 0)
+	kit.box("log", Vector3(0, 2.35, 0.9), Vector3(3.1, 0.08, 0.08), 0)
+
+static func _banner(kit: Kit) -> void:
+	kit.cyl("log", Vector3.ZERO, 0.06, 0.05, 4.2, 5, 0)
+	kit.box("log", Vector3(0, 4.0, 0), Vector3(1.4, 0.05, 0.05), 0)
+	kit.box("canvas_green", Vector3(0, 3.0, 0.03), Vector3(1.2, 2.0, 0.03), 0)
+	kit.box("glow", Vector3(0, 3.2, 0.06), Vector3(0.35, 0.35, 0.02), 0)
+
+static func _blockhouse(kit: Kit, d: Dictionary) -> void:
+	var w := float(d.get("w", 10))
+	var dd := float(d.get("d", 8))
+	var hw := w * 0.5
+	var hd := dd * 0.5
+	var h := 3.4
+	kit.box("concrete_dk", Vector3(0, -0.4, 0), Vector3(w + 0.6, 0.8, dd + 0.6), 1)
+	kit.box("concrete", Vector3(0, 0.06, 0), Vector3(w - 0.3, 0.12, dd - 0.3), 1)
+	_wall(kit, "concrete", Vector3(-hw, 0, -hd), Vector3(hw, 0, -hd), h, [], 0.5)
+	_wall(kit, "concrete", Vector3(-hw, 0, -hd + 0.25), Vector3(-hw, 0, hd - 0.25), h, [], 0.5)
+	_wall(kit, "concrete", Vector3(hw, 0, -hd + 0.25), Vector3(hw, 0, hd - 0.25), h, [], 0.5)
+	_wall(kit, "concrete", Vector3(-hw, 0, hd), Vector3(hw, 0, hd), h, [[0.0, 1.8, 0.0, 2.3]], 0.5)
+	kit.box("concrete", Vector3(0, h + 0.25, 0), Vector3(w + 0.4, 0.5, dd + 0.4), 0)
+	# the blast door, rolled aside on its track
+	kit.cyl("metal", Vector3(2.2, 0.05, hd + 0.4), 1.25, 1.25, 0.35, 16, 0, Basis(Vector3.RIGHT, PI * 0.5))
+	kit.box("metal", Vector3(0.6, 0.06, hd + 0.4), Vector3(4.0, 0.12, 0.3), 0)
+	kit.box("paint", Vector3(0, 2.7, hd + 0.27), Vector3(2.6, 0.5, 0.04), 0)
+	# inside: the launch console, dead screens, a locker
+	kit.box("metal", Vector3(0, 0.55, -hd + 0.9), Vector3(4.2, 1.1, 0.8), 1)
+	kit.box("glass", Vector3(0, 1.45, -hd + 0.55), Vector3(4.0, 0.7, 0.06), 0, Basis(Vector3.RIGHT, -0.25))
+	kit.box("glow", Vector3(-1.3, 1.12, -hd + 0.75), Vector3(0.18, 0.04, 0.12), 0)
+	kit.box("red", Vector3(1.3, 1.12, -hd + 0.75), Vector3(0.18, 0.04, 0.12), 0)
+	kit.box("metal", Vector3(-hw + 0.6, 1.0, 0.5), Vector3(0.6, 2.0, 1.4), 1)
+	kit.cyl("metal", Vector3(hw - 1.0, h + 0.5, -hd + 1.0), 0.06, 0.06, 4.0, 5, 0)
+
+static func _silo(kit: Kit) -> void:
+	# the silo's cap: a concrete ring and the great split hatch, one leaf raised; vents and a stair down that ends in rubble
+	kit.cyl("concrete", Vector3(0, -0.4, 0), 6.5, 6.5, 1.2, 24, 0)
+	kit.solid_box(AABB(Vector3(-4.6, -0.4, -4.6), Vector3(9.2, 1.2, 9.2)))
+	kit.cyl("metal", Vector3(0, 0.8, 0), 4.6, 4.6, 0.15, 24, 0)
+	kit.box("metal", Vector3(-2.3, 0.98, 0), Vector3(4.6, 0.2, 9.0), 0)
+	kit.box("metal", Vector3(2.0, 3.2, 0), Vector3(0.25, 5.0, 8.6), 0, Basis(Vector3.BACK, 0.28))
+	kit.box("dark", Vector3(2.3, 0.97, 0), Vector3(4.2, 0.04, 8.4), 0)
+	for i in 4:
+		var a := i * TAU / 4.0 + 0.4
+		kit.box("concrete_dk", Vector3(cos(a) * 7.6, 0.6, sin(a) * 7.6), Vector3(1.2, 1.2, 1.2), 1)
+		kit.box("metal", Vector3(cos(a) * 7.6, 1.25, sin(a) * 7.6), Vector3(1.0, 0.1, 1.0), 0)
+	kit.box("red", Vector3(0, 0.88, -5.2), Vector3(6.0, 0.02, 0.3), 0)
+
+static func _shards(kit: Kit, d: Dictionary, at := Vector3.ZERO, sc := 1.0) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(d.get("seed", 1)) * 13 + 5
+	for i in rng.randi_range(4, 8):
+		var p := at + Vector3(rng.randf_range(-1.2, 1.2), -0.2, rng.randf_range(-1.2, 1.2)) * sc
+		var h := rng.randf_range(0.8, 2.6) * sc
+		var b := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.35, 0.35)) * Basis(Vector3.BACK, rng.randf_range(-0.35, 0.35))
+		kit.cyl("glow", p, rng.randf_range(0.12, 0.3) * sc, 0.0, h, 5, 0, b)
+
 # ---------------------------------------------------------------- materials
 static func _mat(k: String) -> Material:
 	if _mats.has(k):
@@ -847,6 +1230,7 @@ static func _mat(k: String) -> Material:
 		"canvas": [3, Color(0.62, 0.56, 0.43), Color(0.36, 0.3, 0.22)], "canvas_red": [3, Color(0.6, 0.26, 0.2), Color(0.35, 0.2, 0.15)],
 		"hide": [3, Color(0.56, 0.43, 0.31), Color(0.32, 0.23, 0.16)], "mattress": [3, Color(0.7, 0.66, 0.56), Color(0.5, 0.44, 0.36)],
 		"log": [4, Color(0.42, 0.32, 0.23), Color(0.23, 0.17, 0.12)], "burnt": [4, Color(0.11, 0.1, 0.09), Color(0.05, 0.05, 0.05)],
+		"facade": [6, Color(0.47, 0.45, 0.42)], "canvas_green": [3, Color(0.3, 0.42, 0.22), Color(0.2, 0.26, 0.15)],
 		"concrete": [5, Color(0.47, 0.45, 0.42)], "concrete_dk": [5, Color(0.33, 0.32, 0.3)], "paint": [5, Color(0.72, 0.7, 0.65)],
 	}
 	var m: Material
@@ -871,6 +1255,13 @@ static func _mat(k: String) -> Material:
 		if k == "glass":
 			st.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			st.albedo_color.a = 0.45
+		if k == "glow":
+			st.albedo_color = Color(0.35, 0.85, 0.3)
+			st.emission_enabled = true
+			st.emission = Color(0.3, 0.95, 0.25)
+			st.emission_energy_multiplier = 1.4
+			st.roughness = 0.15
+			st.metallic = 0.3
 		m = st
 	_mats[k] = m
 	return m
