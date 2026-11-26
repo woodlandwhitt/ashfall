@@ -17,6 +17,7 @@ var pending_trade := ""
 var objects: WorldObjects
 var pockets: Pockets
 var barrels: Barrels
+var reactor: Reactor
 var events: RoadEvents
 var forge: Forge
 var atmos: Atmos
@@ -58,6 +59,7 @@ func _ready() -> void:
 	town = TownLife.new()
 	add_child(town)
 	_environment()
+	Reactor.level_ground()
 	_terrain()
 	if vault_dress:
 		chunks.on_built = vault_dress.brighten
@@ -65,6 +67,7 @@ func _ready() -> void:
 		chunks.on_built = _dress_cell
 	# build 15: the Ashwood's towns and ruins stand in the collision and the navigation from the start
 	Frontier.prepare()
+	Reactor.prepare()
 	_colliders()
 	_pools()
 	_lamps()
@@ -125,6 +128,8 @@ func _ready() -> void:
 		frontier.name = "Frontier"
 		add_child(frontier)
 		frontier.setup(self)
+		reactor = Reactor.new(self)
+		add_child(reactor)
 	chunks.on_enter = _spawn_chunk
 	chunks.on_leave = _despawn_chunk
 	player = preload("res://scripts/player.gd").new()

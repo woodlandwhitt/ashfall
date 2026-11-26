@@ -45,6 +45,7 @@ var fly_a := 0.0
 var fly_mode := "wheel"   # wheel, stoop (diving on you), climb
 var fly_t := 0.0
 var stun := 0.0         # a flashbang: blind and staggering
+var caged := false      # held in a cage until something opens it (the Meridian brute)
 var slow := 0.0         # a cryo grenade: frozen to a crawl
 var bleed: Array = []   # [damage per second, seconds left]: nails, burning, a glowing wound
 var crip := {}           # FOCUS hits: crippled legs slow it, crippled arms spoil its aim
@@ -208,6 +209,7 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 			model = ps.instantiate()
 			add_child(model)
 			rig = Rig.new(model, quad)
+			_fit_shape(cs)
 	for mi in model.find_children("*", "GeometryInstance3D", true, false):
 		(mi as GeometryInstance3D).visibility_range_end = 150.0
 	slot = float(absi(hash(eid + str(d.x) + str(d.z))) % 6283) / 1000.0
@@ -217,6 +219,47 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 	agent.radius = 0.5
 	add_child(agent)
 	target = home
+
+# the big ones (the Glow Brute stands near 3.5 m) used to keep a man-sized capsule, so shots at the chest and head
+# went straight past them (build 17 report: "cannot shoot brute"); the shape now fits the model
+func _fit_shape(cs: CollisionShape3D) -> void:
+	var box := AABB()
+	var first := true
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		var xf: Transform3D = global_transform.affine_inverse() * m.global_transform if is_inside_tree() else _rel(m)
+		var b: AABB = xf * m.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	if first:
+		return
+	if quad:
+		if box.size.y > 1.2 or maxf(box.size.x, box.size.z) > 1.6:
+			var bs := BoxShape3D.new()
+			bs.size = Vector3(clampf(box.size.x * 0.8, 0.5, 3.0), clampf(box.size.y * 0.9, 0.6, 3.0), clampf(box.size.z * 0.8, 0.6, 4.0))
+			cs.shape = bs
+			cs.position = Vector3(0, bs.size.y * 0.5, 0)
+		return
+	if box.size.y < 2.1:
+		return
+	var cap := CapsuleShape3D.new()
+	cap.radius = clampf(minf(box.size.x, box.size.z) * 0.38, 0.34, 1.1)
+	cap.height = maxf(box.size.y * 0.97, cap.radius * 2.0)
+	cs.shape = cap
+	cs.position = Vector3(0, cap.height * 0.5, 0)
+	if OS.get_cmdline_user_args().has("--fitlog"):
+		print("FIT ", type, " h ", cap.height, " r ", cap.radius)
+
+func _rel(n: Node3D) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	var x: Node = n
+	while x != null and x != self:
+		if x is Node3D:
+			t = (x as Node3D).transform * t
+		x = x.get_parent()
+	return t
 
 # a gun of their own (a handgun: the aiming pose is one-handed), and the arms held on it in a fight
 const SIDEARMS := {"raider": ["Pistol_4", "lp_pistol", "lp_machine_pistol", "Revolver_3", "lp_derringer"], "warlord": ["lp_revolver"],
@@ -493,6 +536,17 @@ func _physics_process(d: float) -> void:
 	slow = maxf(0.0, slow - d)
 	if fly:
 		_fly(d)
+		return
+	if caged:
+		# pacing the cage, watching you
+		velocity = Vector3(0, -0.5 if is_on_floor() else -6.0, 0)
+		move_and_slide()
+		var to := Game.player.global_position - global_position
+		face_yaw = lerp_angle(face_yaw, atan2(to.x, to.z), 1.0 - exp(-3.0 * d))
+		if model:
+			model.rotation.y = face_yaw
+		if rig:
+			rig.animate(d, 0.4 + 0.4 * sin(t * 1.7), t, false)
 		return
 	if stun > 0.0:
 		# reeling: no shooting, no chasing, a stagger on the spot

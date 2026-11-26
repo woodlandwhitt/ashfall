@@ -124,6 +124,9 @@ static func layout() -> Array:
 	L.append(R("chest", 674.0, 220.0, 0, {"id": "di_safe", "tier": "uncommon"}))
 	L.append(R("campfire", 701.0, 226.0, 0, {"s": 0.7}))
 	_north(L)
+	# build 17: the Meridian reactor opens through its north wall into a containment hall (Reactor does the rest)
+	L.append(R("reactor_hall", 15, -221, 0, {"y": 5.218, "w": 16.0, "d": 14.0}))
+	L.append(R("reactor_dress", 15, -207, 0, {"y": 5.218}))
 	_list = L
 	return L
 
@@ -278,7 +281,7 @@ static func floor_at(x: float, z: float) -> float:
 	if Game.area != "world":
 		return -INF
 	for d in layout():
-		if not String(d.k) in ["shack", "hall", "cabin", "hospital", "longhouse", "ruin", "outhouse", "highrise", "blockhouse", "garage"]:
+		if not String(d.k) in ["shack", "hall", "cabin", "hospital", "longhouse", "ruin", "outhouse", "highrise", "blockhouse", "garage", "reactor_hall"]:
 			continue
 		var w := float(d.get("w", 2.0)) * 0.5
 		var dd := float(d.get("d", 2.0)) * 0.5
@@ -287,7 +290,7 @@ static func floor_at(x: float, z: float) -> float:
 			w = dd
 			dd = t
 		if absf(x - float(d.x)) < w and absf(z - float(d.z)) < dd:
-			return _ground(d) + (0.12 if String(d.k) in ["hospital", "ruin", "highrise", "blockhouse", "garage"] else 0.16)
+			return _ground(d) + (0.12 if String(d.k) in ["hospital", "ruin", "highrise", "blockhouse", "garage", "reactor_hall"] else 0.16)
 	return -INF
 
 # the ground a building stands on: the highest point under its footprint, so no floor is ever buried
@@ -599,6 +602,8 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 		"blockhouse": _blockhouse(kit, d)
 		"silo": _silo(kit)
 		"shards": _shards(kit, d)
+		"reactor_hall": _reactor_hall(kit)
+		"reactor_dress": _reactor_dress(kit)
 		"post":
 			kit.cyl("metal", Vector3.ZERO, 0.05, 0.05, 1.2, 6, 0)
 			kit.box("metal", Vector3(0, 1.25, 0), Vector3(0.3, 0.22, 0.14), 0)
@@ -1113,6 +1118,94 @@ static func _rubble(kit: Kit, d: Dictionary) -> void:
 		kit.box("facade", Vector3(x, hh * 0.5, rng.randf_range(-dd * 0.3, dd * 0.3)), Vector3(rng.randf_range(3.0, 7.0), hh, 0.4), 1)
 	for i in 8:
 		kit.pole("metal", Vector3(rng.randf_range(-w * 0.4, w * 0.4), 0.4, rng.randf_range(-dd * 0.4, dd * 0.4)), Vector3(rng.randf_range(-w * 0.4, w * 0.4), rng.randf_range(1.5, 3.5), rng.randf_range(-dd * 0.4, dd * 0.4)), 0.025)
+
+# ---------------------------------------------------------------- the Meridian reactor (build 17)
+# The containment hall behind the old reactor room, 16 x 14 m and 7 m high: the pressure vessel under its dome, the
+# coolant loop running round the walls to three tanks, the control desks, hazard paint, and the cell where the plant
+# kept what came out of the vessel (the cage itself is Reactor's, so its door can open).
+static func _reactor_hall(kit: Kit) -> void:
+	var h := 7.0
+	kit.box("concrete_dk", Vector3(0, 0.06, -0.1), Vector3(15.2, 0.12, 13.4), 1)
+	_wall(kit, "concrete", Vector3(-7.8, 0, -6.8), Vector3(-7.8, 0, 6.6), h, [], 0.4)
+	_wall(kit, "concrete", Vector3(7.8, 0, -6.8), Vector3(7.8, 0, 6.6), h, [], 0.4)
+	_wall(kit, "concrete", Vector3(-8.0, 0, -6.8), Vector3(8.0, 0, -6.8), h, [], 0.4)
+	# the old north wall, rebuilt with two doorways and an observation window looking onto the core
+	_wall(kit, "concrete", Vector3(-8.0, 0, 7.0), Vector3(8.0, 0, 7.0), h, [[-5.2, 3.0, 0.0, 3.6], [5.2, 3.0, 0.0, 3.6], [0.0, 4.2, 1.4, 3.0]], 0.8)
+	kit.box("glass", Vector3(0, 2.2, 7.0), Vector3(4.2, 1.6, 0.06), 0)
+	kit.box("ochre", Vector3(-5.2, 3.75, 7.42), Vector3(3.2, 0.3, 0.04), 0)
+	kit.box("ochre", Vector3(5.2, 3.75, 7.42), Vector3(3.2, 0.3, 0.04), 0)
+	kit.box("concrete", Vector3(0, h + 0.15, 0), Vector3(16.4, 0.3, 14.6), 2)
+	# the pressure vessel, banded, with its dome and inspection ports
+	var vc := Vector3(1.0, 0, -2.4)
+	kit.cyl("concrete_dk", vc, 3.0, 3.0, 4.8, 24, 1)
+	kit.cone("concrete", vc + Vector3(0, 4.8, 0), 3.0, 1.3, 24)
+	for y in [0.6, 2.4, 4.2]:
+		kit.cyl("metal", vc + Vector3(0, y, 0), 3.08, 3.08, 0.22, 24, 0)
+	for a in [0.4, 1.9, 3.5, 5.0]:
+		var p := vc + Vector3(cos(a) * 3.07, 3.1, sin(a) * 3.07)
+		kit.box("glow", p, Vector3(0.5, 0.36, 0.5), 0, Basis(Vector3.UP, -a))
+	kit.cyl("ochre", vc + Vector3(0, 0.01, 0), 3.9, 3.9, 0.02, 24, 0)
+	kit.cyl("concrete_dk", vc + Vector3(0, 0.02, 0), 3.6, 3.6, 0.02, 24, 0)
+	# coolant loop: two fat pipes from the vessel to the tanks on the east wall, and a ring under the ceiling
+	for i in 3:
+		var tz := -4.6 + i * 3.4
+		kit.cyl("tin_teal", Vector3(6.2, 0, tz), 1.0, 1.0, 3.4, 16, 1)
+		kit.cyl("metal", Vector3(6.2, 3.4, tz), 1.0, 0.5, 0.4, 16, 0)
+		kit.pole("metal", Vector3(6.2, 3.8, tz), Vector3(6.2, 5.6, tz), 0.16)
+		kit.box("ochre", Vector3(5.18, 1.7, tz), Vector3(0.04, 0.3, 1.2), 0)
+	kit.pole("metal", vc + Vector3(2.6, 3.4, 0.8), Vector3(6.2, 5.6, -1.2), 0.32)
+	kit.pole("metal", vc + Vector3(2.6, 1.2, -0.8), Vector3(5.2, 1.2, -4.6), 0.28)
+	kit.pole("metal", Vector3(6.2, 5.6, -4.6), Vector3(6.2, 5.6, 2.2), 0.2)
+	for x in [-7.2, 7.2]:
+		kit.pole("metal", Vector3(x, 5.9, -6.2), Vector3(x, 5.9, 6.2), 0.14)
+		kit.pole("metal", Vector3(x, 6.3, -6.2), Vector3(x, 6.3, 6.2), 0.1)
+	kit.pole("metal", Vector3(-7.2, 5.9, -6.2), Vector3(7.2, 5.9, -6.2), 0.14)
+	kit.pole("metal", vc + Vector3(0, 6.1, 0), vc + Vector3(0, h, 0), 0.5)
+	# control desks along the west wall, screens lit
+	for i in 3:
+		var dz := 0.6 + i * 1.9
+		kit.box("metal", Vector3(-6.9, 0.5, dz), Vector3(0.9, 1.0, 1.6), 1)
+		kit.box("metal", Vector3(-7.35, 1.35, dz), Vector3(0.2, 0.9, 1.6), 0, Basis(Vector3.FORWARD, 0.0))
+		kit.box("glow", Vector3(-7.22, 1.45, dz - 0.35), Vector3(0.04, 0.42, 0.55), 0)
+		kit.box("glow", Vector3(-7.22, 1.45, dz + 0.35), Vector3(0.04, 0.42, 0.55), 0)
+		kit.box("red", Vector3(-6.6, 1.03, dz - 0.4), Vector3(0.12, 0.04, 0.12), 0)
+		kit.box("ochre", Vector3(-6.6, 1.03, dz), Vector3(0.12, 0.04, 0.12), 0)
+	# a gantry crane rail across the ceiling, and hazard chevrons on the floor
+	kit.box("ochre", Vector3(0, 6.55, 1.8), Vector3(15.2, 0.35, 0.3), 0)
+	kit.box("metal", Vector3(1.0, 6.2, 1.8), Vector3(1.2, 0.5, 0.8), 0)
+	kit.pole("metal", Vector3(1.0, 5.95, 1.8), Vector3(1.0, 4.3, 1.8), 0.03)
+	for i in 8:
+		kit.box("ochre" if i % 2 == 0 else "dark", Vector3(-7.0 + i * 0.5, 0.13, -2.35), Vector3(0.5, 0.02, 0.25), 0)
+	# drums of spent fuel, crates, a fallen ladder
+	for p in [Vector3(-2.6, 0, 4.8), Vector3(-1.8, 0, 5.4), Vector3(3.2, 0, 5.2)]:
+		kit.cyl("tin_red", p, 0.34, 0.34, 0.95, 12, 1)
+	kit.box("plank_dk", Vector3(-0.4, 0.45, 5.4), Vector3(1.0, 0.9, 1.0), 1)
+	kit.box("plank_dk", Vector3(-0.4, 1.2, 5.4), Vector3(0.7, 0.6, 0.7), 0, Basis(Vector3.UP, 0.4))
+	kit.pole("metal", Vector3(3.4, 0.05, -6.0), Vector3(4.6, 3.6, -6.4), 0.03)
+	kit.pole("metal", Vector3(3.9, 0.05, -6.0), Vector3(5.1, 3.6, -6.4), 0.03)
+
+# the old reactor room dressed: coolant pipes along the walls, gauges, a desk, a bank of lockers, lamps
+static func _reactor_dress(kit: Kit) -> void:
+	# the room is x -8..8, z -7..7 round the core at (0, -4.5)
+	for x in [-7.35, 7.35]:
+		kit.pole("metal", Vector3(x, 5.2, -6.4), Vector3(x, 5.2, 6.0), 0.16)
+		kit.pole("metal", Vector3(x, 0.6, -6.4), Vector3(x, 0.6, 4.6), 0.1)
+		for z in [-5.0, -1.0, 3.0]:
+			kit.pole("metal", Vector3(x, 0.6, z), Vector3(x, 5.2, z), 0.08)
+			kit.cyl("dark", Vector3(x + (0.12 if x < 0 else -0.12), 1.5, z + 0.5), 0.16, 0.16, 0.06, 12, 0, Basis(Vector3.FORWARD, PI * 0.5))
+	# lockers on the east wall by the door
+	for i in 4:
+		kit.box("tin_teal", Vector3(7.1, 1.0, 4.2 - i * 0.62), Vector3(0.5, 2.0, 0.58), 1)
+		kit.box("dark", Vector3(6.84, 1.6, 4.2 - i * 0.62), Vector3(0.02, 0.2, 0.3), 0)
+	# the shift desk and its chair, a fallen filing cabinet
+	kit.box("metal", Vector3(-5.6, 0.45, 4.6), Vector3(1.8, 0.9, 0.9), 1)
+	kit.box("glow", Vector3(-5.6, 1.12, 4.4), Vector3(0.5, 0.36, 0.04), 0, Basis(Vector3.RIGHT, -0.2))
+	kit.box("metal", Vector3(-4.6, 0.25, 2.6), Vector3(0.5, 1.3, 0.6), 0, Basis(Vector3.FORWARD, PI * 0.5))
+	# a ring of hazard paint round the core, and a lamp cage over each door of the hall
+	kit.cyl("ochre", Vector3(0, 0.01, -4.5), 2.4, 2.4, 0.02, 20, 0)
+	kit.cyl("concrete_dk", Vector3(0, 0.02, -4.5), 2.15, 2.15, 0.02, 20, 0)
+	for x in [-5.2, 5.2]:
+		kit.box("red", Vector3(x, 4.1, -6.55), Vector3(0.36, 0.24, 0.16), 0)
 
 static func _cage(kit: Kit) -> void:
 	# a cage of rebar and chain-link, door chained shut

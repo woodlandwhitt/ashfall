@@ -296,9 +296,9 @@ func _settle_slabs(root: Node3D, fname: String) -> void:
 		# baked explosive drums: the whole little mesh is the drum, so it just goes (live drums replace them)
 		var hide := false
 		for piece in settle[fname][key]:
-			if piece.size() > 2 and String(piece[2]) == "hide":
+			if piece.size() > 2 and String(piece[2]) == "hide" and m.get_surface_count() == 1 and (piece[0] as Array).size() >= m.surface_get_array_len(0):
 				hide = true
-		if hide and m.get_surface_count() == 1:
+		if hide:
 			mi.queue_free()
 			continue
 		var am := ArrayMesh.new()

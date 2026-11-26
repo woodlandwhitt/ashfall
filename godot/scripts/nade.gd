@@ -350,9 +350,8 @@ func _explode() -> void:
 # other drums, and makes the whole neighbourhood look
 static func blast(at: Vector3, r: float, dmg: float, col: Color, by_enemy: bool) -> void:
 	_flash_at(at, col, r)
-	Sfx.play_at("shotgun_far", at, 7.0, 0.42)
-	Sfx.play_at("shotgun", at, 5.0, 0.5)
-	Sfx.play_at("x_rock1", at, 5.0, 0.55)
+	Sfx.play_at("x_boom1" if randf() < 0.5 else "x_boom3", at, 8.0, randf_range(0.85, 1.0))
+	Sfx.play_at("x_rock1", at, 4.0, 0.55)
 	for e in Game.main.enemies.duplicate():
 		if not is_instance_valid(e) or e.dead:
 			continue
