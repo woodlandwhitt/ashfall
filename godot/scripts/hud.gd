@@ -419,6 +419,9 @@ func set_prompt(t: String) -> void:
 	if not dlg.visible:
 		prompt_l.text = t
 		touch.use_label = t
+		# taking what isn't yours reads in red, so it's never an accident
+		var crime := t.begins_with("Steal") or t.begins_with("Pickpocket")
+		prompt_l.add_theme_color_override("font_color", Color(1.0, 0.36, 0.3) if crime else Color(0.95, 0.88, 0.72))
 
 # combat feedback: a cross at the crosshair for every hit (white), critical or head hit (yellow), kill (red)
 func hit_marker(kind: String) -> void:
@@ -973,7 +976,7 @@ class TouchPad extends Control:
 			draw_circle(b[0], b[1], Color(0.95, 0.78, 0.45, 0.32 if on else 0.16))
 			draw_arc(b[0], b[1], 0, TAU, 40, Color(0.95, 0.78, 0.45, 0.55), 2.0)
 			var txt: String = b[2]
-			if k == "chem" and Game.chem != "":
+			if k == "chem" and Game.chem != "" and Game.count(Game.chem) > 0:
 				txt = "%s %d" % [Game.iname(Game.chem).substr(0, 5).to_upper(), Game.count(Game.chem)]
 			if k == "use" and use_label != "":
 				txt = "USE"

@@ -3,8 +3,9 @@
 extends CharacterBody3D
 
 const WALK := 4.4
-const RUN := 7.2
-const JUMP_V := 4.8
+const RUN := 8.6
+const JUMP_V := 5.9
+const STEP := 0.5             # the tallest step walked up without jumping (doorsteps, porches, kerbs)
 const GRAV := 14.0
 const EYE := 1.62
 
@@ -253,6 +254,7 @@ func _physics_process(d: float) -> void:
 	else:
 		velocity.y -= GRAV * d
 	move_and_slide()
+	_step_up(want)
 	# never fall through the world
 	var gh := Game.height(global_position.x, global_position.z)
 	if global_position.y < gh - 2.0:
@@ -268,6 +270,33 @@ func _physics_process(d: float) -> void:
 			Sfx.play(["step_sandl1", "step_sandl2", "step_sandr1", "step_sandr2"][step_lr * 2 + randi() % 2], -9.0, randf_range(0.92, 1.08))
 	if trigger and not talking:
 		fire()
+
+# walking into a step, a doorstep or a porch edge lifts you onto it: try the same move half a metre higher, and
+# if that's clear and there's floor to land on, climb by however much the floor is higher
+func _step_up(want: Vector3) -> void:
+	var wh := Vector2(want.x, want.z)
+	if not is_on_floor() or wh.length() < 0.5 or not is_on_wall():
+		return
+	if Vector2(velocity.x, velocity.z).length() > wh.length() * 0.6:
+		return
+	var dir := Vector3(want.x, 0, want.z).normalized()
+	var t := global_transform
+	if test_move(t, Vector3(0, STEP, 0)):
+		return
+	var up := t.translated(Vector3(0, STEP, 0))
+	if test_move(up, dir * 0.3):
+		return
+	var ahead := up.translated(dir * 0.3)
+	var col := KinematicCollision3D.new()
+	if not test_move(ahead, Vector3(0, -STEP - 0.05, 0), col):
+		return
+	if col.get_normal().y < 0.7:
+		return
+	var climb := STEP - col.get_travel().length()
+	if climb < 0.03:
+		return
+	global_position += Vector3(0, climb + 0.02, 0) + dir * 0.06
+	velocity.y = 0.0
 
 # ---------------------------------------------------------------- sitting down (TownLife seats)
 var seat: Dictionary = {}

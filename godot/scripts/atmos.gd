@@ -51,18 +51,10 @@ func setup(m) -> void:
 	# rain streaks and blowing dust follow the camera
 	rain_p = _particles(700, Vector3(22, 10, 22), Vector3(1.5, -26, 0.5), Color(0.82, 0.86, 0.92, 0.4), Vector2(0.018, 0.9), 0.8)
 	dust_p = _particles(90, Vector3(36, 6, 36), Vector3(6, 0.2, 2), Color(0.85, 0.72, 0.52, 0.22), Vector2(3.0, 3.0), 4.0)
-	# soft round puffs, not cards
-	var g := Gradient.new()
-	g.set_color(0, Color(1, 1, 1, 1))
-	g.set_color(1, Color(1, 1, 1, 0))
-	var gt := GradientTexture2D.new()
-	gt.gradient = g
-	gt.fill = GradientTexture2D.FILL_RADIAL
-	gt.fill_from = Vector2(0.5, 0.5)
-	gt.fill_to = Vector2(0.5, 0.0)
-	gt.width = 64
-	gt.height = 64
-	((dust_p.mesh as QuadMesh).material as StandardMaterial3D).albedo_texture = gt
+	# soft round puffs, drawn by their own shader (a textured alpha card showed as a solid tan blob on phones)
+	var dm := ShaderMaterial.new()
+	dm.shader = preload("res://scripts/dust.gdshader")
+	(dust_p.mesh as QuadMesh).material = dm
 	var layer := CanvasLayer.new()
 	layer.layer = 0
 	m.add_child(layer)

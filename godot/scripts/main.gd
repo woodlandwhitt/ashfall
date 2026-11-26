@@ -15,6 +15,7 @@ var dialog_id := ""
 var dialog_node := ""
 var pending_trade := ""
 var objects: WorldObjects
+var pockets: Pockets
 var events: RoadEvents
 var forge: Forge
 var atmos: Atmos
@@ -86,6 +87,7 @@ func _ready() -> void:
 		if not people.has(k):
 			people[k] = []
 		people[k].append(["e", i])
+	pockets = Pockets.new(self)
 	objects = WorldObjects.new()
 	add_child(objects)
 	objects.setup(self)
@@ -1069,6 +1071,8 @@ func _test_hooks() -> void:
 		get_tree().quit()
 	if args.has("floatscan"):
 		_floatscan()
+	if args.has("roofscan"):
+		await _roofscan()
 	if args.has("opendoor") and vault_dress:
 		vault_dress.open_great_door()
 	if args.has("topdown"):
@@ -1165,6 +1169,8 @@ func _test_hooks() -> void:
 		hud.pip.show_tab(String(args.pip))
 	if args.has("tod"):
 		Game.time = float(args.tod)
+	if args.has("quality"):
+		set_quality(int(args.quality))
 	if args.has("wx") and atmos:
 		atmos.set_weather(String(args.wx), true)
 		atmos.cur = Atmos.WX[String(args.wx)].duplicate()
@@ -2703,6 +2709,157 @@ func _floatscan() -> void:
 	print("FLOATSCAN done ", found)
 	get_tree().quit()
 
+# build 17: roofs and slabs left hanging in the air by the export (a roof slab over Dustwell's brick ruin, south of
+# the crossroads). The export merges every building's pieces into one mesh per material, so each mesh is split into
+# its separate pieces (triangles joined by shared corners); a piece shaped like a slab is tested with rays down from
+# round its underside against all the real geometry of the chunk and the ground. One that rests on nothing within
+# reach is lowered onto the nearest thing under it. Results go to data/settle.json (file -> mesh -> [[vertex
+# indices], drop]); chunks.gd moves those vertices as the chunk loads.
+func _roofscan() -> void:
+	var out := {}
+	var found := 0
+	var space := get_world_3d().direct_space_state
+	var paths: Array = chunks.files.values()
+	paths.sort()
+	for path in paths:
+		var ps: PackedScene = load(path)
+		if ps == null:
+			continue
+		var fname := String(path).get_file().get_basename()
+		var n := ps.instantiate() as Node3D
+		add_child(n)
+		var mis: Array = []
+		for c in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := c as MeshInstance3D
+			if mi.mesh == null or mi.mesh.get_surface_count() == 0:
+				continue
+			mis.append(mi)
+			var sb := StaticBody3D.new()
+			sb.collision_layer = 1 << 19
+			var cs := CollisionShape3D.new()
+			cs.shape = mi.mesh.create_trimesh_shape()
+			sb.add_child(cs)
+			mi.add_child(sb)
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		for mi in mis:
+			var t: Transform3D = mi.global_transform
+			for si in mi.mesh.get_surface_count():
+				var arr: Array = mi.mesh.surface_get_arrays(si)
+				var V: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+				var I = arr[Mesh.ARRAY_INDEX]
+				var idx: PackedInt32Array = I if I != null and I.size() > 0 else PackedInt32Array(range(V.size()))
+				# union the corners of each triangle, welding coincident positions
+				var weld := {}
+				var parent := PackedInt32Array()
+				parent.resize(V.size())
+				for i in V.size():
+					var key := V[i].snapped(Vector3.ONE * 0.01)
+					parent[i] = int(weld.get(key, i))
+					if not weld.has(key):
+						weld[key] = i
+				var find := func(f: Callable, x: int) -> int:
+					while parent[x] != x:
+						parent[x] = parent[parent[x]]
+						x = parent[x]
+					return x
+				for ti in range(0, idx.size(), 3):
+					var r0: int = find.call(find, idx[ti])
+					for k in [1, 2]:
+						var rk: int = find.call(find, idx[ti + k])
+						if rk != r0:
+							parent[rk] = r0
+				var groups := {}
+				for i in V.size():
+					var r: int = find.call(find, i)
+					if not groups.has(r):
+						groups[r] = PackedInt32Array()
+					groups[r].append(i)
+				for r in groups:
+					var g: PackedInt32Array = groups[r]
+					if g.size() < 8 or g.size() > 400:
+						continue
+					var pts := PackedVector3Array()
+					for i in g:
+						pts.append(t * V[i])
+					var res := _slab_of(pts)
+					if res.is_empty():
+						continue
+					# sweep a thin copy of the slab's underside straight down until it touches something
+					var bs := BoxShape3D.new()
+					bs.size = Vector3(res.size.x * 0.96, 0.1, res.size.z * 0.96)
+					var sq := PhysicsShapeQueryParameters3D.new()
+					sq.shape = bs
+					sq.transform = Transform3D(res.basis, res.c - res.basis.y * (res.size.y * 0.5 + 0.08))
+					sq.motion = Vector3(0, -25.0, 0)
+					sq.collision_mask = (1 << 19) | 1
+					var cm := space.cast_motion(sq)
+					if cm.is_empty() or float(cm[0]) <= 0.0:
+						continue
+					var drop: float = float(cm[0]) * 25.0 + 0.11
+					if drop > 0.3:
+						var mp := String(n.get_path_to(mi))
+						out.get_or_add(fname, {}).get_or_add(mp + "#" + str(si), []).append([Array(g), snappedf(drop, 0.01)])
+						found += 1
+						print("ROOF %s %s#%d at %s size %s -> drop %.2f" % [fname, mp, si, str(res.c.snapped(Vector3.ONE * 0.1)), str(res.size.snapped(Vector3.ONE * 0.1)), drop])
+		n.queue_free()
+		await get_tree().process_frame
+	# candidates only: a report to look through (most are roofs resting on their walls); real fixes are picked
+	# one by one with tools/settle/pick.gd into data/settle.json
+	var f := FileAccess.open("user://roofscan.json", FileAccess.WRITE)
+	f.store_string(JSON.stringify(out))
+	f.close()
+	print("ROOFSCAN done ", found)
+	get_tree().quit()
+
+# a piece shaped like a slab (two long axes, one thin one, lying more flat than upright): its centre, size and
+# eight points round the edge of its underside
+func _slab_of(pts: PackedVector3Array) -> Dictionary:
+	var c := Vector3.ZERO
+	for p in pts:
+		c += p
+	c /= pts.size()
+	# the thin axis: the direction the points spread least along, found by trying a set of directions
+	var best := Vector3.UP
+	var best_s := INF
+	for ix in 13:
+		for iy in 13:
+			var th := ix * PI / 12.0
+			var ph := iy * PI / 12.0
+			var dir := Vector3(sin(th) * cos(ph), cos(th), sin(th) * sin(ph))
+			var lo := INF
+			var hi := -INF
+			for p in pts:
+				var v := (p - c).dot(dir)
+				lo = minf(lo, v)
+				hi = maxf(hi, v)
+			if hi - lo < best_s:
+				best_s = hi - lo
+				best = dir
+	if best.y < 0.0:
+		best = -best
+	if best_s > 0.6 or best.y < 0.55:
+		return {}
+	var a := best.cross(Vector3.FORWARD if absf(best.z) < 0.9 else Vector3.RIGHT).normalized()
+	var b := a.cross(best).normalized()        # (a, best, b) must be right-handed for the physics query
+	var la := [INF, -INF]
+	var lb := [INF, -INF]
+	for p in pts:
+		var va := (p - c).dot(a)
+		var vb := (p - c).dot(b)
+		la = [minf(la[0], va), maxf(la[1], va)]
+		lb = [minf(lb[0], vb), maxf(lb[1], vb)]
+	var sa: float = la[1] - la[0]
+	var sb: float = lb[1] - lb[0]
+	if sa < 1.5 or sb < 1.5 or sa > 16.0 or sb > 16.0:
+		return {}
+	var probes: Array = []
+	for uv in [Vector2(0.04, 0.04), Vector2(0.5, 0.04), Vector2(0.96, 0.04), Vector2(0.96, 0.5), Vector2(0.96, 0.96), Vector2(0.5, 0.96), Vector2(0.04, 0.96), Vector2(0.04, 0.5)]:
+		var p: Vector3 = c + a * lerpf(la[0], la[1], uv.x) + b * lerpf(lb[0], lb[1], uv.y) - best * best_s * 0.5
+		probes.append(p)
+	var cc: Vector3 = c + a * (la[0] + la[1]) * 0.5 + b * (lb[0] + lb[1]) * 0.5
+	return {"c": cc, "size": Vector3(sa, best_s, sb), "probes": probes, "basis": Basis(a, best, b)}
+
 func _lifelog() -> void:
 	while true:
 		await get_tree().create_timer(3.0).timeout
@@ -2991,12 +3148,18 @@ func _best_target() -> Dictionary:
 	var best := {}
 	var bd := 3.6
 	for n in npcs:
+		# someone knocked down can't talk until they're back on their feet
+		if float(n.down) > 0.0 or n.hostile:
+			continue
 		var to: Vector3 = n.global_position - pp
 		to.y = 0
 		var d := to.length()
 		if d < 3.2 and (d < 1.2 or fwd.dot(to / d) > 0.5) and d < bd:
 			bd = d
 			best = {"k": "npc", "o": n, "label": "Talk: " + String(n.display_name)}
+			# behind someone, sneaking: their pockets instead of their conversation
+			if pockets.can_pick(n, player):
+				best = {"k": "pocket", "o": n, "label": "Pickpocket: " + String(n.display_name)}
 			npc_dot = fwd.dot(to / d) if d > 0.01 else 1.0
 	for e in enemies:
 		var d: float = e.global_position.distance_to(pp)
@@ -3038,6 +3201,7 @@ func interact() -> void:
 		return
 	match t.k:
 		"npc": start_dialog(t.o, String(t.o.id))
+		"pocket": pockets.open(t.o)
 		"talk": start_dialog(t.o, String(t.o.eid))
 		"loot":
 			var e = t.o

@@ -234,6 +234,8 @@ func _build(k: String, ps: PackedScene) -> void:
 	add_child(root)
 	if ps and Game.area == "world" and (Game.region.has("cut") or Game.region.has("cuts")):
 		_settle_cut(root)
+	if ps and Game.area == "world":
+		_settle_slabs(root, String(files.get(k, "")).get_file().get_basename())
 	loaded[k] = root
 	coarse[k].visible = false
 	_tune(root)
@@ -266,6 +268,45 @@ static func _cut_one(C: Dictionary, x: float, z: float) -> float:
 	var a := lerpf(float(v[iz * w + ix]), float(v[iz * w + ix + 1]), tx)
 	var b := lerpf(float(v[(iz + 1) * w + ix]), float(v[(iz + 1) * w + ix + 1]), tx)
 	return lerpf(a, b, tz) * 0.1
+
+# roof slabs the export left in mid-air come down onto whatever is under them (data/settle.json, from --roofscan:
+# per chunk file, per mesh and surface, the vertices of each loose slab and how far it drops)
+static var settle: Dictionary = {}
+static var settle_loaded := false
+func _settle_slabs(root: Node3D, fname: String) -> void:
+	if not settle_loaded:
+		settle_loaded = true
+		if FileAccess.file_exists("res://data/settle.json"):
+			var j = JSON.parse_string(FileAccess.get_file_as_string("res://data/settle.json"))
+			if j is Dictionary:
+				settle = j
+	if not settle.has(fname):
+		return
+	for key in settle[fname]:
+		var parts := String(key).split("#")
+		var mi: Node = null
+		for c in root.get_children():
+			mi = c.get_node_or_null(NodePath(String(parts[0])))
+			if mi:
+				break
+		if mi == null or not (mi is MeshInstance3D):
+			continue
+		var m: Mesh = (mi as MeshInstance3D).mesh
+		var si := int(parts[1])
+		var am := ArrayMesh.new()
+		var inv := (mi as MeshInstance3D).global_transform.basis.inverse()
+		for s in m.get_surface_count():
+			var arr: Array = m.surface_get_arrays(s)
+			if s == si:
+				var V: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+				for piece in settle[fname][key]:
+					var off: Vector3 = inv * Vector3(0, -float(piece[1]), 0)
+					for i in piece[0]:
+						V[int(i)] += off
+				arr[Mesh.ARRAY_VERTEX] = V
+			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			am.surface_set_material(s, m.surface_get_material(s))
+		(mi as MeshInstance3D).mesh = am
 
 func _settle_cut(root: Node3D) -> void:
 	for c in root.find_children("*", "MeshInstance3D", true, false):

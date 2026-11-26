@@ -57,6 +57,13 @@ var lights := 0
 var rect: Rect2
 
 var nav_key := ""            # TownLife area the seats and work spots belong to
+var kind_now := ""
+var stolen_n := 0
+# what's lying about in someone's room that you could pocket (build 17: there was too little to steal)
+const STEALABLE := {"store": ["ammo_9", "jerky", "purified_water", "canned_beans", "duct_tape", "bobby_pin", "shells"],
+	"saloon": ["prewar_cola", "jerky", "flatbread", "coffee_tin", "bobby_pin"], "clinic": ["stimpak", "radaway", "rad_tea", "purified_water"],
+	"office": ["bobby_pin", "circuit", "coffee_tin", "ammo_9"], "workshop": ["gears", "circuit", "duct_tape", "scrap_metal", "cell"],
+	"tech": ["circuit", "cell", "gears"], "lab": ["circuit", "radaway", "cell", "stimpak"], "storage": ["scrap_metal", "duct_tape", "canned_beans", "ammo_rifle"]}
 static func room(parent: Node3D, C: Dictionary, key := "") -> Node3D:
 	var f := Furnish.new()
 	f.nav_key = key
@@ -105,6 +112,7 @@ func _area(parent: Node3D, r0: Rect2, kind: String, floor_y: float, doors: Array
 	fy = floor_y
 	rect = r0
 	var C := {"kind": kind}
+	kind_now = kind
 	var K: Dictionary = KIND.get(kind, KIND.office)
 	# the way in: around the door, and a lane from it into the room
 	for dp0 in doors:
@@ -240,6 +248,18 @@ func _on_top(host: String, at: Vector2, yaw: float, y: float, K: Dictionary, n: 
 				continue
 			placed.append(lp)
 			var w := lp.rotated(-yaw)
+			# now and then it's not an ornament but something worth taking, and it belongs to somebody
+			if Game.area == "cells" and STEALABLE.has(kind_now) and stolen_n < 4 and rng.randf() < 0.3 and Game.main and Game.main.objects:
+				var pool: Array = STEALABLE[kind_now].filter(func(x): return Game.DB.items.has(x))
+				if not pool.is_empty():
+					var item: String = pool[rng.randi() % pool.size()]
+					var qty := 1
+					if item.begins_with("ammo") or item == "shells":
+						qty = rng.randi_range(6, 14)
+					var pid := "fs_%s_%d" % [root.name, stolen_n]
+					stolen_n += 1
+					Game.main.objects.add_pickup_now({"id": pid, "item": item, "qty": qty, "x": at.x + w.x, "z": at.y + w.y, "y": y + level, "owned": "town"})
+					break
 			var c := Furniture.make(id, false)
 			root.add_child(c)
 			c.global_position = Vector3(at.x + w.x, y + level - cab.position.y + 0.002, at.y + w.y)

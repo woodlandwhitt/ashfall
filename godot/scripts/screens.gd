@@ -388,16 +388,25 @@ func _render_trade() -> void:
 	_label(body, shop_info if shop_info != "" else "Carrying %.0f / %.0f" % [Game.carry_now(), Game.carry_max()], 18, DIM)
 
 # ================================================================ LOOT
-func open_loot(name: String, items: Array, done: Callable) -> void:
+var loot_check: Callable          # (item, ...) -> bool: may this be taken? (pickpocketing rolls for each)
+var loot_store := false           # a container you can put things in as well as take them out
+var loot_putting := false
+
+func open_loot(name: String, items: Array, done: Callable, check := Callable(), store := true) -> void:
 	loot_name = name
 	loot_items = items
 	loot_done = done
+	loot_check = check
+	loot_store = store
+	loot_putting = false
 	_open("loot")
 	Sfx.play("k_cloth1", -6.0)
 	_render_loot()
 
 func _take(i: int) -> void:
 	var it: Array = loot_items[i]
+	if loot_check.is_valid() and not loot_check.call(it):
+		return
 	if String(it[0]) == "caps":
 		Game.caps += int(it[1])
 	else:
@@ -406,13 +415,15 @@ func _take(i: int) -> void:
 	Sfx.play("k_cloth1", -4.0)
 	Game.stats_changed.emit()
 	Game.check_quests()
-	if loot_items.is_empty():
+	if loot_items.is_empty() and not loot_store:
 		close()
 	else:
 		_render_loot()
 
 func _take_all() -> void:
 	while not loot_items.is_empty():
+		if loot_check.is_valid() and not loot_check.call(loot_items[loot_items.size() - 1]):
+			return
 		var it: Array = loot_items.pop_back()
 		if String(it[0]) == "caps":
 			Game.caps += int(it[1])
@@ -423,11 +434,60 @@ func _take_all() -> void:
 	Game.check_quests()
 	close()
 
+# putting your own things in: anything you carry that isn't equipped or a quest item
+func _put(id: String, n: int) -> void:
+	if Game.count(id) < n:
+		return
+	Game.take(id, n)
+	var found := false
+	for it in loot_items:
+		if String(it[0]) == id:
+			it[1] = int(it[1]) + n
+			found = true
+	if not found:
+		loot_items.append([id, n])
+	Sfx.play("k_cloth1", -6.0)
+	Game.stats_changed.emit()
+	_render_loot()
+
+func _render_put() -> void:
+	_clear()
+	var top := _row()
+	var t := _label(top, ("PUT IN: " + loot_name).to_upper(), 24)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_button(top, "BACK", func(): loot_putting = false; _render_loot(), 130)
+	_button(top, "X", close, 60)
+	var list := _scroll()
+	var keys: Array = Game.inv.keys()
+	keys.sort_custom(func(a, b): return Game.iname(a) < Game.iname(b))
+	var any := false
+	for id in keys:
+		var c := Game.count(String(id))
+		var it := Game.item(String(id))
+		if c <= 0 or String(it.get("t", "")) == "quest" or id == Game.weapon or id == Game.armor:
+			continue
+		any = true
+		var h := HBoxContainer.new()
+		list.add_child(h)
+		var l := _label(h, Game.iname(id) + ("  x" + str(c) if c > 1 else ""), 20)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_button(h, "PUT 1", _put.bind(String(id), 1), 100)
+		if c > 1:
+			_button(h, "ALL", _put.bind(String(id), c), 80)
+	if not any:
+		_label(list, "Nothing you can leave here.", 19, DIM)
+	_label(body, "Carrying %.0f / %.0f" % [Game.carry_now(), Game.carry_max()], 18, DIM)
+
 func _render_loot() -> void:
+	if loot_putting:
+		_render_put()
+		return
 	_clear()
 	var top := _row()
 	var t := _label(top, loot_name.to_upper(), 24)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if loot_store:
+		_button(top, "PUT IN", func(): loot_putting = true; _render_loot(), 130)
 	_button(top, "TAKE ALL", _take_all, 160)
 	_button(top, "X", close, 60)
 	var list := _scroll()

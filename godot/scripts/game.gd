@@ -79,13 +79,16 @@ func can_ready(id: String) -> bool:
 	return String(it.get("t", "")) == "aid" and not it.get("throw", false) and (L.get("consts", {}).get("DRUGS", {}).has(id) or it.has("buff") or float(it.get("heal", 0)) >= 30.0 or id in ["radaway", "rad_tabs", "stimpak", "super_stim"])
 
 func use_chem() -> void:
-	if chem == "" or count(chem) <= 0:
+	if chem != "" and count(chem) <= 0:
+		chem = ""
+	if chem == "":
 		msg("No chem readied. Ready one from the Pip-Boy (INV > AID).")
 		return
 	var id := chem
 	use_item(id)
 	if count(id) <= 0:
 		msg(iname(id) + ": that was the last one.")
+		chem = ""
 
 var hp_max: float:
 	get:

@@ -77,7 +77,12 @@ func spawn_chunk(key: String) -> void:
 		pickup_nodes[o.id] = mi
 
 # a pickup added after its chunk was built gets its model straight away
+var _added := {}
 func add_pickup_now(o: Dictionary) -> void:
+	if _added.has(String(o.id)):
+		spawn_chunk(key_of(float(o.x), float(o.z)))
+		return
+	_added[String(o.id)] = true
 	_add("pickup", o)
 	spawn_chunk(key_of(float(o.x), float(o.z)))
 
@@ -92,7 +97,7 @@ func label_of(o: Dictionary) -> Variant:
 	match String(o._k):
 		"chest":
 			if _chest_empty(o):
-				return null
+				return ("Use " + String(o.name).to_lower()) if o.has("name") else "Use container"
 			if o.get("lock") != null and not Game.opened.has("u_" + String(o.id)):
 				return "Pick lock (" + LOCK_NAMES[clampi(int(o.lock), 0, 3)] + ")"
 			if o.get("owned", false) and not Game.opened.has(String(o.id)):
@@ -169,7 +174,8 @@ func best(pp: Vector3, fwd: Vector3, bd: float) -> Dictionary:
 		var q := PhysicsRayQueryParameters3D.create(eye, at, 1)
 		var hit := get_world_3d().direct_space_state.intersect_ray(q)
 		# things on the ground must be in plain sight; furniture-sized things may sit against their own wall
-		if not hit.is_empty() and (hit.position.distance_to(at) > 0.45 if small else Vector2(hit.position.x - at.x, hit.position.z - at.z).length() > 1.3):
+		# (a chest's own wall must be behind it, not between you: the ray stops within half a metre of the chest)
+		if not hit.is_empty() and (hit.position.distance_to(at) > 0.45 if small else Vector2(hit.position.x - at.x, hit.position.z - at.z).length() > 0.6):
 			return {}
 	return found
 
