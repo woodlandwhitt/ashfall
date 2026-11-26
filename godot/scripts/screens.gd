@@ -683,6 +683,56 @@ var slide_l: Label
 var cre := {}
 var cre_name: LineEdit
 
+# every save slot with what's in it (level, where, when); tap one to load it
+func open_load(back: Callable) -> void:
+	_open("load")
+	_clear()
+	var t := _label(body, "LOAD GAME", 40, Color(1.0, 0.85, 0.5))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(560, 0)
+	box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_theme_constant_override("separation", 12)
+	body.add_child(box)
+	var any := false
+	for slot in ["auto", "1", "2", "3"]:
+		var info := Game.save_info(slot)
+		var nm: String = "Autosave" if slot == "auto" else "Slot " + slot
+		if info == "":
+			var b := _button(box, nm + ":  empty", func(): pass)
+			b.disabled = true
+			continue
+		any = true
+		var where := ""
+		var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.READ)
+		if f:
+			var d = JSON.parse_string(f.get_as_text())
+			if d is Dictionary:
+				where = String(d.get("name", ""))
+				if d.get("pos") is Array and Game.DB.has("locs"):
+					var px := float(d.pos[0])
+					var pz := float(d.pos[2])
+					var best := 1e9
+					for k in Game.DB.locs:
+						var L: Dictionary = Game.DB.locs[k]
+						var dd := Vector2(float(L.get("x", 0)) - px, float(L.get("z", 0)) - pz).length()
+						if dd < best:
+							best = dd
+							where = String(d.get("name", "")) + ", near " + String(L.get("name", k))
+				if String(d.get("area", "world")) == "vault":
+					where = String(d.get("name", "")) + ", Haven 12"
+		var sl: String = slot
+		_button(box, "%s:  %s\n%s" % [nm, info, where], func():
+			Game.booted = true
+			close()
+			if Game.main and Game.main.hud:
+				Game.main.hud.pause_panel.visible = false
+			Loader.begin("Loading " + nm.to_lower())
+			Game.load_game(sl))
+	if not any:
+		_label(box, "No saved games yet.", 18, DIM).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_button(box, "BACK", back)
+
 func latest_save() -> String:
 	var best := ""
 	var bt := ""
@@ -716,7 +766,10 @@ func open_title() -> void:
 		_button(box, "CONTINUE  (" + Game.save_info(last) + ")", func():
 			Game.booted = true
 			close()
+			Loader.begin("Picking up where you left off")
 			Game.load_game(last))
+	if last != "":
+		_button(box, "LOAD GAME", func(): open_load(open_title))
 	_button(box, "NEW GAME", func(): Game.booted = true; _intro(0))
 	_button(box, "JUMP INTO THE VALLEY", func():
 		Game.booted = true

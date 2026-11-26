@@ -540,6 +540,7 @@ func new_game(nm: String, st: Dictionary, pts: int) -> void:
 # through Haven 12's great door, in either direction
 func travel_area(a: String, x: float, z: float, yaw: float) -> void:
 	save_game("auto")
+	Loader.begin({"vault": "Into Haven 12", "world": "Out into the valley", "cells": "Going inside", "khole": "Down the Hole"}.get(a, "Loading"))
 	load_area(a)
 	pending_pos = [x, height(x, z), z, yaw]
 	main.restart_keep()

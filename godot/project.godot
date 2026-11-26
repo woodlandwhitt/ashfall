@@ -5,7 +5,13 @@ config_version=5
 
 config/name="Ashfall Godot"
 config/description="Ashfall: Meridian, native Godot test slice"
-run/main_scene="res://main.tscn"
+run/main_scene="res://boot.tscn"
+boot_splash/bg_color=Color(0.03, 0.02, 0.015, 1)
+boot_splash/show_image=true
+boot_splash/image="res://boot_splash.png"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
+boot_splash/stretch_mode=1
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
 
@@ -18,6 +24,7 @@ general/text_to_speech=true
 Patcher="*res://scripts/patcher.gd"
 Sfx="*res://scripts/sfx.gd"
 Game="*res://scripts/game.gd"
+Loader="*res://scripts/loader.gd"
 
 [display]
 

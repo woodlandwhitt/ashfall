@@ -235,7 +235,11 @@ func _ready() -> void:
 	root.add_child(term)
 	_build_dialogue()
 	dead_panel = _center_panel("You died", [["Get up", func(): Game.main.respawn()]])
-	pause_panel = _center_panel("Paused", [["Resume", toggle_pause], ["Save game", _save_now], ["Settings", _open_settings],
+	pause_panel = _center_panel("Paused", [["Resume", toggle_pause], ["Save game", _save_now], ["Load game", func():
+			pause_panel.visible = false
+			screens.open_load(func():
+				screens.close()
+				pause_panel.visible = true)], ["Settings", _open_settings],
 		["Developer", func(): toggle_pause(); toggle_dev()], ["Forge mode", func(): toggle_pause(); Game.main.forge.toggle()],
 		["Main menu", func(): toggle_pause(); screens.open_title()]])
 	settings_panel = _center_panel("Settings", [["Graphics", _open_gfx], ["Camera: first / third person", func(): Game.player.toggle_view(); _settings_labels()],

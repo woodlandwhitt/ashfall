@@ -721,6 +721,7 @@ func _item_card(R: VBoxContainer, id: String) -> void:
 				show_tab(current), 140)
 
 # ---------------------------------------------------------------- DATA: QUESTS
+var quest_history := false
 func _quests() -> void:
 	var lr := _split(0.9)
 	var L: VBoxContainer = _scroll(lr[0])
@@ -728,12 +729,34 @@ func _quests() -> void:
 	var active := []
 	var done := []
 	for q in Game.quests:
-		(done if Game.quests[q].done else active).append(q)
+		# a quest whose last stage is behind it counts as finished even if nothing marked it so
+		var over: bool = Game.quests[q].done or Game.stage(q) >= (Game.qdef(q).get("stages", []) as Array).size()
+		(done if over else active).append(q)
+	# ACTIVE and HISTORY are separate lists now (build 17): finished quests leave the active list for the history
+	var tabs := HBoxContainer.new()
+	L.add_child(tabs)
+	for k in ["ACTIVE", "HISTORY"]:
+		var on: bool = (k == "HISTORY") == quest_history
+		var tb := _list_button(tabs, "%s (%d)" % [k, active.size() if k == "ACTIVE" else done.size()], on, func():
+			quest_history = k == "HISTORY"
+			sel_quest = ""
+			show_tab("QUESTS"))
+		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if quest_history:
+		active = []
+	else:
+		done = []
 	active.sort_custom(func(a, b): return int(Game.qdef(a).get("main", false)) > int(Game.qdef(b).get("main", false)))
-	if sel_quest == "" or not Game.quests.has(sel_quest):
-		sel_quest = String(Game.flags.get("track", active[0] if not active.is_empty() else ""))
-	_title(L, "Active")
-	if active.is_empty():
+	if sel_quest == "" or not Game.quests.has(sel_quest) or (quest_history and not sel_quest in done) or (not quest_history and not sel_quest in active):
+		if quest_history:
+			sel_quest = String(done[done.size() - 1]) if not done.is_empty() else ""
+		else:
+			sel_quest = String(Game.flags.get("track", active[0] if not active.is_empty() else ""))
+			if not sel_quest in active:
+				sel_quest = String(active[0]) if not active.is_empty() else ""
+	if not quest_history:
+		_title(L, "Active")
+	if active.is_empty() and not quest_history:
 		_label(L, "No active quests. Talk to people.", 16, DIM)
 	for q in active:
 		var tracked: bool = Game.flags.get("track") == q
@@ -742,12 +765,14 @@ func _quests() -> void:
 			show_tab("QUESTS"))
 		if tracked and q != sel_quest:
 			b.add_theme_color_override("font_color", AMBERC)
-	_title(L, "Completed")
-	if done.is_empty():
-		_label(L, "None yet.", 16, DIM)
+	if quest_history:
+		_title(L, "Quest history")
+		if done.is_empty():
+			_label(L, "Nothing finished yet.", 16, DIM)
+	done.reverse()
 	for q in done:
 		var failed: bool = Game.quests[q].get("failed", false)
-		var b := _list_button(L, String(Game.qdef(q).get("t", q)) + ("  [FAILED]" if failed else ""), q == sel_quest, func():
+		var b := _list_button(L, ("✗ " if failed else "✓ ") + String(Game.qdef(q).get("t", q)) + ("  [FAILED]" if failed else ""), q == sel_quest, func():
 			sel_quest = q
 			show_tab("QUESTS"))
 		if q != sel_quest:
@@ -755,7 +780,7 @@ func _quests() -> void:
 	if sel_quest == "":
 		return
 	var d: Dictionary = Game.qdef(sel_quest)
-	var finished: bool = Game.quests[sel_quest].done
+	var finished: bool = Game.quests[sel_quest].done or Game.stage(sel_quest) >= (d.get("stages", []) as Array).size()
 	_title(R, String(d.get("t", sel_quest)))
 	if d.get("main", false):
 		_label(R, "Main quest", 15, AMBERC)

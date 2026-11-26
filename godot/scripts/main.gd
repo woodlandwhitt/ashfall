@@ -997,6 +997,12 @@ func _test_hooks() -> void:
 		player.global_position = Vector3(float(v[0]), Game.height(float(v[0]), float(v[1])) + 0.1, float(v[1]))
 		player.yaw = float(v[2]) if v.size() > 2 else 0.0
 		player.pitch = float(v[3]) if v.size() > 3 else 0.0
+	if args.has("loadscreen"):
+		await _wait(5)
+		hud.screens.open_load(hud.screens.close)
+	if args.has("pausemenu"):
+		await _wait(5)
+		hud.toggle_pause()
 	if args.has("startq"):
 		for q in String(args.startq).split(","):
 			Game.start(q)
@@ -3641,6 +3647,10 @@ func fast_travel(k: String) -> void:
 			p = q
 			break
 	p.y = Game.height(p.x, p.z) + 0.3
+	if Loader.begin("Travelling to " + String(L.name)):
+		Loader.progress(0.5)
+		await get_tree().process_frame
+		await get_tree().process_frame
 	player.global_position = p
 	player.velocity = Vector3.ZERO
 	chunks.load_now(p)
@@ -3771,6 +3781,13 @@ func restart_keep() -> void:
 	Game.nav_ready = false
 	get_tree().paused = false
 	Game.paused = false
+	# the loading screen goes up and gets drawn before the frame freezes on the rebuild
+	if not Loader.quiet():
+		if not Loader.shown:
+			Loader.begin("Loading")
+		Loader.building()
+		await get_tree().process_frame
+		await get_tree().process_frame
 	get_tree().reload_current_scene()
 
 # ---------------------------------------------------------------- effects
