@@ -1285,6 +1285,8 @@ func _test_hooks() -> void:
 		_floatscan()
 	if args.has("roofscan"):
 		await _roofscan()
+	if args.has("propscan"):
+		await _propscan()
 	if args.has("opendoor") and vault_dress:
 		vault_dress.open_great_door()
 	if args.has("topdown"):
@@ -3827,6 +3829,94 @@ func _roofscan() -> void:
 	f.store_string(JSON.stringify(out))
 	f.close()
 	print("ROOFSCAN done ", found)
+	get_tree().quit()
+
+# build 24: whole props the export left hanging over the ground (a van a foot above the road, chairs, crates,
+# barrels): every lone prop of a chunk (its own mesh, s_*) that touches nothing else and has only open air between
+# it and the ground is lowered until it rests on the ground. Results to user://propscan.json (file -> {"@mesh": drop}),
+# copied into data/settle.json, which chunks.gd applies as the chunk loads.
+func _propscan() -> void:
+	var out := {}
+	var found := 0
+	var space := get_world_3d().direct_space_state
+	var paths: Array = chunks.files.values()
+	paths.sort()
+	for path in paths:
+		var ps: PackedScene = load(path)
+		if ps == null:
+			continue
+		var fname := String(path).get_file().get_basename()
+		var n := ps.instantiate() as Node3D
+		add_child(n)
+		var mis: Array = []
+		for c in n.find_children("*", "MeshInstance3D", true, false):
+			var mi := c as MeshInstance3D
+			if mi.mesh == null or mi.mesh.get_surface_count() == 0:
+				continue
+			var sb := StaticBody3D.new()
+			sb.collision_layer = 1 << 19
+			var cs := CollisionShape3D.new()
+			cs.shape = mi.mesh.create_trimesh_shape()
+			sb.add_child(cs)
+			mi.add_child(sb)
+			mis.append([mi, sb])
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		for e in mis:
+			var mi: MeshInstance3D = e[0]
+			if not String(mi.name).begins_with("s_"):
+				continue
+			var ab: AABB = mi.global_transform * mi.get_aabb()
+			if ab.size.x > 12.0 or ab.size.z > 12.0 or ab.size.y > 8.0 or ab.size.length() < 0.3:
+				continue
+			# the ground under it, all round
+			var gmax := -INF
+			var gmin := INF
+			for fx in [0.1, 0.5, 0.9]:
+				for fz in [0.1, 0.5, 0.9]:
+					var gy: float = Game.height(ab.position.x + ab.size.x * fx, ab.position.z + ab.size.z * fz)
+					gmax = maxf(gmax, gy)
+					gmin = minf(gmin, gy)
+			var gap := ab.position.y - gmax
+			if gap < 0.12 or gap > 6.0:
+				continue
+			# touching anything else (resting on a table, hung on a wall, part of something bigger)? then it's held
+			var q := PhysicsShapeQueryParameters3D.new()
+			var bs := BoxShape3D.new()
+			bs.size = ab.size + Vector3.ONE * 0.08
+			q.shape = bs
+			q.transform = Transform3D(Basis(), ab.get_center())
+			q.collision_mask = 1 << 19
+			q.exclude = [(e[1] as StaticBody3D).get_rid()]
+			var held := false
+			for h in space.intersect_shape(q, 4):
+				held = true
+			if held:
+				continue
+			# and nothing under it but air (a sweep of its footprint straight down to the first thing it meets)
+			var sq := PhysicsShapeQueryParameters3D.new()
+			var fb := BoxShape3D.new()
+			fb.size = Vector3(maxf(0.05, ab.size.x * 0.9), 0.05, maxf(0.05, ab.size.z * 0.9))
+			sq.shape = fb
+			sq.transform = Transform3D(Basis(), Vector3(ab.get_center().x, ab.position.y - 0.03, ab.get_center().z))
+			sq.motion = Vector3(0, -(gap + 0.5), 0)
+			sq.collision_mask = (1 << 19) | 1
+			sq.exclude = [(e[1] as StaticBody3D).get_rid()]
+			var cm := space.cast_motion(sq)
+			var drop := gap
+			if not cm.is_empty() and float(cm[0]) < 1.0:
+				drop = minf(gap, float(cm[0]) * (gap + 0.5) + 0.03)
+			if drop < 0.12:
+				continue
+			out.get_or_add(fname, {})["@" + String(n.get_path_to(mi))] = snappedf(drop, 0.01)
+			found += 1
+			print("PROP %s %s at %s size %s floats %.2f" % [fname, mi.name, str(ab.get_center().snapped(Vector3.ONE * 0.1)), str(ab.size.snapped(Vector3.ONE * 0.1)), drop])
+		n.queue_free()
+		await get_tree().process_frame
+	var f := FileAccess.open("user://propscan.json", FileAccess.WRITE)
+	f.store_string(JSON.stringify(out))
+	f.close()
+	print("PROPSCAN done ", found)
 	get_tree().quit()
 
 # a piece shaped like a slab (two long axes, one thin one, lying more flat than upright): its centre, size and

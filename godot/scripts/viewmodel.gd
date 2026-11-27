@@ -200,10 +200,33 @@ func _mount(sk: Transform3D, long: bool, bb: AABB, fit: Basis, gf: Dictionary) -
 		lt.position -= (gb.inverse() * (sk_from_vm.basis * (lb_vm * Vector3(0, 0.07, 0)))) 
 	# the support hand reaches the handguard however far forward it is: the shoulder (out of sight) comes with it
 	ikl.stretch = long
+	# elbows down and out, as you'd hold a rifle (build 24: the support arm came in flat from the left with its
+	# elbow up, its sleeve across the bottom of the view); a handgun's arms reach straight out, elbows a little down
+	if long:
+		ikl.use_pole = true
+		ikl.pole = sk_from_vm * Vector3(-0.3, -1.0, 0.25)
+		ikr.use_pole = true
+		ikr.pole = sk_from_vm * Vector3(0.4, -1.0, 0.3)
+		ikl.shoulder = sk_from_vm.basis * Vector3(-0.06, -0.22, 0.08)
+		ikr.shoulder = sk_from_vm.basis * Vector3(0.03, -0.14, 0.07)
+		# and what's left of the upper arms near the eye dissolves (the long energy guns are held low and close,
+		# which brought a dark lump of sleeve into the corner of the view)
+		_arm_fade(0.34, 0.43)
 	guard_t = lt
 	ik_tgt = lt
 	if unit < 1e-6:
 		k_back = Vector3.BACK
+
+func _arm_fade(near: float, far: float) -> void:
+	for mi in skel.find_children("*", "MeshInstance3D", false, false):
+		var m := mi as MeshInstance3D
+		if not m.visible or m.mesh == null:
+			continue
+		for i in m.mesh.get_surface_count():
+			var mat := m.get_surface_override_material(i)
+			if mat is StandardMaterial3D:
+				(mat as StandardMaterial3D).distance_fade_min_distance = near
+				(mat as StandardMaterial3D).distance_fade_max_distance = far
 
 func _no_shadow(n: Node) -> void:
 	for c in n.find_children("*", "GeometryInstance3D", true, false):
@@ -350,9 +373,24 @@ func setup_melee(armed: bool, id: String) -> void:
 	holder.add_child(w)
 	_no_shadow(holder)
 	if two and melee_kind != "fist":
-		# a long handle takes both hands (build 22): the left a forearm's length up the haft from the right
+		# a long handle takes both hands (build 22): the left a forearm's length up the haft from the right, closed
+		# round it in a fist (build 24: it hung open beside the handle), its elbow down
 		holder.add_child(lt)
-		lt.position = Vector3(0.0, 0.3, 0.0)
+		var lfy := Vector3(0.22, 0.1, -1.0).normalized()
+		var lfx := Vector3(-1.0, 0.0, -0.15)
+		lfx = (lfx - lfy * lfx.dot(lfy)).normalized()
+		var lhand := Basis(lfy, PI) * Basis(lfx, lfy, lfx.cross(lfy).normalized())
+		var lb_mount: Basis = to_mount.call(Transform3D(lhand, Vector3.ZERO)).basis
+		lt.basis = (holder.transform.basis.orthonormalized().inverse() * lb_mount).orthonormalized()
+		lt.position = Vector3(0.0, 0.3, 0.0) - lt.basis * Vector3(-0.03, 0.065, 0.0)
+		ikl.pin_rotation = true
+		ikl.use_pole = true
+		ikl.pole = sk_from_vm * Vector3(-0.3, -0.8, -0.1)
+		ikr.use_pole = true
+		ikr.pole = sk_from_vm * Vector3(0.45, -0.75, 0.1)
+		var fcl := FingerCurl.new()
+		skel.add_child(fcl)
+		fcl.setup(skel, "l", 1.35)
 	# keep the weapon in the fist wherever the arm actually ends up
 	melee_off = rt.transform.affine_inverse() * holder.transform
 	melee_holder = holder

@@ -283,6 +283,20 @@ func _settle_slabs(root: Node3D, fname: String) -> void:
 	if not settle.has(fname):
 		return
 	for key in settle[fname]:
+		# a whole prop that floats: lowered as one (build 24, --propscan)
+		if String(key).begins_with("@"):
+			for c in root.get_children():
+				var pn := c.get_node_or_null(NodePath(String(key).substr(1)))
+				if pn is Node3D:
+					# straight down in the world, whatever its parents' frames
+					var t := Transform3D.IDENTITY
+					var x: Node = (pn as Node3D).get_parent()
+					while x != null and x != root and x is Node3D:
+						t = (x as Node3D).transform * t
+						x = x.get_parent()
+					(pn as Node3D).position += t.basis.inverse() * Vector3(0, -float(settle[fname][key]), 0)
+					break
+			continue
 		var parts := String(key).split("#")
 		var mi: Node = null
 		for c in root.get_children():

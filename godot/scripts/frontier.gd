@@ -1181,9 +1181,21 @@ static func _lookout(kit: Kit, d: Dictionary) -> void:
 	for p in [Vector2(-2.6, -2.6), Vector2(2.6, -2.6), Vector2(-2.6, 2.6), Vector2(2.6, 2.6)]:
 		kit.box("metal", Vector3(p.x, top + 1.25, p.y), Vector3(0.12, 2.5, 0.12), 0)
 	kit.cone("tin_red", Vector3(0, top + 2.5, 0), 4.3, 1.4, 4, PI * 0.25)
-	# on the roof, the radio aerial and a lightning rod; in the cab, the fire-finder, a stool, a cot, a water can, a bell
-	kit.cyl("metal", Vector3(0.6, top + 3.5, 0.6), 0.03, 0.02, 3.2, 5, 0)
-	kit.box("metal", Vector3(0.6, top + 5.6, 0.6), Vector3(0.9, 0.03, 0.03), 0)
+	# the roof seen from inside the cab (build 24: a cone only shows its outside, so from the cab the roof wasn't
+	# there and the aerial and the bell hung in the sky): a boarded ceiling with rafters, and the roof's underside
+	kit.box("plank_dk", Vector3(0, top + 2.47, 0), Vector3(5.3, 0.05, 5.3), 0)
+	for i in 5:
+		kit.box("plank", Vector3(-2.2 + i * 1.1, top + 2.41, 0), Vector3(0.1, 0.08, 5.3), 0)
+	kit.cone_under("tin_red", Vector3(0, top + 2.5, 0), 4.3, 1.4, 4, PI * 0.25)
+	# on the roof, the radio aerial (stood on the roof's peak, stayed) and a lightning rod; in the cab, the
+	# fire-finder, a stool, a cot, a water can, and the bell on its bracket under the ceiling
+	kit.cyl("metal", Vector3(0, top + 3.86, 0), 0.04, 0.025, 3.0, 6, 0)
+	kit.box("metal", Vector3(0, top + 6.2, 0), Vector3(0.9, 0.03, 0.03), 0)
+	for gy in [Vector3(0.0, 0.0, 0.0)]:
+		for k in 3:
+			var a := k * TAU / 3.0
+			kit.pole("metal", Vector3(0, top + 5.4, 0), Vector3(cos(a) * 1.6, top + 3.0, sin(a) * 1.6), 0.008)
+	kit.pole("metal", Vector3(1.9, top + 2.45, -1.9), Vector3(1.9, top + 2.38, -1.9), 0.02)
 	kit.cyl("metal", Vector3(-1.9, top, 2.1), 0.08, 0.08, 1.0, 6, 0)
 	kit.cyl("metal", Vector3(-1.9, top + 1.0, 2.1), 0.4, 0.4, 0.08, 12, 0)
 	kit.box("plank", Vector3(1.4, top + 0.42, 2.15), Vector3(1.9, 0.12, 0.75), 2)
@@ -2472,6 +2484,21 @@ class Kit:
 				Flora.tri(s, [base + d0 * rr, base + d0 * rr * shrink + lift, base + d1 * rr * shrink + lift], [n0, n0, n1], [w, w, w])
 				continue
 			Flora.tri(s, [base + d0 * r, base + Vector3(0, h, 0), base + d1 * r], [n0, (n0 + n1).normalized(), n1], [w, w, w])
+
+	# the inside of a cone (its triangles turned to face in), for a roof seen from under it
+	func cone_under(m: String, base: Vector3, r: float, h: float, seg: int, rot := 0.0) -> void:
+		if solids_only:
+			return
+		var s := _s(m)
+		var w := Color.WHITE
+		for k in seg:
+			var a0 := rot + k * TAU / seg
+			var a1 := rot + (k + 1) * TAU / seg
+			var d0 := Vector3(cos(a0), 0, sin(a0))
+			var d1 := Vector3(cos(a1), 0, sin(a1))
+			var n0 := -(d0 * h + Vector3(0, r, 0)).normalized()
+			var n1 := -(d1 * h + Vector3(0, r, 0)).normalized()
+			Flora.tri(s, [base + d0 * r * 0.99 - Vector3(0, 0.02, 0), base + d1 * r * 0.99 - Vector3(0, 0.02, 0), base + Vector3(0, h - 0.02, 0)], [n0, n1, (n0 + n1).normalized()], [w, w, w])
 
 	# a gable end: a triangle of wall 'thick' deep, width w, rising 'rise' above base
 	func prism(m: String, base: Vector3, w: float, rise: float, thick: float, solid := false) -> void:
