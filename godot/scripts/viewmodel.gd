@@ -280,7 +280,7 @@ func setup_melee(armed: bool, id: String) -> void:
 	var sk_from_vm := vm_from_sk.affine_inverse()
 	melee_kind = id if armed and id != "" and id != "fists" else "fist"
 	var two: bool = id in ["sledge", "bat"] or bool(Game.item(id).get("two", false))
-	var grip_vm := Vector3(0.2, -0.24, -0.38) if not two else Vector3(0.17, -0.27, -0.36)
+	var grip_vm := Vector3(0.2, -0.24, -0.38) if not two else Vector3(0.16, -0.3, -0.44)
 	if melee_kind == "fist":
 		grip_vm = Vector3(0.15, -0.19, -0.36)
 	for a in OS.get_cmdline_user_args():
@@ -333,7 +333,7 @@ func setup_melee(armed: bool, id: String) -> void:
 			var fc := FingerCurl.new()
 			skel.add_child(fc)
 			fc.setup(skel, side)
-	else:
+	elif not two:
 		skel.add_child(lt)
 		lt.position = sk_from_vm * Vector3(-0.3, -0.75, -0.05)
 	skel.add_child(ikl)
@@ -349,6 +349,10 @@ func setup_melee(armed: bool, id: String) -> void:
 	holder.transform = to_mount.call(Transform3D(wb, grip_vm))
 	holder.add_child(w)
 	_no_shadow(holder)
+	if two and melee_kind != "fist":
+		# a long handle takes both hands (build 22): the left a forearm's length up the haft from the right
+		holder.add_child(lt)
+		lt.position = Vector3(0.0, 0.3, 0.0)
 	# keep the weapon in the fist wherever the arm actually ends up
 	melee_off = rt.transform.affine_inverse() * holder.transform
 	melee_holder = holder
@@ -396,7 +400,9 @@ func _melee_mesh(k: String) -> Node3D:
 		var w := (load("res://guns/" + String(it.mglb) + ".glb") as PackedScene).instantiate() as Node3D
 		var ms := float(it.get("ms", 1.0))
 		w.scale = Vector3.ONE * ms
-		w.position.y = -0.05 * ms * (0.4 if ms < 1.5 else 0.6)
+		# held near the end of the haft: nothing reaching back past the fist into your face (build 22: an axe's handle
+		# ran back under the camera, a hand's width of it filling the bottom of the screen)
+		w.position.y = -0.05 * ms * (0.4 if ms < 1.5 else 0.12)
 		Weathering.apply(w, 0.6, false, true)
 		root.add_child(w)
 		return root

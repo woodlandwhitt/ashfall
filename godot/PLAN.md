@@ -296,8 +296,22 @@ Keep every existing quest and line, then deepen them:
    graves), Dead Air (Relay Station K's sentries and console, a broadcast on Meridian Free Radio). The old screenshots'
    issues re-checked in the game: Lantern Row's sign, tower and fence, the camp's logs, the reactor safe, door steps.
    `--b21test`, `--screen=menu[:options|load|credits]`, `--screen=loader:intro|splash`, `--heights=x0,z0,x1,z1,step`.
-20. **godot-22:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
+20. **godot-22:** *Status: shipped as a patch (to build 15, and to build 13).* **Falls hurt:** a drop of more than
+   about four metres costs health (six metres a little, twelve nearly half), with a thud and a grunt; anything more
+   than a hop lands with a thud. **Sounds:** a hit lands with a punch (Kenney's Impact Sounds, CC0) and now and then a
+   grunt; a jump rustles and sometimes grunts (grunts voiced with Piper, like everyone else). **The fire lookout**
+   (`_lookout`) is rebuilt to be climbed: eight railed flights, landings railed on their open side, a U-shaped cab
+   floor that no longer sits on your head over the last flights, legs and the first step down to the ground, a cot,
+   a stool, the aerial, a bell (`--towertest` climbs it). **Fire pits** (`FireFX.make_pit`): every campfire burns in a
+   ring of stones or of bricks, a cast-iron stove, a cut-down drum, or a cross of logs on its ashes, chosen by where
+   it is. **Rifles to the shoulder** (`Humanoid.shoulder_gun`): in third person and in raider hands a long gun rides
+   the chest with the butt in the shoulder and both hands on it, so it no longer points at the sky; the gun stays up
+   on your aim whatever your legs do. **Sharpshooters** carry rifles, keep 26-58 m off, back away when you close in
+   and hold still to shoot; the last gunmen still on the old stick rig (sharpshooters, hunters, hired guns,
+   warlords) are people now. **Two-handed tools** (axe, pickaxe, shovel, sledge, bat) take both hands in first
+   person and no longer run back past the camera. `--b22test`, `--sidecam_e`, `--tpside`.
+21. **godot-23:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
    Overseer's secret, the other vaults), real road meshes and terrain variety (washes, rock shelves, erosion), better
    ground and building textures, more GitHub character models for townspeople, interiors (the Spire's upper floors,
-   the silo shaft), companions from the north, a Forge tidy-up (brick and more materials), and the WebView build
-   retired.
+   the silo shaft), companions from the north, a Forge tidy-up (brick and more materials), a closer pass on the
+   first-person pistol hands (the support arm crosses wide on the bigger pistols), and the WebView build retired.

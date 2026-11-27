@@ -35,4 +35,6 @@ All third-party assets are free and need no sign-up.
   low-poly fox by PixelMannen (CC0); rigging and animation by tomkranis on Sketchfab (CC BY 4.0); glTF conversion by
   @AsoboStudio and @scurest. Texture recoloured for this game as a tan mutt.
 - **Alarm klaxon** (sfx/alarm.wav) and the boot splash: made for this game (tools inline in the build 17 notes).
+- **Player sounds** (sfx/p_hit*, sfx/p_thud*): Kenney's Impact Sounds (CC0), via series-ai/jam-ready-assets on
+  GitHub. The grunts (sfx/p_hurt*, p_jump*, p_land1) are voiced with Piper like the characters (see Voices).
 - **Engine:** Godot Engine 4.5, MIT licence.

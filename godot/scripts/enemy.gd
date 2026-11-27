@@ -722,7 +722,7 @@ func _physics_process(d: float) -> void:
 				elif zed:
 					a = "Zombie_Idle"
 				elif aim:
-					a = "Crouch_Idle_Loop" if def.get("sniper", false) and ap.has_animation("Crouch_Idle_Loop") else "Pistol_Aim_Neutral"
+					a = "Crouch_Idle_Loop" if (def.get("sniper", false) or type == "sniper") and ap.has_animation("Crouch_Idle_Loop") else "Pistol_Aim_Neutral"
 				var sgn := LegTwist.drive(lt, face_yaw, velocity) if spd > 0.3 else LegTwist.drive(lt, face_yaw, Vector3.ZERO)
 				Humanoid.play(ap, a, (clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0) * sgn)
 			if aim_hold:
@@ -817,7 +817,7 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 	var want_lo := 7.0
 	var want_hi := 20.0
 	var reach_aim := 28.0
-	var sniper: bool = def.get("sniper", false)
+	var sniper: bool = def.get("sniper", false) or type == "sniper"
 	if sniper:
 		# a sharpshooter keeps far off and works from where it is (build 22: it used to run up on you like the rest)
 		want_lo = 26.0

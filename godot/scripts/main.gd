@@ -1168,6 +1168,8 @@ func _test_hooks() -> void:
 		await _b20_test()
 	if args.has("b21test"):
 		await _b21_test()
+	if args.has("b22test"):
+		await _b22_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -2417,6 +2419,60 @@ func _float_audit() -> void:
 		if g - lo > 0.3:
 			print("FLOAT %s %s at %.1f,%.1f hangs %.2f m" % [k, String(d.get("id", "")), float(d.x), float(d.z), g - lo])
 	print("FLOAT done")
+	get_tree().quit()
+
+# build 22: falls hurt, fires sit in pits, sharpshooters keep their distance and shoulder their rifles
+func _b22_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	await _wait(10)
+	await _tp(-40.0, 150.0)
+	await _wait(20)
+	for h in [2.0, 6.0, 12.0]:
+		Game.hp = Game.hp_max
+		var gy := Game.height(player.global_position.x, player.global_position.z)
+		player.global_position.y = gy + h
+		player.velocity = Vector3.ZERO
+		await _wait(5)
+		for f in 240:
+			await get_tree().physics_frame
+			if player.is_on_floor():
+				break
+		await _wait(3)
+		out.append("fell %.0f m: lost %.0f of %.0f health" % [h, Game.hp_max - Game.hp, Game.hp_max])
+	Game.hp = Game.hp_max
+	var hp0 := Game.hp
+	Game.hurt(12.0)
+	out.append("hurt sound played, hp %.0f -> %.0f" % [hp0, Game.hp])
+	# the fire pits
+	var kinds := {}
+	for d in Frontier.layout():
+		if String(d.k) == "campfire":
+			var pk := String(d.get("pit", FireFX.pit_kind(float(d.x), float(d.z))))
+			kinds[pk] = int(kinds.get(pk, 0)) + 1
+	out.append("fire pits by kind: %s" % str(kinds))
+	var pit := FireFX.make_pit(0.8, "stove")
+	add_child(pit)
+	out.append("a stove pit has %d pieces and its fire %s" % [pit.get_child_count(), str(pit.has_meta("fire"))])
+	pit.queue_free()
+	# a sharpshooter spawned close backs off; its rifle is shouldered
+	Game.dev["god"] = true
+	var f := Vector3(-sin(player.yaw), 0, -cos(player.yaw))
+	var sp: Vector3 = player.global_position + f * 12.0
+	var sn = events._enemy("sniper", sp.x, sp.z, true)
+	sn.state = "chase"
+	await _wait(10)
+	var d0: float = sn.global_position.distance_to(player.global_position)
+	await _wait(360)
+	var d1: float = sn.global_position.distance_to(player.global_position) if is_instance_valid(sn) else -1.0
+	var shouldered := false
+	for ba in sn.model.find_children("*", "BoneAttachment3D", true, false):
+		if String((ba as BoneAttachment3D).bone_name) == "spine_03":
+			shouldered = true
+	out.append("sharpshooter %.0f m -> %.0f m after six seconds (keeps away %s); rifle shouldered %s" % [d0, d1, str(d1 > d0 + 4.0), str(shouldered)])
+	for l in out:
+		print("B22TEST ", l)
 	get_tree().quit()
 
 # build 21: the main menu, the options, and the three new places' quests
