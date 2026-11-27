@@ -1534,6 +1534,16 @@ static func _ruins20(L: Array) -> void:
 	L.append(R("kit", 1012, 101, 0, {"id": "k:q_Container_Green", "len": 6.0, "yaw": 0.0}))
 	L.append(R("chest", 1000.0, 94.8, 0, {"id": "rk_locker", "tier": "rare"}))
 	L.append(R("sign", 1000, 122, 0, {"text": "RELAY STATION K\nAUTHORIZED PERSONNEL\nSENTRIES ACTIVE"}))
+	# build 21: Hob Kettering's camp down the highway from Wayside, his truck dry; Ada Holloway's watch on the ridge road
+	L.append(R("kit", 876.0, -690.0, 0, {"id": "k:q_Vehicle_Truck", "len": 6.0, "yaw": 0.5}))
+	L.append(R("campfire", 868.5, -683.0, 0, {"s": 0.6}))
+	L.append(R("log_seat", 866.0, -681.0, 0, {"yaw": 0.6}))
+	L.append(R("tent", 863.0, -688.0, 1, {"w": 2.6, "d": 3.4}))
+	L.append(R("crates", 879.5, -685.5, 0, {"seed": 40}))
+	L.append(R("kit", 871.0, -692.0, 0, {"id": "k:q_Barrel", "len": 0.9}))
+	L.append(R("campfire", -300.0, -565.5, 0, {"s": 0.45}))
+	L.append(R("tarp", -304.0, -563.5, 0, {"yaw": 2.9}))
+	L.append(R("log_seat", -301.5, -568.5, 0, {"yaw": 0.2}))
 
 static func _pump(kit: Kit, d: Dictionary) -> void:
 	kit.box("concrete", Vector3(0, 0.1, 0), Vector3(1.2, 0.2, 0.7), 1)

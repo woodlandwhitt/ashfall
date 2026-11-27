@@ -1150,12 +1150,22 @@ func _test_hooks() -> void:
 		await _b18_test()
 	if args.has("b19test"):
 		await _b19_test()
+	if args.has("heights"):
+		var hv := String(args.heights).split(",")
+		for zz in range(int(hv[1]), int(hv[3]) + 1, int(hv[4])):
+			var row := ""
+			for xx in range(int(hv[0]), int(hv[2]) + 1, int(hv[4])):
+				row += "%6.1f" % Game.height(xx, zz)
+			print("H ", zz, " ", row)
+		get_tree().quit()
 	if args.has("floataudit"):
 		_float_audit()
 	if args.has("doortest"):
 		await _door_test()
 	if args.has("b20test"):
 		await _b20_test()
+	if args.has("b21test"):
+		await _b21_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -1413,6 +1423,32 @@ func _test_hooks() -> void:
 					show_node(sv[2])
 			"banner": Game.banner("QUEST COMPLETE", "Bad Water")
 			"title": hud.screens.open_title()
+			"loader":
+				var LS := LoadScreen.it()
+				await _wait(2)
+				if sv.size() > 1 and sv[1] == "splash":
+					# the picture for the native boot splash: the intro's last frame without the bar and the words
+					LS.play_intro(func(): pass)
+					LS.t = 30.0
+					for c in [LS.bar, LS.status, LS.tip, LS.stages, LS.skip_l, LS.card, LS.card_sub]:
+						c.visible = false
+					LS.ash.preprocess = 20.0
+				elif sv.size() > 1 and sv[1] == "intro":
+					LS.play_intro(func(): pass)
+					LS.t = float(sv[2]) if sv.size() > 2 else 1.0
+					LS.target = 0.35
+					LS.shown_p = 0.35
+				else:
+					LS._show("Loading slot 1")
+					LS.target = 0.64
+					LS.shown_p = 0.64
+				await _wait(5)
+			"menu":
+				MainMenu.it().open()
+				await _wait(30)
+				if sv.size() > 1:
+					MainMenu.it().call("_page_" + sv[1])
+					await _wait(10)
 			"drive":
 				Game.flags["buggy"] = {"fixed": true}
 				Game.give("buggy_key", 1)
@@ -2358,6 +2394,86 @@ func _float_audit() -> void:
 		if g - lo > 0.3:
 			print("FLOAT %s %s at %.1f,%.1f hangs %.2f m" % [k, String(d.get("id", "")), float(d.x), float(d.z), g - lo])
 	print("FLOAT done")
+	get_tree().quit()
+
+# build 21: the main menu, the options, and the three new places' quests
+func _b21_test() -> void:
+	var out: Array = []
+	Game.flags.erase("radio")
+	# the menu: up over the valley, the world paused under it, the options saved, gone again on RESUME
+	MainMenu.it().open()
+	await _wait(10)
+	var mm := MainMenu.it()
+	var items: Array = mm.list.get_children().filter(func(c): return c is Button).map(func(c): return String(c.text).strip_edges())
+	out.append("menu open %s, paused %s, hud hidden %s, items %s" % [str(mm.is_open()), str(get_tree().paused), str(not hud.visible), str(items)])
+	out.append("menu camera current %s" % str(mm.cam != null and mm.cam.current))
+	var s0 := Settings.num("sens")
+	Settings.set_num("sens", 1.5)
+	var yaw0: float = player.yaw
+	player.look(0.1, 0.0)
+	out.append("sensitivity 1.5: look 0.1 turned %.2f" % (yaw0 - player.yaw))
+	Settings.set_num("sens", s0)
+	mm._page_options()
+	await _wait(3)
+	out.append("options rows %d" % mm.side_body.get_child_count())
+	mm._page_load()
+	mm._page_credits()
+	await _wait(3)
+	mm.close()
+	await _wait(3)
+	out.append("closed: paused %s, hud %s, player camera %s" % [str(get_tree().paused), str(hud.visible), str(player.cam.current)])
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	Game.dev["god"] = true
+	# the Toll Road
+	await _tp(872.0, -680.0)
+	await _wait(20)
+	out.append(_dlg2("hob", ["Who runs", "clear the road"]))
+	out.append("toll_road active %s" % str(Game.G.questActive("toll_road")))
+	for i in 4:
+		Game.killed["ws" + str(i)] = 1
+	Game.check_quests()
+	out.append(_dlg2("hob", ["It's done", "Drive safe"]))
+	out.append("toll_road done %s, fuel can %d" % [str(Game.G.questDone("toll_road")), Game.count("fuel_can")])
+	# Holloway Ground
+	await _tp(-296.5, -565.0)
+	await _wait(20)
+	out.append(_dlg2("ada", ["What happened", "clear the fields"]))
+	for i in 4:
+		Game.killed["hf" + str(i)] = 1
+	await _tp(-284.0, -594.5)
+	await _wait(10)
+	for o in objects.grid.values():
+		for oo in o:
+			if oo._k == "point" and String(oo.id) == "hf_graves":
+				out.append("graves label: %s" % str(objects.point_label(oo)))
+				objects.point_use(oo)
+	Game.check_quests()
+	await _tp(-296.5, -565.0)
+	out.append(_dlg2("ada", ["The fields are clear", "Thank you"]))
+	out.append("holloway_ground done %s" % str(Game.G.questDone("holloway_ground")))
+	# Dead Air
+	await _tp(1000.0, 104.0)
+	await _wait(60)
+	Game.check_quests()
+	out.append("dead_air started on arrival %s" % str(Game.G.questKnown("dead_air")))
+	for i in 2:
+		Game.killed["rk" + str(i)] = 1
+	Game.stats["intellect"] = 7
+	for o in objects.grid.values():
+		for oo in o:
+			if oo._k == "point" and String(oo.id) == "rk_console":
+				out.append("console label: %s" % str(objects.point_label(oo)))
+				objects.point_use(oo)
+	out.append("radio queued: %s" % str(Game.flags.get("radio")))
+	Game.flags.erase("radio")
+	await _wait(30)
+	Game.check_quests()
+	Game.check_quests()
+	await _wait(5)
+	out.append("dead_air done %s" % str(Game.G.questDone("dead_air")))
+	for l in out:
+		print("B21TEST ", l)
 	get_tree().quit()
 
 # build 20: containers you can see and must look at, a gentler dog, the new places
@@ -4064,6 +4180,7 @@ func _radio_bus() -> String:
 		ds.drive = 0.12
 		ds.post_gain = -2.0
 		AudioServer.add_bus_effect(b, ds)
+		Settings.apply_audio()
 	return "Radio"
 
 func set_radio(on: bool) -> void:

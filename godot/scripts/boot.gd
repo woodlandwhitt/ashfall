@@ -23,7 +23,7 @@ func _process(d: float) -> void:
 	var st := ResourceLoader.load_threaded_get_status(MAIN, arr)
 	if not arr.is_empty():
 		LoadScreen.it().progress(float(arr[0]) * 0.55, "Loading")
-	var intro_done := skipped or t > 5.0
+	var intro_done := skipped or t > 4.6 + 4.4
 	if st == ResourceLoader.THREAD_LOAD_LOADED and intro_done and not switching:
 		switching = true
 		LoadScreen.it().intro = false

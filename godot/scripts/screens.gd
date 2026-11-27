@@ -887,6 +887,12 @@ func latest_save() -> String:
 	return best
 
 func open_title() -> void:
+	# build 21: the full-screen main menu over the valley (the old panel stays for the scripted test runs)
+	if not LoadScreen.quiet() or OS.get_cmdline_user_args().has("--menu"):
+		if panel.visible:
+			close()
+		MainMenu.it().open()
+		return
 	_open("title")
 	_clear()
 	var sp := Control.new()

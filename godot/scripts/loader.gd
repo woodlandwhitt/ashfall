@@ -47,6 +47,12 @@ var tip: Label
 var status: Label
 var bar: Bar
 var skip_l: Label
+var card: Label          # build 21: the cards before the title (engine, headphones)
+var card_sub: Label
+var stages: Label
+var tip_i := 0
+var tip_t := 0.0
+const CARD_T := 4.6      # how long the cards run before the emblem rises
 var shown := false
 var intro := false
 var t := 0.0
@@ -121,6 +127,11 @@ void fragment(){
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD
 	status = _label("", 17, Color(1.0, 0.76, 0.36))
 	skip_l = _label("tap to skip", 15, Color(0.7, 0.62, 0.5))
+	card = _label("", 46, Color(0.95, 0.9, 0.8))
+	card.add_theme_constant_override("outline_size", 6)
+	card.add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.01))
+	card_sub = _label("", 18, Color(1.0, 0.76, 0.36))
+	stages = _label("", 14, Color(0.75, 0.68, 0.55))
 	bar = Bar.new()
 	root.add_child(bar)
 	root.gui_input.connect(_tap)
@@ -149,7 +160,7 @@ func _layout() -> void:
 	sub.position = Vector2(0, s.y * 0.40 + 104)
 	sub.size = Vector2(s.x, 40)
 	var bw := minf(s.x * 0.62, 760.0)
-	bar.position = Vector2((s.x - bw) * 0.5, s.y * 0.78)
+	bar.position = Vector2((s.x - bw - 88.0) * 0.5, s.y * 0.78)
 	bar.size = Vector2(bw, 22)
 	status.position = Vector2(0, s.y * 0.78 - 34)
 	status.size = Vector2(s.x, 26)
@@ -157,6 +168,13 @@ func _layout() -> void:
 	tip.size = Vector2(s.x * 0.7, 60)
 	skip_l.position = Vector2(0, s.y - 34)
 	skip_l.size = Vector2(s.x, 24)
+	card_sub.position = Vector2(0, s.y * 0.42 - 34)
+	card_sub.size = Vector2(s.x, 26)
+	card.position = Vector2(0, s.y * 0.42)
+	card.size = Vector2(s.x, 60)
+	stages.position = Vector2(0, s.y * 0.78 + 30)
+	stages.size = Vector2(s.x, 20)
+	tip.position.y = s.y * 0.78 + 58
 
 static func quiet() -> bool:
 	return OS.get_cmdline_user_args().size() > 0
@@ -172,6 +190,8 @@ func play_intro(skip: Callable) -> void:
 	sub.modulate.a = 0.0
 	emblem.modulate.a = 0.0
 	skip_l.visible = true
+	card.visible = true
+	card_sub.visible = true
 	Sfx.play("geiger", -12.0, 0.8)
 
 # a load: a save, a door to another area, a long trip. Returns false (and shows nothing) under the test hooks.
@@ -184,6 +204,8 @@ func begin(text: String) -> bool:
 	title.modulate.a = 1.0
 	sub.modulate.a = 1.0
 	emblem.modulate.a = 1.0
+	card.visible = false
+	card_sub.visible = false
 	target = 0.12
 	shown_p = 0.0
 	waiting = true
@@ -196,7 +218,9 @@ func _show(text: String) -> void:
 	visible = true
 	root.modulate.a = 1.0
 	status.text = text.to_upper()
-	tip.text = "TIP: " + TIPS[randi() % TIPS.size()]
+	tip_i = randi() % TIPS.size()
+	tip_t = 0.0
+	tip.text = "TIP  ·  " + TIPS[tip_i]
 	shown_t = 0.0
 	_layout()
 
@@ -227,11 +251,42 @@ func _process(d: float) -> void:
 	shown_t += d
 	(bg.material as ShaderMaterial).set_shader_parameter("t", t)
 	emblem.turn = t
+	# a new tip every seven seconds, faded through
+	tip_t += d
+	if tip_t > 7.0:
+		tip.modulate.a = maxf(0.0, 1.0 - (tip_t - 7.0) * 3.0)
+		if tip_t > 7.35:
+			tip_t = 0.0
+			tip_i = (tip_i + 1) % TIPS.size()
+			tip.text = "TIP  ·  " + TIPS[tip_i]
+	else:
+		tip.modulate.a = minf(1.0, tip_t * 3.0)
+	# the stages, lit as the bar passes them
+	var names := ["LOADING", "BUILDING", "STREAMING", "READY"]
+	var at := [0.0, 0.55, 0.7, 0.995]
+	var line := ""
+	for i in names.size():
+		line += ("●  " if shown_p >= float(at[i]) else "○  ") + String(names[i]) + ("        " if i < names.size() - 1 else "")
+	stages.text = line
 	if intro:
-		emblem.modulate.a = clampf(t / 1.2, 0.0, 1.0)
-		title.modulate.a = clampf((t - 0.8) / 1.0, 0.0, 1.0)
-		sub.modulate.a = clampf((t - 1.6) / 1.0, 0.0, 1.0)
-		var w := 18.0 * maxf(0.0, 1.0 - (t - 1.6) / 1.4)
+		# first the cards (the engine, then headphones), each faded in and out, then the emblem and the title
+		var c0 := clampf(minf(t / 0.6, (2.2 - t) / 0.5), 0.0, 1.0)
+		var c1 := clampf(minf((t - 2.3) / 0.6, (CARD_T - t) / 0.5), 0.0, 1.0)
+		if t < 2.25:
+			card_sub.text = "P O W E R E D   B Y"
+			card.text = "GODOT ENGINE"
+			card.modulate.a = c0
+			card_sub.modulate.a = c0
+		else:
+			card_sub.text = "B E S T   W I T H"
+			card.text = "HEADPHONES ON"
+			card.modulate.a = c1
+			card_sub.modulate.a = c1
+		var ti := t - CARD_T
+		emblem.modulate.a = clampf(ti / 1.2, 0.0, 1.0)
+		title.modulate.a = clampf((ti - 0.8) / 1.0, 0.0, 1.0)
+		sub.modulate.a = clampf((ti - 1.6) / 1.0, 0.0, 1.0)
+		var w := 18.0 * maxf(0.0, 1.0 - (ti - 1.6) / 1.4)
 		sub.add_theme_constant_override("outline_size", 0)
 		sub.text = "M  E  R  I  D  I  A  N" if w <= 0.0 else " ".repeat(int(w * 0.2)) + "M  E  R  I  D  I  A  N"
 	# the game scene is up: follow the nearby chunks streaming in
@@ -262,6 +317,8 @@ func finish() -> void:
 	waiting = false
 	intro = false
 	fading = true
+	card.visible = false
+	card_sub.visible = false
 
 # a slow-turning trefoil over the sun
 class Emblem extends Control:
@@ -287,28 +344,46 @@ class Emblem extends Control:
 			var l := 0.06 if k % 3 == 0 else 0.03
 			draw_line(Vector2.from_angle(a) * r * 1.16, Vector2.from_angle(a) * r * (1.16 + l), Color(amber, 0.6), 1.5)
 
-# an amber bar in segments, the leading one flickering, with its percentage
+# the bar (build 21): a framed amber gauge with a gradient fill, a light sweeping along it, a glowing leading edge,
+# tick marks every tenth and the percentage in its own box at the end
 class Bar extends Control:
 	var value := 0.0
 	var t := 0.0
 	func _draw() -> void:
 		var s := size
 		var amber := Color(1.0, 0.72, 0.3)
-		draw_rect(Rect2(Vector2(-6, -6), s + Vector2(12, 12)), Color(0.05, 0.03, 0.02, 0.8))
-		draw_rect(Rect2(Vector2(-6, -6), s + Vector2(12, 12)), Color(amber, 0.55), false, 2.0)
-		for c in [Vector2(-6, -6), Vector2(s.x + 6, -6), Vector2(-6, s.y + 6), Vector2(s.x + 6, s.y + 6)]:
-			draw_rect(Rect2(c - Vector2(3, 3), Vector2(6, 6)), amber)
-		var n := 32
-		var gap := 3.0
-		var w := (s.x - gap * (n - 1)) / n
-		var lit := value * n
-		for i in n:
-			var x := i * (w + gap)
-			var a := 0.12
-			if i < int(lit):
-				a = 0.95
-			elif i == int(lit):
-				a = 0.3 + 0.5 * (0.5 + 0.5 * sin(t * 14.0))
-			draw_rect(Rect2(Vector2(x, 0), Vector2(w, s.y)), Color(amber, a))
+		var deep := Color(0.62, 0.28, 0.07)
+		# the frame
+		draw_rect(Rect2(Vector2(-8, -8), s + Vector2(16, 16)), Color(0.04, 0.025, 0.015, 0.85))
+		draw_rect(Rect2(Vector2(-8, -8), s + Vector2(16, 16)), Color(amber, 0.5), false, 2.0)
+		draw_rect(Rect2(Vector2(-3, -3), s + Vector2(6, 6)), Color(amber, 0.18), false, 1.0)
+		for c in [Vector2(-8, -8), Vector2(s.x + 8, -8), Vector2(-8, s.y + 8), Vector2(s.x + 8, s.y + 8)]:
+			draw_rect(Rect2(c - Vector2(4, 4), Vector2(8, 8)), amber)
+		# the fill: dark amber to bright, in a few vertical bands for a lit-glass look
+		var w := s.x * clampf(value, 0.0, 1.0)
+		if w > 1.0:
+			var bands := 6
+			for i in bands:
+				var f := float(i) / bands
+				var col := deep.lerp(amber, 0.35 + 0.65 * (1.0 - absf(f - 0.35) * 1.4))
+				draw_rect(Rect2(Vector2(0, s.y * f), Vector2(w, s.y / bands + 0.5)), col)
+			# a light running along the filled part
+			var sw := fposmod(t * 0.55, 1.4) - 0.2
+			var sx := sw * s.x
+			if sx > 0 and sx < w:
+				for k in 10:
+					var a := 0.28 * (1.0 - k / 10.0)
+					draw_rect(Rect2(Vector2(clampf(sx - k * 4.0, 0, w), 0), Vector2(4, s.y)), Color(1, 0.95, 0.8, a))
+			# the leading edge glows
+			for k in 4:
+				draw_rect(Rect2(Vector2(w - 2 - k * 2, -2 - k), Vector2(3, s.y + 4 + k * 2)), Color(1.0, 0.9, 0.6, 0.35 - k * 0.07))
+		# ticks every tenth
+		for i in range(1, 10):
+			var x := s.x * i / 10.0
+			draw_line(Vector2(x, s.y + 3), Vector2(x, s.y + 7), Color(amber, 0.5), 1.0)
+		# the readout
 		var font := ThemeDB.fallback_font
-		draw_string(font, Vector2(s.x + 14, s.y - 4), "%d%%" % int(value * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 16, amber)
+		var box := Rect2(Vector2(s.x + 18, -8), Vector2(70, s.y + 16))
+		draw_rect(box, Color(0.04, 0.025, 0.015, 0.85))
+		draw_rect(box, Color(amber, 0.5), false, 2.0)
+		draw_string(font, Vector2(s.x + 18, s.y - 1), "%d%%" % int(value * 100.0), HORIZONTAL_ALIGNMENT_CENTER, 70, 18, amber)

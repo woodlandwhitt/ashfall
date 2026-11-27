@@ -249,6 +249,7 @@ func _ready() -> void:
 	settings_panel.offset_top = -260
 	settings_panel.offset_bottom = 260
 	Settings.load_all()
+	Settings.apply_audio()
 	_gfx_label()
 
 	Game.message.connect(add_msg)

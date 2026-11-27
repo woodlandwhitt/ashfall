@@ -163,8 +163,9 @@ func _no_shadow(n: Node) -> void:
 		_no_shadow(c)
 
 func look(dx: float, dy: float) -> void:
-	yaw -= dx
-	pitch = clampf(pitch - dy, -1.45, 1.45)
+	var k := Settings.num("sens")
+	yaw -= dx * k
+	pitch = clampf(pitch - dy * k, -1.45, 1.45)
 
 func _unhandled_input(e: InputEvent) -> void:
 	if Game.paused or Game.main.in_dialog():

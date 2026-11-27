@@ -283,8 +283,21 @@ Keep every existing quest and line, then deepen them:
    generator and aerial, a notice board, string lights, a garden plot, drums, pallets and tyres. **New places:**
    Wayside 9 (a fuel stop raiders hold as a toll post), Holloway Farm (burnt, ghouls in the fields) and Relay Station K
    (sentry robots still on guard), each with a stash. `--b20test`.
-19. **godot-21:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
-   Overseer's secret, the other vaults), quests for the three new places, real road meshes and terrain variety
-   (washes, rock shelves, erosion), better ground and building textures, more GitHub character models for
-   townspeople, interiors (the Spire's upper floors, the silo shaft), companions from the north, a Forge tidy-up
-   (brick and more materials), and the WebView build retired.
+19. **godot-21:** *Status: shipped as a patch (to build 15, and to build 13); the new boot splash needs the APK.*
+   **Main menu** (`scripts/menu.gd`, `MainMenu`): full screen over the live valley, a camera drifting round where you
+   are through three slow views, the menu down the left (RESUME when you came from the game, CONTINUE with where and
+   when, NEW GAME with an are-you-sure when there's a game to lose, LOAD GAME, OPTIONS, CREDITS, EXPLORE THE VALLEY,
+   QUIT), pages in a panel on the right. **Options:** graphics preset, field of view, look sensitivity, volume, radio
+   volume, camera, DEV and FORGE buttons (sensitivity and volumes are new, in `Settings`). **Intro and loading:** two
+   cards before the title (powered by Godot, headphones), a framed gauge with a gradient fill, a light running along
+   it, a glowing edge, tenth ticks and a boxed percentage; a stage line (loading, building, streaming, ready); tips that
+   change every seven seconds. The boot splash is now the intro's own last frame. **Quests for build 20's places**
+   (`story21.mjs`): The Toll Road (Hob Kettering, Wayside 9), Holloway Ground (Ada Holloway, the farm and its
+   graves), Dead Air (Relay Station K's sentries and console, a broadcast on Meridian Free Radio). The old screenshots'
+   issues re-checked in the game: Lantern Row's sign, tower and fence, the camp's logs, the reactor safe, door steps.
+   `--b21test`, `--screen=menu[:options|load|credits]`, `--screen=loader:intro|splash`, `--heights=x0,z0,x1,z1,step`.
+20. **godot-22:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
+   Overseer's secret, the other vaults), real road meshes and terrain variety (washes, rock shelves, erosion), better
+   ground and building textures, more GitHub character models for townspeople, interiors (the Spire's upper floors,
+   the silo shaft), companions from the north, a Forge tidy-up (brick and more materials), and the WebView build
+   retired.
