@@ -508,8 +508,11 @@ func shot_fx(kind: String) -> void:
 	recoil = clampf(float(it.get("dmg", 15)) / 25.0, 0.6, 2.0)
 	var quiet: bool = it.get("quiet", false)
 	flash.light_energy = 1.2 if quiet else 6.0
-	flash_q.visible = not quiet
-	flash_q.rotation.z = randf() * TAU
+	# build 23: a real flash, smoke and a spent case instead of a flat orange square
+	flash_q.visible = false
+	if gun.visible and vm and vm.muzzle:
+		var gsize := 1.0 if kind == "pistol" else (1.8 if kind == "shotgun" else (1.0 if kind == "energy" else 1.35))
+		GunFX.muzzle(vm.muzzle, gsize, quiet, kind == "energy", kind != "energy" and int(it.get("pellets", 1)) <= 1, -cam.global_basis.z)
 	var snd: String = it.get("snd", SND.get(kind, "pistol"))
 	Sfx.play(snd, -17.0 if quiet else -3.0, randf_range(0.95, 1.05) * (1.4 if kind == "energy" else 1.0) * (1.5 if quiet else 1.0))
 
@@ -559,7 +562,7 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 				if head and not killed:
 					Sfx.play("k_click", -10.0, 1.6)
 		else:
-			Game.main.impact(hit.position, hit.normal)
+			Game.main.impact(hit.position, hit.normal, GunFX.surface(hit))
 		if round_kind == "ex" and burst_ok:
 			_ex_burst(hit.position, dmg * 0.35, c)
 

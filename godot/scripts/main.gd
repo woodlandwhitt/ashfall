@@ -1498,7 +1498,13 @@ func _test_hooks() -> void:
 			scam.look_at(tgt.global_position + Vector3.UP * 1.25, Vector3.UP)
 		get_tree().process_frame.connect(func(): if is_instance_valid(scam): follow.call())
 	if args.has("shot"):
+		var fire_at := int(args.get("fireat", "-1"))
 		for i in int(args.get("frames", "40")):
+			# --fireat=N: pull the trigger N frames before the picture (--fireat2 for a second shot earlier)
+			if i == int(args.get("frames", "40")) - fire_at or (args.has("fireat2") and i == int(args.get("frames", "40")) - int(args.fireat2)):
+				Game.mag = maxi(Game.mag, 5)
+				player.fire_cd = 0.0
+				player.fire()
 			await get_tree().process_frame
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(args.shot)
@@ -4672,9 +4678,11 @@ func _puff(pos: Vector3, normal: Vector3, col: Color, n: int, spd: float) -> voi
 	p.emitting = true
 	get_tree().create_timer(1.2).timeout.connect(p.queue_free)
 
-func impact(pos: Vector3, normal: Vector3) -> void:
-	_puff(pos + normal * 0.05, normal, Color(0.62, 0.53, 0.42, 0.9), 10, 3.0)
-	Sfx.play_at(["x_rock0", "x_rock1"][randi() % 2], pos, -6.0)
+func impact(pos: Vector3, normal: Vector3, kind := "") -> void:
+	# build 23: by what was hit (dirt, stone, wood or metal), with a hole left behind
+	if kind == "":
+		kind = "dirt" if Game.area == "world" and absf(pos.y - Game.height(pos.x, pos.z)) < 0.25 else "stone"
+	GunFX.impact(self, pos, normal, kind)
 
 func blood(pos: Vector3, dir: Vector3) -> void:
 	_puff(pos, -dir, Color(0.45, 0.02, 0.02, 0.95), 12, 2.5)
@@ -4704,6 +4712,10 @@ func float_text(at: Vector3, t: String) -> void:
 	tw.tween_callback(l.queue_free)
 
 func tracer(a: Vector3, b: Vector3, col: Color = Color(1.0, 0.85, 0.5, 0.8)) -> void:
+	# build 23: a streak that travels, not a line drawn whole; beams stay lines (and get a streak too)
+	GunFX.tracer(self, a, b, col, 0.02 if col.b > col.r else 0.01)
+	if col.b <= col.r:
+		return
 	var mi := MeshInstance3D.new()
 	var im := ImmediateMesh.new()
 	var m := StandardMaterial3D.new()

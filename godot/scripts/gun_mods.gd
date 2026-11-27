@@ -35,6 +35,16 @@ static func attach(gun: Node3D, fit: Basis, id: String) -> void:
 	var bottom := fb.position.y
 	var cx := fb.get_center().x
 	var muzzle_y := top - fb.size.y * 0.18
+	# build 23: sit things on the gun's actual surface, found from its mesh, not on the top of its bounding box (a
+	# reflex sight floated a hand's width over the receiver of any gun with a carry handle or a tall front sight)
+	var pts := _points(gun, fr)
+	var mz := _section(pts, front, front + 0.04 * L)
+	if mz.z > 0.0:
+		muzzle_y = mz.y
+		cx = mz.x
+	var surf := func(z: float) -> Vector2:
+		var s := _section(pts, z - 0.05 * L, z + 0.05 * L)
+		return Vector2(s.x, s.w) if s.z > 0.0 else Vector2(cx, top)
 	var metal := _m(Color(0.16, 0.16, 0.17), 0.6, 0.4)
 	var M: Dictionary = Game.ARSENAL.get("mods", {})
 	for slot in fitted:
@@ -53,15 +63,23 @@ static func attach(gun: Node3D, fit: Basis, id: String) -> void:
 					_box(fr, Vector3(0.03 * L, 0.01 * L, 0.02 * L), Vector3(cx, top + 0.003 * L, front + (0.05 + k * 0.04) * L), _m(Color(0.05, 0.05, 0.05), 0.2, 0.8))
 			"scope":
 				var z := lerpf(rear, front, 0.55)
-				_cyl(fr, 0.021 * L, 0.26 * L, Vector3(cx, top + 0.04 * L, z), metal)
-				_cyl(fr, 0.018 * L, 0.004 * L, Vector3(cx, top + 0.04 * L, z - 0.131 * L), _m(Color(0.1, 0.2, 0.35), 0.9, 0.1))
+				var sa: Vector2 = surf.call(z - 0.07 * L)
+				var sb: Vector2 = surf.call(z + 0.07 * L)
+				var st := maxf(sa.y, sb.y)
+				var sx := (sa.x + sb.x) * 0.5
+				_cyl(fr, 0.021 * L, 0.26 * L, Vector3(sx, st + 0.045 * L, z), metal)
+				_cyl(fr, 0.018 * L, 0.004 * L, Vector3(sx, st + 0.045 * L, z - 0.131 * L), _m(Color(0.1, 0.2, 0.35), 0.9, 0.1))
 				for dz in [-0.07, 0.07]:
-					_box(fr, Vector3(0.018 * L, 0.03 * L, 0.016 * L), Vector3(cx, top + 0.015 * L, z + dz * L), metal)
+					var sr: Vector2 = surf.call(z + dz * L)
+					var hh := st + 0.03 * L - sr.y
+					_box(fr, Vector3(0.018 * L, hh, 0.016 * L), Vector3(sx, sr.y + hh * 0.5, z + dz * L), metal)
 			"reflex":
 				var z2 := lerpf(rear, front, 0.4)
-				_box(fr, Vector3(0.05 * L, 0.012 * L, 0.06 * L), Vector3(cx, top + 0.006 * L, z2), metal)
-				_box(fr, Vector3(0.05 * L, 0.05 * L, 0.008 * L), Vector3(cx, top + 0.035 * L, z2 - 0.02 * L), _m(Color(0.25, 0.35, 0.4, 0.4), 0.3, 0.1, true))
-				_box(fr, Vector3(0.006 * L, 0.006 * L, 0.004 * L), Vector3(cx, top + 0.035 * L, z2 - 0.016 * L), _glow(Color(1.0, 0.15, 0.1)))
+				var s2: Vector2 = surf.call(z2)
+				var r_top := s2.y
+				_box(fr, Vector3(0.05 * L, 0.012 * L, 0.06 * L), Vector3(s2.x, r_top + 0.006 * L, z2), metal)
+				_box(fr, Vector3(0.05 * L, 0.05 * L, 0.008 * L), Vector3(s2.x, r_top + 0.035 * L, z2 - 0.02 * L), _m(Color(0.25, 0.35, 0.4, 0.4), 0.3, 0.1, true))
+				_box(fr, Vector3(0.006 * L, 0.006 * L, 0.004 * L), Vector3(s2.x, r_top + 0.035 * L, z2 - 0.016 * L), _glow(Color(1.0, 0.15, 0.1)))
 			"big_mag":
 				_box(fr, Vector3(0.05 * L, 0.24 * L, 0.08 * L), Vector3(cx, bottom - 0.06 * L, lerpf(rear, front, 0.5)), metal)
 			"drum_mag":
@@ -78,6 +96,42 @@ static func attach(gun: Node3D, fit: Basis, id: String) -> void:
 			"capacitor", "heavy_receiver":
 				_cyl(fr, 0.025 * L, 0.12 * L, Vector3(cx + fb.size.x * 0.55, lerpf(bottom, top, 0.6), lerpf(rear, front, 0.4)),
 					_glow(Color(0.4, 0.8, 1.0)) if String(fitted[slot]) == "capacitor" else metal)
+
+# every vertex of the gun's meshes, in the mods frame
+static func _points(gun: Node3D, fr: Node3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var to_fr := fr.transform.affine_inverse()
+	for mi in gun.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null or m.get_parent() == fr or fr.is_ancestor_of(m):
+			continue
+		var x := Transform3D.IDENTITY
+		var n: Node = m
+		while n != gun and n is Node3D:
+			x = (n as Node3D).transform * x
+			n = n.get_parent()
+		var xf := to_fr * x
+		for si in m.mesh.get_surface_count():
+			var arr := m.mesh.surface_get_arrays(si)
+			for v in arr[Mesh.ARRAY_VERTEX]:
+				out.append(xf * v)
+	return out
+
+# across a slice of the gun from z0 to z1: (centre x, middle y, count, top y)
+static func _section(pts: PackedVector3Array, z0: float, z1: float) -> Vector4:
+	var lo := INF
+	var hi := -INF
+	var xs := 0.0
+	var n := 0
+	for p in pts:
+		if p.z >= minf(z0, z1) and p.z <= maxf(z0, z1):
+			lo = minf(lo, p.y)
+			hi = maxf(hi, p.y)
+			xs += p.x
+			n += 1
+	if n == 0:
+		return Vector4(0, 0, 0, 0)
+	return Vector4(xs / n, (lo + hi) * 0.5 + (hi - lo) * 0.2, n, hi)
 
 static func _m(c: Color, metal: float, rough: float, clear := false) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()

@@ -257,6 +257,39 @@ func _world() -> void:
 	_btn(g, "RESTOCK SHOPS", func(): Game.shops = {})
 	_btn(g, "FIX AND PARK BUGGY", func(): run("buggy"))
 	_btn(g, "SAVE NOW", func(): Game.save_game("auto"))
+	# build 23: Silo 9's ending on demand, seen from the ridge or from the hatch
+	g = _row("Silo 9", "Ending now: %s. The launch and the scuttle start their count where you stand; WATCH takes you to the ridge first" % String(Game.flags.get("silo_end", "none")))
+	var silo_go := func(kind: String, watch: bool):
+		Game.main.hud.toggle_dev()
+		if Game.area != "world":
+			Game.msg("Go back to the surface first.")
+			return
+		if watch:
+			var c := Silo9.CAP
+			run("tp %s %s" % [str(c.x - 150.0), str(c.z + 95.0)])
+			Game.player.yaw = atan2(-(150.0), -(-95.0))
+			Game.player.pitch = 0.12
+		Game.flags["silo_end"] = "launched" if kind == "launch" else "blown"
+		Game.flags["silo_seq"] = kind
+		Game.flags["silo_count"] = 20.0
+		if kind == "scuttle":
+			Game.flags["silo_buried"] = 1
+		else:
+			Game.flags["silo_launched"] = 1
+		Game.msg("Silo 9: %s sequence started. Twenty seconds." % ("launch" if kind == "launch" else "scuttle"))
+	_btn(g, "LAUNCH", func(): silo_go.call("launch", false))
+	_btn(g, "WATCH THE LAUNCH", func(): silo_go.call("launch", true))
+	_btn(g, "SCUTTLE", func(): silo_go.call("scuttle", false))
+	_btn(g, "WATCH THE SCUTTLE", func(): silo_go.call("scuttle", true))
+	_btn(g, "TO THE SILO", func():
+		Game.main.hud.toggle_dev()
+		run("tp %s %s" % [str(Silo9.CAP.x - 14.0), str(Silo9.CAP.z + 6.0)]))
+	_btn(g, "RESET", func():
+		for k in ["silo_end", "silo_seq", "silo_count", "silo_buried", "silo_launched", "burst_day", "silo_burst"]:
+			Game.flags.erase(k)
+		Game.main.hud.toggle_dev()
+		var pp: Vector3 = Game.player.global_position
+		Game.travel_area("world", pp.x, pp.z, Game.player.yaw))
 	g = _row("Open a shop", "From anywhere")
 	for k in Game.L.get("vendors", {}):
 		_btn(g, k.to_upper(), func():

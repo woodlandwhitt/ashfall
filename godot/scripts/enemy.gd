@@ -980,6 +980,16 @@ func _attack(dist: float, moving := 0.0) -> void:
 	var you_move := clampf(Vector2(pv.x, pv.z).length() / 6.0, 0.0, 1.0)
 	var chance := clampf(0.78 - dist * 0.02, 0.22, 0.78) * (0.6 if crip.has("arms") else 1.0) * (1.0 - you_move * 0.35) * (0.8 if moving > 0.5 else 1.0)
 	var hit_it := randf() < chance
-	Game.main.tracer(global_position + Vector3.UP * 1.4 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5, tp + (Vector3.ZERO if hit_it else Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * miss * 2.0))
+	var from := global_position + Vector3.UP * 1.4 + Vector3(sin(face_yaw), 0, cos(face_yaw)) * 0.5
+	var to := tp + (Vector3.ZERO if hit_it else Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * miss * 2.0)
+	Game.main.tracer(from, to)
+	# build 23: its muzzle flashes and smokes, and a miss kicks up whatever it lands in behind you
+	GunFX.muzzle_at(Game.main, from, to - from, 1.0)
+	if not hit_it:
+		var q := PhysicsRayQueryParameters3D.create(from, from + (to - from).normalized() * 60.0, 1)
+		q.exclude = [get_rid(), Game.player.get_rid()]
+		var mh := get_world_3d().direct_space_state.intersect_ray(q)
+		if mh:
+			GunFX.impact(Game.main, mh.position, mh.normal, GunFX.surface(mh))
 	if hit_it:
 		_deal(dmg * randf_range(0.7, 1.1))
