@@ -106,7 +106,7 @@ static func layout() -> Array:
 		var a := PI * 0.35 + i * (PI * 1.3 / 6.0)
 		L.append(R("tipi", 1310 + cos(a) * 16.0, -330 + sin(a) * 16.0, 0, {"rad": 2.3 + (i % 2) * 0.4, "face": a + PI}))
 	L.append(R("longhouse", 1310, -349, 0, {"w": 12, "d": 7}))
-	L.append(R("campfire", 1310.0, -330.0, 0, {"s": 1.6}))
+	L.append(R("campfire", 1310.0, -330.0, 0, {"s": 1.6, "pit": "stones"}))
 	L.append(R("totem", 1280, -334.5, 0, {"h": 4.2}))
 	L.append(R("totem", 1280, -325.5, 0, {"h": 4.2}))
 	L.append(R("totem", 1310, -339, 0, {"h": 5.5}))
@@ -204,7 +204,7 @@ static func layout() -> Array:
 	# Haven's Door: the camp the vault folk pitched outside their own front door while they wait on the regulator
 	for t in [[-8.0, 206.0], [8.0, 206.0], [-4.0, 197.0], [6.0, 196.0]]:
 		L.append(R("tent", t[0], t[1], 0))
-	L.append(R("campfire", 0.0, 203.0, 0, {"s": 0.8}))
+	L.append(R("campfire", 0.0, 203.0, 0, {"s": 0.8, "pit": "stones"}))
 	L.append(R("log_seat", -2.6, 203.6, 0, {"yaw": 1.3}))
 	L.append(R("log_seat", 2.6, 202.4, 0, {"yaw": -1.7}))
 	L.append(R("kit", -11, 199, 0, {"id": "k:q_Barrel", "len": 0.9}))
@@ -451,7 +451,11 @@ func build(d: Dictionary) -> Node3D:
 	var k := String(d.k)
 	match k:
 		"campfire":
-			var cf := FireFX.make(float(d.get("s", 1.0)))
+			# build 22: in a pit of stones or bricks, a stove, a drum or a cross of logs, not straight on the dirt
+			var pk := String(d.get("pit", FireFX.pit_kind(float(d.x), float(d.z))))
+			if float(d.get("s", 1.0)) < 0.4:
+				pk = "logs"
+			var cf := FireFX.make_pit(float(d.get("s", 1.0)), pk)
 			fires.append([cf, float(d.get("s", 1.0))])
 			return cf
 		"seat":
@@ -701,7 +705,7 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 		"rack": _rack(kit)
 		"snag": _snag(kit)
 		"log_seat": _log_seat(kit, d)
-		"lookout": _lookout(kit)
+		"lookout": _lookout(kit, d)
 		"outhouse": _outhouse(kit)
 		"hospital": _hospital(kit, d)
 		"ruin": _ruin(kit, d)
@@ -1069,44 +1073,81 @@ static func _log_seat(kit: Kit, d: Dictionary) -> void:
 	kit.box("plank_dk", yb * Vector3(0, 0.41 + lo * 0.5, 0), Vector3(1.5, 0.03, 0.2), 0, yb)
 	kit.cyl("log", yb * Vector3(0.5, 0.25 + lo * 0.5, 0.15), 0.05, 0.03, 0.3, 5, 0, yb * Basis(Vector3.RIGHT, 1.1))
 
-static func _lookout(kit: Kit) -> void:
+static func _lookout(kit: Kit, d: Dictionary) -> void:
+	# build 22: rebuilt so you can climb it. Eight flights switch back and forth inside the frame, each with solid rails
+	# on both sides; the cab floor is a U round the stairwell (the old floor sat a metre and a half over the last two
+	# flights, and nobody could get their head past it); the legs and the first flight reach the ground on a slope.
 	var top := 12.0
 	for p in [Vector2(-2.5, -2.5), Vector2(2.5, -2.5), Vector2(-2.5, 2.5), Vector2(2.5, 2.5)]:
-		kit.box("metal", Vector3(p.x, top * 0.5, p.y), Vector3(0.22, top, 0.22), 1)
+		var lo := minf(0.0, _lifty(d, Vector3(p.x, 0, p.y))) - 0.4
+		kit.box("metal", Vector3(p.x, (top + lo) * 0.5, p.y), Vector3(0.22, top - lo, 0.22), 1)
+		kit.box("concrete", Vector3(p.x, lo + 0.25, p.y), Vector3(0.6, 0.7, 0.6), 0)
 	for lv in 3:
 		var y := 2.0 + lv * 3.6
-		for s in [-2.5, 2.5]:
-			kit.box("metal", Vector3(0, y + 1.8, s), Vector3(5.4, 0.08, 0.08), 0, Basis(Vector3.FORWARD, 0.6 * (1 if lv % 2 == 0 else -1)))
-			kit.box("metal", Vector3(s, y + 1.8, 0), Vector3(0.08, 0.08, 5.4), 0, Basis(Vector3.RIGHT, 0.6 * (1 if lv % 2 == 0 else -1)))
-	# eight flights of stairs, back and forth, with landings at each turn
+		for sd in [-2.5, 2.5]:
+			kit.box("metal", Vector3(0, y + 1.8, sd), Vector3(5.4, 0.08, 0.08), 0, Basis(Vector3.FORWARD, 0.6 * (1 if lv % 2 == 0 else -1)))
 	var flights := 8
 	var rise := top / flights
+	var run := 3.4
+	var ang := atan2(rise, run)
+	var slope := sqrt(run * run + rise * rise)
 	for i in flights:
 		var y0 := i * rise
 		var zs := 0.8 if i % 2 == 0 else -0.8
 		var dirx := 1.0 if i % 2 == 0 else -1.0
-		var run := 3.4
-		var ang := atan2(rise, run)
 		var b := Basis(Vector3.BACK, ang * dirx)
 		var c := Vector3(0, y0 + rise * 0.5, zs)
-		kit.box("plank_dk", c, Vector3(sqrt(run * run + rise * rise), 0.1, 1.4), 2, b)
-		kit.box("metal", c + Vector3(0, 0.45, zs * 0.9), Vector3(sqrt(run * run + rise * rise), 0.05, 0.05), 0, b)
+		kit.box("plank_dk", c, Vector3(slope, 0.1, 1.4), 2, b)
+		# treads, so it reads as a stair and not a ramp
+		for k in 9:
+			var t := (k + 0.5) / 9.0 - 0.5
+			kit.box("plank", c + b * Vector3(t * slope, 0.07, 0), Vector3(0.06, 0.04, 1.4), 0, b)
+		# rails on both sides at waist height, solid
+		for side in [-0.72, 0.72]:
+			kit.box("metal", c + Vector3(0, 0.95, side), Vector3(slope, 0.06, 0.06), 2, b)
+			kit.box("metal", c + Vector3(0, 0.5, side), Vector3(slope, 0.04, 0.04), 2, b)
+			for k in 3:
+				var t2 := (k / 2.0 - 0.5) * 0.92
+				kit.box("metal", c + b * Vector3(t2 * slope, 0, 0) + Vector3(0, 0.47, side), Vector3(0.05, 0.95, 0.05), 0)
 		if i < flights - 1:
+			# the landing at the turn, railed on its open side
 			kit.box("plank_dk", Vector3(2.2 * dirx, y0 + rise - 0.05, 0), Vector3(1.0, 0.1, 3.2), 2)
-	# the cab: a floor with a hatch where the last flight comes up, half walls, windows all round, a pyramid roof
-	kit.box("plank_dk", Vector3(0, top - 0.05, 1.3), Vector3(5.2, 0.1, 2.6), 2)
-	kit.box("plank_dk", Vector3(-2.15, top - 0.05, -1.3), Vector3(0.9, 0.1, 2.6), 2)
-	kit.box("plank_dk", Vector3(2.15, top - 0.05, -1.3), Vector3(0.9, 0.1, 2.6), 2)
-	for s in [[Vector3(0, top + 0.5, -2.6), Vector3(5.4, 1.0, 0.1)], [Vector3(0, top + 0.5, 2.6), Vector3(5.4, 1.0, 0.1)],
-			[Vector3(-2.6, top + 0.5, 0), Vector3(0.1, 1.0, 5.4)], [Vector3(2.6, top + 0.5, 0), Vector3(0.1, 1.0, 5.4)]]:
-		kit.box("plank", s[0], s[1], 2)
-		kit.box("glass", s[0] + Vector3(0, 0.95, 0), s[1] * Vector3(1, 0.9, 1) * Vector3(1, 1, 1) - Vector3(0, 0, 0), 0)
+			kit.box("metal", Vector3(2.68 * dirx, y0 + rise + 0.95, 0), Vector3(0.06, 0.06, 3.2), 2)
+			kit.box("metal", Vector3(2.68 * dirx, y0 + rise + 0.5, 0), Vector3(0.04, 0.04, 3.2), 2)
+	# the foot of the first flight comes down to the ground
+	var gfoot := _lifty(d, Vector3(-2.4, 0, 0.8))
+	if gfoot < -0.08:
+		var l := maxf(1.0, -gfoot / 0.42)
+		var fa := atan2(-gfoot, l)
+		kit.box("plank_dk", Vector3(-1.7 - l * 0.5, gfoot * 0.5 - 0.04, 0.8), Vector3(sqrt(l * l + gfoot * gfoot), 0.1, 1.4), 2, Basis(Vector3.BACK, -fa))
+	# the cab floor: a U round the stairwell, open over the last landing
+	kit.box("plank_dk", Vector3(0, top - 0.05, 2.15), Vector3(5.2, 0.1, 0.9), 2)
+	kit.box("plank_dk", Vector3(0, top - 0.05, -2.15), Vector3(5.2, 0.1, 0.9), 2)
+	kit.box("plank_dk", Vector3(-2.15, top - 0.05, 0), Vector3(0.9, 0.1, 3.4), 2)
+	# a rail round the stairwell
+	for rl in [[Vector3(0, top + 0.95, 1.68), Vector3(3.4, 0.06, 0.06)], [Vector3(0, top + 0.95, -1.68), Vector3(3.4, 0.06, 0.06)],
+			[Vector3(1.68, top + 0.95, 0.9), Vector3(0.06, 0.06, 1.6)]]:
+		kit.box("metal", rl[0], rl[1], 2)
+		kit.box("metal", rl[0] - Vector3(0, 0.45, 0), rl[1] * Vector3(1, 0.7, 1), 2)
+	# half walls, windows all round, corner posts, a pyramid roof
+	for sw in [[Vector3(0, top + 0.5, -2.6), Vector3(5.4, 1.0, 0.12)], [Vector3(0, top + 0.5, 2.6), Vector3(5.4, 1.0, 0.12)],
+			[Vector3(-2.6, top + 0.5, 0), Vector3(0.12, 1.0, 5.4)], [Vector3(2.6, top + 0.5, 0), Vector3(0.12, 1.0, 5.4)]]:
+		kit.box("plank", sw[0], sw[1], 2)
+		kit.box("plank_dk", sw[0] + Vector3(0, 0.52, 0), sw[1] * Vector3(1, 0.06, 1) + Vector3(0.06, 0, 0.06), 0)
+		kit.box("glass", sw[0] + Vector3(0, 0.95, 0), sw[1] * Vector3(1, 0.9, 1), 0)
 	for p in [Vector2(-2.6, -2.6), Vector2(2.6, -2.6), Vector2(-2.6, 2.6), Vector2(2.6, 2.6)]:
 		kit.box("metal", Vector3(p.x, top + 1.25, p.y), Vector3(0.12, 2.5, 0.12), 0)
 	kit.cone("tin_red", Vector3(0, top + 2.5, 0), 4.3, 1.4, 4, PI * 0.25)
-	# the Osborne fire-finder on its stand in the middle of the cab
-	kit.cyl("metal", Vector3(0, top, 0.9), 0.08, 0.08, 1.0, 6, 0)
-	kit.cyl("metal", Vector3(0, top + 1.0, 0.9), 0.4, 0.4, 0.08, 12, 0)
+	# on the roof, the radio aerial and a lightning rod; in the cab, the fire-finder, a stool, a cot, a water can, a bell
+	kit.cyl("metal", Vector3(0.6, top + 3.5, 0.6), 0.03, 0.02, 3.2, 5, 0)
+	kit.box("metal", Vector3(0.6, top + 5.6, 0.6), Vector3(0.9, 0.03, 0.03), 0)
+	kit.cyl("metal", Vector3(-1.9, top, 2.1), 0.08, 0.08, 1.0, 6, 0)
+	kit.cyl("metal", Vector3(-1.9, top + 1.0, 2.1), 0.4, 0.4, 0.08, 12, 0)
+	kit.box("plank", Vector3(1.4, top + 0.42, 2.15), Vector3(1.9, 0.12, 0.75), 2)
+	kit.box("mattress", Vector3(1.4, top + 0.52, 2.15), Vector3(1.8, 0.1, 0.65), 0)
+	kit.cyl("plank_dk", Vector3(-2.0, top, -2.0), 0.2, 0.2, 0.5, 8, 0)
+	kit.cyl("tin_teal", Vector3(-1.4, top, -2.15), 0.18, 0.18, 0.45, 10, 0)
+	kit.cyl("metal", Vector3(1.9, top + 2.1, -1.9), 0.16, 0.22, 0.28, 10, 0)
 
 static func _hospital(kit: Kit, d: Dictionary) -> void:
 	var w := float(d.get("w", 26))
@@ -1536,7 +1577,7 @@ static func _ruins20(L: Array) -> void:
 	L.append(R("sign", 1000, 122, 0, {"text": "RELAY STATION K\nAUTHORIZED PERSONNEL\nSENTRIES ACTIVE"}))
 	# build 21: Hob Kettering's camp down the highway from Wayside, his truck dry; Ada Holloway's watch on the ridge road
 	L.append(R("kit", 876.0, -690.0, 0, {"id": "k:q_Vehicle_Truck", "len": 6.0, "yaw": 0.5}))
-	L.append(R("campfire", 868.5, -683.0, 0, {"s": 0.6}))
+	L.append(R("campfire", 868.5, -683.0, 0, {"s": 0.6, "pit": "drum"}))
 	L.append(R("log_seat", 866.0, -681.0, 0, {"yaw": 0.6}))
 	L.append(R("tent", 863.0, -688.0, 1, {"w": 2.6, "d": 3.4}))
 	L.append(R("crates", 879.5, -685.5, 0, {"seed": 40}))

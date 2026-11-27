@@ -117,7 +117,7 @@ func _ready() -> void:
 	if Game.area == "world":
 		for pr in Game.STORY.get("props", []) + Game.ARSENAL.get("props", []):
 			if String(pr.kind) == "campfire":
-				var cf := FireFX.make(1.0)
+				var cf := FireFX.make_pit(1.0, String(pr.get("pit", FireFX.pit_kind(float(pr.x), float(pr.z)))))
 				add_child(cf)
 				cf.global_position = Vector3(float(pr.x), Game.height(float(pr.x), float(pr.z)), float(pr.z))
 				town.add_fire(cf.global_position, 1.0)
@@ -1160,6 +1160,8 @@ func _test_hooks() -> void:
 		get_tree().quit()
 	if args.has("floataudit"):
 		_float_audit()
+	if args.has("towertest"):
+		await _tower_test()
 	if args.has("doortest"):
 		await _door_test()
 	if args.has("b20test"):
@@ -2529,6 +2531,51 @@ func _b20_test() -> void:
 	out.append("run speed %.1f" % player.RUN)
 	for l in out:
 		print("B20TEST ", l)
+	get_tree().quit()
+
+# build 22: walk up the fire lookout's eight flights to the cab
+func _tower_test() -> void:
+	Game.booted = true
+	Game.dev["god"] = true
+	await _wait(10)
+	var o := Vector3(997.0, 0, -236.0)
+	var g0 := Frontier._ground({"k": "lookout", "x": 997.0, "z": -236.0, "r": 0})
+	var pts: Array = [Vector2(-1.2, 0.8)]
+	for i in 8:
+		var dirx := 1.0 if i % 2 == 0 else -1.0
+		var zs := 0.8 if i % 2 == 0 else -0.8
+		pts.append(Vector2(1.6 * dirx, zs))
+		pts.append(Vector2(2.2 * dirx, zs))
+		if i < 7:
+			pts.append(Vector2(2.2 * dirx, -zs))
+	pts.append(Vector2(-2.2, 0.0))
+	await _tp(o.x - 4.0, o.z + 0.8)
+	var wi := 0
+	var stuck := 0.0
+	var last: Vector3 = player.global_position
+	for f in 3000:
+		await get_tree().physics_frame
+		if wi >= pts.size():
+			break
+		var tgt: Vector2 = pts[wi]
+		var to: Vector3 = Vector3(o.x + tgt.x, 0, o.z + tgt.y) - player.global_position
+		to.y = 0
+		if to.length() < 0.35:
+			wi += 1
+			continue
+		player.yaw = atan2(-to.x, -to.z)
+		Game.touch_move = Vector2(0, -0.6)
+		if f % 60 == 0:
+			print("TOWERTEST f %d wp %d pos %s" % [f, wi, str((player.global_position - o).snapped(Vector3.ONE * 0.1))])
+			if player.global_position.distance_to(last) < 0.2:
+				stuck += 1
+				if stuck > 4:
+					break
+			else:
+				stuck = 0
+			last = player.global_position
+	Game.touch_move = Vector2.ZERO
+	print("TOWERTEST reached waypoint %d of %d, height above the base %.1f (the cab floor is at 12)" % [wi, pts.size(), player.global_position.y - g0])
 	get_tree().quit()
 
 # build 20: walk in through the door of every building the frontier puts up (doorsteps, porches, sloping ground)
@@ -4470,10 +4517,19 @@ func _process(d: float) -> void:
 		Game.stats_changed.emit()
 
 # ---------------------------------------------------------------- damage, death
+var _hit_snd := 0
+var _grunt_snd := 0
 func on_player_hurt(d: float) -> void:
 	hud.flash_hurt(0.12 + d * 0.012)
 	player.hurt_fx(d)
-	Sfx.play(["o_mhurt1", "o_mhurt2"][randi() % 2], -4.0)
+	# build 22: the thump of the hit, and now and then a grunt (never a stream of them: radiation and fire hurt every frame)
+	var now := Time.get_ticks_msec()
+	if d >= 1.5 and now - _hit_snd > 220:
+		_hit_snd = now
+		Sfx.play("p_hit%d" % (1 + randi() % 4), -9.0 + minf(d, 25.0) * 0.25, randf_range(0.9, 1.08))
+	if d >= 1.5 and now - _grunt_snd > 850 and (d >= 7.0 or randf() < 0.55):
+		_grunt_snd = now
+		Sfx.play("p_hurt%d" % (1 + randi() % 5), -5.0, randf_range(0.94, 1.06))
 	if Game.hp <= 0.0:
 		end_dialog()
 		hud.show_dead(true)

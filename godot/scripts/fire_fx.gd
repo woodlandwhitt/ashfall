@@ -247,3 +247,159 @@ static func dress(root: Node) -> void:
 		root.add_child(f)
 		f.global_position = base
 		f._settle()
+
+# ---------------------------------------------------------------- fire pits (build 22)
+# Every campfire gets something round it, and not all the same: a ring of field stones, a ring of bricks, a cast-iron
+# stove with its chimney, an oil drum cut down for a brazier, or just a cross of logs on a bed of ash. Which one comes
+# from the fire's place (so the same fire is always the same), unless the layout says.
+const PITS := ["stones", "bricks", "stove", "drum", "logs"]
+static var _pit_mats := {}
+
+static func pit_mat(k: String) -> StandardMaterial3D:
+	if _pit_mats.has(k):
+		return _pit_mats[k]
+	var m := StandardMaterial3D.new()
+	m.roughness = 0.95
+	match k:
+		"stone": m.albedo_color = Color(0.32, 0.3, 0.28)
+		"stone2": m.albedo_color = Color(0.24, 0.23, 0.22)
+		"brick": m.albedo_color = Color(0.52, 0.25, 0.17)
+		"brick2": m.albedo_color = Color(0.44, 0.2, 0.14)
+		"log": m.albedo_color = Color(0.3, 0.2, 0.12)
+		"char": m.albedo_color = Color(0.07, 0.06, 0.05)
+		"ash": m.albedo_color = Color(0.3, 0.29, 0.27)
+		"iron":
+			m.albedo_color = Color(0.13, 0.12, 0.11)
+			m.metallic = 0.6
+			m.roughness = 0.6
+		"rust":
+			m.albedo_color = Color(0.42, 0.2, 0.1)
+			m.metallic = 0.3
+			m.roughness = 0.85
+		"glow":
+			m.albedo_color = Color(1.0, 0.45, 0.12)
+			m.emission_enabled = true
+			m.emission = Color(1.0, 0.4, 0.1)
+			m.emission_energy_multiplier = 2.5
+	_pit_mats[k] = m
+	return m
+
+static func _piece(root: Node3D, mesh: Mesh, mat: String, at: Vector3, rot := Vector3.ZERO, sc := Vector3.ONE) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = pit_mat(mat)
+	mi.position = at
+	mi.rotation = rot
+	mi.scale = sc
+	mi.visibility_range_end = 120.0
+	root.add_child(mi)
+	return mi
+
+static func _box(sz: Vector3) -> BoxMesh:
+	var b := BoxMesh.new()
+	b.size = sz
+	return b
+
+static func _cyl(r1: float, r2: float, h: float, seg := 10) -> CylinderMesh:
+	var c := CylinderMesh.new()
+	c.top_radius = r1
+	c.bottom_radius = r2
+	c.height = h
+	c.radial_segments = seg
+	c.rings = 1
+	return c
+
+static func pit_kind(x: float, z: float) -> String:
+	return PITS[absi(int(floor(x * 7.31) + floor(z * 3.17))) % PITS.size()]
+
+# a fire and what it burns in; the returned node's origin is on the ground
+static func make_pit(s: float, kind: String) -> Node3D:
+	var root := Node3D.new()
+	root.name = "FirePit"
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(kind) + int(s * 100.0)
+	var fire_at := Vector3.ZERO
+	var fire_s := s
+	var r := 0.55 * s + 0.15
+	if kind != "stove" and kind != "drum":
+		# the bed of ash and coals, and the logs on it
+		_piece(root, _cyl(r * 0.9, r * 0.95, 0.04, 16), "ash", Vector3(0, 0.01, 0))
+		_piece(root, _cyl(r * 0.55, r * 0.6, 0.05, 12), "char", Vector3(0, 0.03, 0))
+		var logs := 4 if kind != "logs" else 6
+		for i in logs:
+			var a := i * TAU / logs + rng.randf() * 0.3
+			var lean := 0.85 if kind == "logs" else 1.25
+			var lg := _piece(root, _cyl(0.05 * s + 0.02, 0.06 * s + 0.025, 0.75 * s + 0.15, 7), "log" if i % 2 == 0 else "char",
+				Vector3(cos(a) * r * 0.32, 0.12 * s + 0.04, sin(a) * r * 0.32))
+			lg.basis = Basis(Vector3.UP, -a) * Basis(Vector3.BACK, lean)
+	match kind:
+		"stones":
+			var n := int(10 + s * 6)
+			for i in n:
+				var a := i * TAU / n + rng.randf_range(-0.08, 0.08)
+				var sz := rng.randf_range(0.16, 0.24) * (0.8 + s * 0.3)
+				var sp := SphereMesh.new()
+				sp.radius = sz
+				sp.height = sz * 1.4
+				sp.radial_segments = 7
+				sp.rings = 3
+				_piece(root, sp, "stone" if i % 3 else "stone2", Vector3(cos(a) * r, sz * 0.35, sin(a) * r), Vector3(rng.randf() * 0.5, rng.randf() * TAU, 0), Vector3(1.0, 0.8, 1.2))
+		"bricks":
+			var n := int(12 + s * 8)
+			for layer in 2:
+				for i in n:
+					var a := (i + layer * 0.5) * TAU / n
+					_piece(root, _box(Vector3(0.24, 0.09, 0.12)), "brick" if (i + layer) % 3 else "brick2",
+						Vector3(cos(a) * r, 0.045 + layer * 0.095, sin(a) * r), Vector3(0, -a + PI * 0.5 + rng.randf_range(-0.06, 0.06), 0))
+		"logs":
+			# a ring of half-buried log ends
+			var n := 8
+			for i in n:
+				var a := i * TAU / n
+				_piece(root, _cyl(0.08, 0.09, 0.22, 7), "log", Vector3(cos(a) * r, 0.06, sin(a) * r), Vector3(0, 0, rng.randf_range(-0.15, 0.15)))
+		"stove":
+			# a cast-iron box stove on legs, door open, the fire inside it, a chimney pipe
+			var w := 0.7
+			var h := 0.55
+			var by := 0.25
+			_piece(root, _box(Vector3(w, 0.04, 0.5)), "iron", Vector3(0, by, 0))
+			_piece(root, _box(Vector3(w, 0.04, 0.5)), "iron", Vector3(0, by + h, 0))
+			_piece(root, _box(Vector3(w, h, 0.04)), "iron", Vector3(0, by + h * 0.5, -0.23))
+			_piece(root, _box(Vector3(0.04, h, 0.5)), "iron", Vector3(-w * 0.5, by + h * 0.5, 0))
+			_piece(root, _box(Vector3(0.04, h, 0.5)), "iron", Vector3(w * 0.5, by + h * 0.5, 0))
+			_piece(root, _box(Vector3(0.16, h, 0.04)), "iron", Vector3(-w * 0.5 + 0.08, by + h * 0.5, 0.23))
+			_piece(root, _box(Vector3(0.3, 0.36, 0.03)), "iron", Vector3(-w * 0.5 - 0.1, by + h * 0.45, 0.36), Vector3(0, -1.1, 0))
+			for lx in [-0.28, 0.28]:
+				for lz in [-0.18, 0.18]:
+					_piece(root, _box(Vector3(0.05, by + 0.1, 0.05)), "iron", Vector3(lx, (by + 0.1) * 0.5 - 0.1, lz))
+			_piece(root, _cyl(0.07, 0.07, 1.6, 8), "iron", Vector3(0.18, by + h + 0.8, -0.1))
+			_piece(root, _cyl(0.1, 0.1, 0.05, 8), "iron", Vector3(0.18, by + h + 1.6, -0.1))
+			_piece(root, _box(Vector3(w - 0.1, 0.03, 0.4)), "glow", Vector3(0, by + 0.03, 0))
+			fire_at = Vector3(0, by + 0.04, 0.02)
+			fire_s = minf(s, 0.75) * 0.5
+		"drum":
+			# an oil drum cut down for a brazier, holes punched round its foot
+			_piece(root, _cyl(0.3, 0.3, 0.7, 14), "rust", Vector3(0, 0.35, 0))
+			_piece(root, _cyl(0.31, 0.31, 0.04, 14), "iron", Vector3(0, 0.69, 0))
+			_piece(root, _cyl(0.31, 0.31, 0.04, 14), "iron", Vector3(0, 0.3, 0))
+			for i in 6:
+				var a := i * TAU / 6.0
+				_piece(root, _box(Vector3(0.06, 0.06, 0.02)), "glow", Vector3(cos(a) * 0.302, 0.14, sin(a) * 0.302), Vector3(0, -a + PI * 0.5, 0))
+			_piece(root, _cyl(0.27, 0.27, 0.02, 12), "char", Vector3(0, 0.66, 0))
+			fire_at = Vector3(0, 0.68, 0)
+			fire_s = minf(s, 0.8) * 0.7
+	var f := FireFX.make(fire_s)
+	f.position = fire_at
+	root.add_child(f)
+	# a body for the stove and the drum, so nobody walks through them
+	if kind in ["stove", "drum"]:
+		var sb := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(0.72, 0.85, 0.55) if kind == "stove" else Vector3(0.6, 0.7, 0.6)
+		cs.shape = bs
+		cs.position.y = bs.size.y * 0.5
+		sb.add_child(cs)
+		root.add_child(sb)
+	root.set_meta("fire", f)
+	return root

@@ -256,7 +256,11 @@ func _physics_process(d: float) -> void:
 			jump()
 	else:
 		velocity.y -= GRAV * d
+	var was_air := not is_on_floor()
+	var fall_v := -velocity.y
 	move_and_slide()
+	if was_air and is_on_floor():
+		_landed(fall_v)
 	_step_up(want)
 	# never fall through the world
 	var gh := Game.height(global_position.x, global_position.z)
@@ -273,6 +277,23 @@ func _physics_process(d: float) -> void:
 			Sfx.play(["step_sandl1", "step_sandl2", "step_sandr1", "step_sandr2"][step_lr * 2 + randi() % 2], -9.0, randf_range(0.92, 1.08))
 	if trigger and not talking:
 		fire()
+
+# coming down (build 22): a thud for anything more than a hop, and past about four metres it hurts. Free fall from
+# h metres lands at sqrt(2 g h): 11 m/s is a drop of about 4.3 m, 16 m/s about 9 m (around half your health)
+const FALL_SAFE := 11.0
+func _landed(v: float) -> void:
+	if v > 6.5:
+		Sfx.play("p_thud%d" % (1 + randi() % 3), clampf(-16.0 + (v - 6.5) * 1.6, -16.0, -2.0), randf_range(0.85, 1.0))
+	if v <= FALL_SAFE or Game.dev.noclip or not seat.is_empty():
+		return
+	var dmg := pow(v - FALL_SAFE, 2.0) * 1.2 + (v - FALL_SAFE) * 2.0
+	if Game.perks.has("light_step"):
+		dmg *= 0.7
+	Sfx.play("p_land1", -4.0, randf_range(0.95, 1.05))
+	hurt_shake = maxf(hurt_shake, 0.6 + dmg * 0.03)
+	Game.hurt(dmg)
+	if Game.hp > 0.0 and dmg > 8.0:
+		Game.msg("You land hard.")
 
 # walking into a step, a doorstep or a porch edge lifts you onto it: try the same move half a metre higher, and
 # if that's clear and there's floor to land on, climb by however much the floor is higher
@@ -356,6 +377,10 @@ func visibility() -> float:
 func jump() -> void:
 	if is_on_floor():
 		velocity.y = JUMP_V
+		# the effort of it, now and then; always a rustle of clothes (build 22)
+		Sfx.play(["k_cloth1", "k_cloth2"][randi() % 2], -16.0, randf_range(0.9, 1.1))
+		if randf() < 0.3:
+			Sfx.play("p_jump%d" % (1 + randi() % 2), -8.0, randf_range(0.95, 1.05))
 
 func _process(d: float) -> void:
 	fire_cd = maxf(0.0, fire_cd - d)
