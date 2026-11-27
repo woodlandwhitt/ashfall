@@ -269,8 +269,22 @@ Keep every existing quest and line, then deepen them:
    Stillwater, the Ashborn camp, the Garage and the Children's camp. **Floating:** watchtower and water-tower legs reach
    the ground on slopes; tents, shrines and parked wrecks settle into slopes (`--floataudit` lists what still hangs).
    `--b19test`.
-18. **godot-20:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
-   Overseer's secret, the other vaults), more settlements and ruins on the empty stretches, real road meshes and
-   terrain variety (washes, rock shelves, erosion), better ground and building textures, more GitHub character models
-   for townspeople, interiors (the Spire's upper floors, the silo shaft), companions from the north, a Forge tidy-up
+18. **godot-20:** *Status: shipped as a patch (to build 15, and to build 13); the APK is renamed.* The game is
+   **Ashfall: Meridian** on the phone (app name, project name, `AshfallMeridian.apk`, release titles); the name
+   change itself needs the new APK installed, since a patch can't change project settings. **Doors:** every frontier
+   shack, hall and cabin has a board ramp up to its floor, and the step-up tries a low step before a tall one, so you
+   walk in without jumping (`--doortest` walks into all of them). **Sprint** 7.9 m/s, between build 16's 7.2 and build
+   17's 8.6. **Prompts follow the crosshair:** containers and pickups must be in front of your eyes to be offered, the
+   closest to the centre wins, and looking away takes the prompt and the USE with it; a container whose mesh never
+   made it into the world (the reactor's safe) gets a visible safe or footlocker where it stands. **Floating:**
+   barrels found their floor through an invisible collider (fixed), fence runs follow slopes sheet by sheet, log seats
+   have closed ends and sit into the ground (no seeing through them at the Camp of the Door). **Biscuit** bites for
+   75% and a little slower. **Camp of the Door:** a cook pot on a tripod, more seats, a tarp over the stores, a
+   generator and aerial, a notice board, string lights, a garden plot, drums, pallets and tyres. **New places:**
+   Wayside 9 (a fuel stop raiders hold as a toll post), Holloway Farm (burnt, ghouls in the fields) and Relay Station K
+   (sentry robots still on guard), each with a stash. `--b20test`.
+19. **godot-21:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
+   Overseer's secret, the other vaults), quests for the three new places, real road meshes and terrain variety
+   (washes, rock shelves, erosion), better ground and building textures, more GitHub character models for
+   townspeople, interiors (the Spire's upper floors, the silo shaft), companions from the north, a Forge tidy-up
    (brick and more materials), and the WebView build retired.
