@@ -138,70 +138,8 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 			_arm(d)
 		ap.play("Idle")
 	elif PEOPLE.has(type) and not quad:
-		var p: Array = PEOPLE[type]
-		# every raider his own: cut, dye, skin, hair, beard, headgear
-		var rng := RandomNumberGenerator.new()
-		rng.seed = hash(String(d.get("id", "")) + type + str(d.x))
-		var fem: bool = String(p[0]).begins_with("Female") or (type in ["raider", "jackal"] and rng.randf() < 0.25)
-		var outfit: String = p[0]
-		if not fem and type in ["raider", "jackal", "pyro"]:
-			outfit = ["Male_Ranger", "Male_Peasant", "Male_Knight_Cloth", "Male_Ranger"][rng.randi() % 4]
-		elif fem:
-			outfit = "Female_Ranger" if rng.randf() < 0.6 else "Female_Peasant"
-		if type in ["heavy", "guardbot", "warden"]:
-			outfit = "Male_Knight_Cloth"
-		elif type == "tollking":
-			outfit = "Male_Noble"
-		elif type == "hillfolk":
-			fem = rng.randf() < 0.3
-			outfit = "Female_Peasant" if fem else "Male_Peasant"
-		elif type == "hill_ma":
-			fem = true
-		var cloth: Color = (p[1] as Color).lerp(Color.from_hsv(rng.randf(), 0.4, 0.6), 0.25) * rng.randf_range(0.8, 1.1)
-		var skins := [Color(1.0, 0.86, 0.76), Color(0.85, 0.66, 0.52), Color(0.62, 0.45, 0.33), Color(0.45, 0.32, 0.24), Color(0.95, 0.78, 0.66)]
-		var ghoulish: bool = type in ["ghoul", "glowhusk"]
-		var skin: Color = (p[2] as Color) * rng.randf_range(0.85, 1.05) if ghoulish else skins[rng.randi() % skins.size()]
-		# every raider his own outfit: shirt, trousers, boots, sleeves, belts and armour pieces from different kits
-		var spec := Humanoid.mix_spec(rng, fem, cloth, type in ["raider", "heavy", "marauder", "tollking", "jackal", "pyro"])
-		if not ghoulish and not type in ["heavy", "tollking"] and not type in MACHINES and not type in ["hillfolk", "hill_ma"]:
-			outfit = spec.outfit
-		if type in MACHINES:
-			spec["acc"] = []
-			spec["nohood"] = true
-		if ghoulish:
-			spec["ghoul"] = true
-			spec["acc"] = []
-			spec["nohood"] = true
-		model = Humanoid.build(outfit, cloth, skin, true, spec)
-		if type == "glowhusk":
-			# they glow from the inside
-			var gl := OmniLight3D.new()
-			gl.light_color = Color(0.5, 1.0, 0.4)
-			gl.light_energy = 0.9
-			gl.omni_range = 4.0
-			gl.position.y = 1.2
-			model.add_child(gl)
-		var hc: Color = Humanoid.HAIR_COLS[rng.randi() % Humanoid.HAIR_COLS.size()]
-		var hat: String = ["", "", "cap", "wide", "helmet", ""][rng.randi() % 6] if not type in ["ghoul", "glowhusk"] else ""
-		if type == "heavy":
-			hat = "helmet"
-		elif type in ["hillfolk", "hill_ma"]:
-			hat = ["wide", "", "wide", "cap"][rng.randi() % 4]
-		elif type in MACHINES:
-			hat = "helmet" if type != "synth" else ""
-		if hat != "helmet" and not type in ["ghoul", "glowhusk"] and not type in MACHINES:
-			Humanoid.add_hair(model, (Humanoid.HAIR_F if fem else Humanoid.HAIR_M)[rng.randi() % 6], hc)
-		if not fem and not type in ["ghoul", "glowhusk"] and not type in MACHINES:
-			Humanoid.add_hair(model, Humanoid.FACE_M[rng.randi() % Humanoid.FACE_M.size()], hc)
-		if hat != "":
-			Humanoid.add_hat(model, hat, Color(0.33, 0.34, 0.33) if hat == "helmet" else Color.from_hsv(rng.randf(), 0.3, 0.35))
-		if type in MACHINES:
-			Machine.dress(model, type)
-		var hh := rng.randf_range(0.95, 1.05)
-		model.scale = Vector3.ONE * hh * (1.12 if type == "heavy" else (1.15 if type == "warden" else 1.0))
-		if type in ["ghoul", "glowhusk"]:
-			# wasted to the bone
-			model.scale = Vector3(hh * 0.88, hh * 0.98, hh * 0.88)
+		# every raider his own: cut, dye, skin, hair, beard, headgear (Humanoid.enemy_person)
+		model = Humanoid.enemy_person(type, PEOPLE[type], hash(String(d.get("id", "")) + type + str(d.x)))
 		add_child(model)
 		ap = model.get_node("AnimationPlayer")
 		_twist_setup()

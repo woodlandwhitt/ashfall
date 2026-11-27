@@ -1381,6 +1381,46 @@ func _test_hooks() -> void:
 			hud.pip.sel_gun = "hunting_rifle"
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
+	if args.has("geodump"):
+		# every drawn thing near a spot, whatever it is (finding a stray mesh)
+		var v := String(args.geodump).split(",")
+		var c := Vector3(float(v[0]), 0, float(v[1]))
+		await _wait(40)
+		for gi in find_children("*", "GeometryInstance3D", true, false):
+			var g := gi as GeometryInstance3D
+			if not g.is_visible_in_tree():
+				continue
+			var ab: AABB = g.global_transform * g.get_aabb()
+			if Vector2(ab.get_center().x - c.x, ab.get_center().z - c.z).length() < float(v[2]) and ab.size.length() < 30.0:
+				var col := ""
+				if g is MeshInstance3D and (g as MeshInstance3D).mesh:
+					var m = g.material_override if g.material_override else (g as MeshInstance3D).get_active_material(0)
+					col = str((m as StandardMaterial3D).albedo_color) if m is StandardMaterial3D else str(m)
+				if g is CPUParticles3D:
+					var cp := g as CPUParticles3D
+					col = "amount %d color %s mesh %s local %s emit %s gpos %s meta %s" % [cp.amount, str(cp.color), str(cp.mesh), str(cp.local_coords), str(cp.emitting), str(cp.global_position.snapped(Vector3.ONE * 0.1)), str(cp.get_meta_list())]
+				print("GEO ", g.get_class(), " ", g.get_path(), " c ", ab.get_center().snapped(Vector3.ONE * 0.1), " s ", ab.size.snapped(Vector3.ONE * 0.1), " ", col)
+		get_tree().quit()
+	if args.has("reddump"):
+		# anything drawn in red within reach of the camera (finding a stray red streak)
+		await _wait(60)
+		var cp0: Vector3 = player.cam.global_position
+		for gi in find_children("*", "GeometryInstance3D", true, false):
+			var g := gi as GeometryInstance3D
+			if not g.is_visible_in_tree():
+				continue
+			var ab: AABB = g.global_transform * g.get_aabb()
+			if ab.grow(1.0).has_point(cp0) or ab.get_center().distance_to(cp0) < 25.0:
+				var cols: Array = []
+				if g is MeshInstance3D and (g as MeshInstance3D).mesh:
+					for si in (g as MeshInstance3D).mesh.get_surface_count():
+						var m = g.material_override if g.material_override else (g as MeshInstance3D).get_active_material(si)
+						if m is StandardMaterial3D:
+							cols.append((m as StandardMaterial3D).albedo_color)
+						elif m is ShaderMaterial:
+							cols.append(str((m as ShaderMaterial).shader.resource_path) if (m as ShaderMaterial).shader else "shader")
+				print("RED ", g.get_class(), " ", g.get_path(), " c ", ab.get_center().snapped(Vector3.ONE * 0.1), " s ", ab.size.snapped(Vector3.ONE * 0.1), " ", cols)
+		get_tree().quit()
 	if args.has("vmdump"):
 		await _wait(30)
 		for mi in player.gun.find_children("*", "GeometryInstance3D", true, false):

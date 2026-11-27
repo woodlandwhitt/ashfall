@@ -28,23 +28,31 @@ jobs:
           mkdir -p $T && unzip -q Godot_v${GODOT}_export_templates.tpz -d tpl && mv tpl/templates/* $T/
           mkdir -p $HOME/.config/godot
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME" > $HOME/.config/godot/editor_settings-4.5.tres
-      # which build this is, and which installed APK its update patch is for (godot/patch_base.txt: "self" makes
-      # this build a new base, whose full pack is kept on its release for later patches to be cut against)
-      # which build this is, and which installed APKs get an update patch (godot/patch_base.txt: a list of base
-      # builds; "self" makes this build a new base too, whose full pack is kept on its release for later patches)
+      # which build this is, and which installed APKs get an in-game update (build 24: rolling). Every build is now a
+      # base of its own: its APK says so, and its full pack (base-N.pck) is kept on its release. Each release then
+      # carries a patch for the installed APKs it can reach: the last ROLL builds before it that kept a base pack, plus
+      # any older bases still listed in godot/patch_base.txt (build 15, which every APK from 15 to 23 was made from).
       - name: Stamp the build number
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLL: 3
         run: |
           N=$(( ${{ github.run_number }} - BUILD_SKIP ))
-          BASES=$(cat godot/patch_base.txt 2>/dev/null || echo self)
-          [ -z "$(echo $BASES | tr -d '[:space:]')" ] && BASES=self
-          B=""
-          for t in $BASES; do
-            if [ "$t" = "self" ]; then B=$N; break; fi
+          echo "{\"build\": $N, \"base\": $N}" > godot/data/build.json
+          BASES=""
+          for t in $(gh release list --repo "${{ github.repository }}" --limit 30 --json tagName --jq '.[].tagName' | grep '^godot-' | sed 's/godot-//' | sort -rn); do
+            [ "$t" -ge "$N" ] && continue
+            if gh release view "godot-$t" --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | grep -qx "base-$t.pck"; then
+              BASES="$BASES $t"
+              [ $(echo $BASES | wc -w) -ge $ROLL ] && break
+            fi
           done
-          if [ -z "$B" ]; then B=$(echo $BASES | awk '{print $1}'); fi
-          echo "{\"build\": $N, \"base\": $B}" > godot/data/build.json
+          for t in $(cat godot/patch_base.txt 2>/dev/null); do
+            case " $BASES " in *" $t "*) ;; *) BASES="$BASES $t";; esac
+          done
           echo "PATCH_BASES=$BASES" >> $GITHUB_ENV
           cat godot/data/build.json
+          echo "patches for: $BASES"
       - name: Import assets
         run: $HOME/bin/godot --headless --path godot --import || true
       - name: Export APK
@@ -63,18 +71,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           N=$(( ${{ github.run_number }} - BUILD_SKIP ))
-          ASSETS=""
+          $HOME/bin/godot --headless --path godot --export-pack "Android" build/base.pck
+          cp godot/build/base.pck base-$N.pck
+          ASSETS="base-$N.pck"
+          mkdir -p /tmp/base
           for t in $PATCH_BASES; do
-            if [ "$t" = "self" ]; then
-              $HOME/bin/godot --headless --path godot --export-pack "Android" build/base.pck
-              cp godot/build/base.pck base-$N.pck
-              ASSETS="$ASSETS base-$N.pck"
-            else
-              mkdir -p /tmp/base
-              gh release download "godot-$t" -p "base-$t.pck" -D /tmp/base --repo "${{ github.repository }}" --clobber
+            if gh release download "godot-$t" -p "base-$t.pck" -D /tmp/base --repo "${{ github.repository }}" --clobber; then
               $HOME/bin/godot --headless --path godot --export-patch "Android" build/patch-b$t.pck --patches /tmp/base/base-$t.pck
               cp godot/build/patch-b$t.pck patch-b$t.pck
               ASSETS="$ASSETS patch-b$t.pck"
+              rm -f /tmp/base/base-$t.pck
             fi
           done
           echo "UPDATE_ASSETS=$ASSETS" >> $GITHUB_ENV
@@ -88,4 +94,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           N=$(( ${{ github.run_number }} - BUILD_SKIP ))
-          gh release create "godot-$N" AshfallMeridian.apk $UPDATE_ASSETS --title "Ashfall: Meridian (build $N)" --notes "Ashfall: Meridian, build $N. Tap AshfallMeridian.apk below to install, or update from the title screen (the patch-bN.pck files are the in-game updates)." --target "${{ github.sha }}"
+          gh release create "godot-$N" AshfallMeridian.apk $UPDATE_ASSETS --title "Ashfall: Meridian (build $N)" --notes "Ashfall: Meridian, build $N. Tap AshfallMeridian.apk below to install, or update from the title screen (patch-bN.pck is the in-game update for an installed build N; base-N.pck is kept for later builds to patch against)." --target "${{ github.sha }}"
