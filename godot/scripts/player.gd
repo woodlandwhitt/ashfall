@@ -195,6 +195,17 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_F1, KEY_QUOTELEFT: Game.main.hud.toggle_dev()
 			KEY_F2: Game.main.forge.toggle()
 
+# Field of view: the setting is the height of the view, but on a wide phone screen 75 degrees tall is close to 120 across,
+# which shrinks every room, chair and doorway into the distance (build 23). The view across is held to WIDE_FOV at most.
+const WIDE_FOV := 100.0
+func view_fov(v: float) -> float:
+	var vs := get_viewport().get_visible_rect().size
+	var asp := vs.x / maxf(1.0, vs.y)
+	if asp <= 1.0:
+		return v
+	var cap := rad_to_deg(2.0 * atan(tan(deg_to_rad(WIDE_FOV * 0.5)) / asp))
+	return minf(v, cap)
+
 func _physics_process(d: float) -> void:
 	if Game.hp <= 0 or Game.paused:
 		velocity = Vector3.ZERO
@@ -203,7 +214,7 @@ func _physics_process(d: float) -> void:
 	# chems, buffs and radiation; action points come back over time, slower while something is hunting you
 	Game.body_tick(d)
 	fxc = Game.fx()
-	cam.fov = lerpf(cam.fov, Quality.fov * float(fxc.fov) + sin(Time.get_ticks_msec() * 0.0011) * 4.0 * float(fxc.warp), minf(1.0, d * 3.0))
+	cam.fov = lerpf(cam.fov, view_fov(Quality.fov * float(fxc.fov) + sin(Time.get_ticks_msec() * 0.0011) * 4.0 * float(fxc.warp)), minf(1.0, d * 3.0))
 	if Game.dev.ap:
 		Game.ap = Game.ap_max
 	if Game.ap < Game.ap_max:
@@ -409,8 +420,12 @@ func _process(d: float) -> void:
 			Game.stats_changed.emit()
 	holster_k = move_toward(holster_k, 1.0 if holstered else 0.0, d * 4.0)
 	target += Vector3(0.06, -0.5, 0.12) * holster_k
-	gun.position = gun.position.lerp(target, 1.0 - exp(-20.0 * d))
+	# the arms and gun are drawn as if through the field of view the setting asks for, whatever the world's view is
+	# narrowed to: grown about the eye by the ratio of the two, they cover the same part of the screen as before
+	var vk := tan(deg_to_rad(Quality.fov * 0.5)) / maxf(0.05, tan(deg_to_rad(cam.fov * 0.5)))
+	gun.position = gun.position.lerp(target * vk, 1.0 - exp(-20.0 * d))
 	gun.rotation.x = recoil * 0.06 - 1.0 * holster_k
+	gun.scale = Vector3.ONE * vk
 	if flash.light_energy > 0.0:
 		flash.light_energy = maxf(0.0, flash.light_energy - d * 60.0)
 		flash_q.visible = flash.light_energy > 0.5

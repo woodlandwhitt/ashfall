@@ -943,6 +943,7 @@ func _chest_shells() -> void:
 
 # the room you're standing in gets its furniture (and the one you left gives it back)
 var furnished := -1
+var cell_lights: Array = []
 var furnish_node: Node3D
 func _furnish_tick() -> void:
 	if Game.area != "cells":
@@ -955,6 +956,10 @@ func _furnish_tick() -> void:
 	town.forget("cell%d" % furnished)
 	furnished = c
 	furnish_node = Furnish.room(self, Game.CELLS[c], "cell%d" % c)
+	# the room you're in casts shadows from its lamps; the others don't need to
+	for i in cell_lights.size():
+		for l in cell_lights[i]:
+			(l as OmniLight3D).shadow_enabled = i == c and int(Quality.current(quality).shadow) > 0
 	_bake_cell.call_deferred(c)
 
 # the room's walkable floor, once its furniture's collision is in
@@ -1170,6 +1175,8 @@ func _test_hooks() -> void:
 		await _b21_test()
 	if args.has("b22test"):
 		await _b22_test()
+	if args.has("b23test"):
+		await _b23_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -1339,6 +1346,8 @@ func _test_hooks() -> void:
 				await get_tree().physics_frame
 				await get_tree().physics_frame
 				forge.place()
+	if args.has("furntest"):
+		await _furn_test()
 	if args.has("celltest"):
 		await _cell_test(int(args.celltest) if String(args.celltest) != "" else 1)
 	if args.has("perf"):
@@ -1372,6 +1381,10 @@ func _test_hooks() -> void:
 			hud.pip.sel_gun = "hunting_rifle"
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
+	if args.has("tonemap"):
+		env.tonemap_mode = {"filmic": Environment.TONE_MAPPER_FILMIC, "aces": Environment.TONE_MAPPER_ACES, "agx": Environment.TONE_MAPPER_AGX}.get(String(args.tonemap), env.tonemap_mode)
+		if args.has("white"):
+			env.tonemap_white = float(args.white)
 	if args.has("tod"):
 		Game.time = float(args.tod)
 	if args.has("quality"):
@@ -1659,6 +1672,20 @@ func _khole_test() -> void:
 	get_tree().quit()
 
 # through a street door into a building and back out
+# every room furnished in turn (the town's cells, or Haven 12's rooms): is any way through cut off? (build 23)
+func _furn_test() -> void:
+	await _wait(30)
+	if Game.area == "cells":
+		for i in Game.CELLS.size():
+			var C: Dictionary = Game.CELLS[i]
+			player.global_position = Vector3(float(C.ox), float(Game.L.consts.CELLS.y) + 0.3, float(C.oz))
+			await get_tree().create_timer(2.2).timeout
+	await _wait(10)
+	for l in Furnish.audit:
+		print("FURN ", l)
+	print("FURN %d rooms furnished, %d mapped for the way through; the most floor left cut off anywhere %.2f m2 (%s)" % [Furnish.audit.size(), Furnish.rooms_checked, Furnish.worst, "ok" if Furnish.worst < 1.0 else "FAIL"])
+	get_tree().quit()
+
 func _cell_test(i: int) -> void:
 	var out: Array = Game.test_log
 	if Game.area == "world" and out.is_empty():
@@ -2428,6 +2455,78 @@ func _float_audit() -> void:
 	get_tree().quit()
 
 # build 22: falls hurt, fires sit in pits, sharpshooters keep their distance and shoulder their rifles
+# build 23: gunfire (flash, brass, impacts), the view's width, the shacks' furniture and lamps, indoor light
+func _b23_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	await _wait(10)
+	# the field of view: a wide screen is held to 100 degrees across, the arms drawn as before
+	var vs := get_viewport().get_visible_rect().size
+	var v: float = player.view_fov(75.0)
+	var across := rad_to_deg(2.0 * atan(tan(deg_to_rad(v * 0.5)) * vs.x / vs.y))
+	out.append("view %.0fx%.0f: 75 tall asked, %.1f tall given, %.0f across (at most 100: %s); arms scaled %.2f" % [vs.x, vs.y, v, across, str(across <= 100.5), player.gun.scale.x])
+	# a shot at the ground: a flash at the muzzle, a case thrown, a hole and dust where it hit
+	await _tp(-40.0, 150.0)
+	Game.give("pipe_pistol", 1)
+	Game.weapon = "pipe_pistol"
+	player.weapon_changed()
+	await _wait(10)
+	player.pitch = -0.6
+	await _wait(5)
+	var holes0: int = GunFX._holes.size()
+	var kids0 := get_child_count()
+	Game.mag = maxi(Game.mag, 5)
+	player.fire_cd = 0.0
+	player.fire()
+	await _wait(2)
+	var flash := 0
+	for c in player.vm.muzzle.get_children():
+		if c is Node3D and (c as Node3D).visible and c != player.flash_q and c != player.flash:
+			flash += (c as Node3D).find_children("*", "MeshInstance3D", true, false).size()
+	await _wait(20)
+	out.append("one shot: %d flash pieces at the muzzle, %d hole(s) left in the ground, %d things added to the world (brass, dust)" % [flash, GunFX._holes.size() - holes0, get_child_count() - kids0])
+	out.append("ground hit reads as: %s" % GunFX.surface({"collider": null, "normal": Vector3.UP, "position": Vector3(player.global_position.x, Game.height(player.global_position.x, player.global_position.z), player.global_position.z)}))
+	# Cinder Gap's homes: a real table, the lantern on it; the store's lamp hung flush from the ceiling
+	await _tp(789.0, -51.3)
+	await _wait(30)
+	var home: Node3D = null
+	var best := 99.0
+	for f in find_children("f_Lantern_01", "Node3D", true, false):
+		var d := Vector2((f as Node3D).global_position.x - 789.0, (f as Node3D).global_position.z + 53.0).length()
+		if d < best:
+			best = d
+			home = f
+	if home:
+		var tbl: Node3D = home.get_parent().find_child("f_WoodenTable_03", false, false)
+		var top := (tbl.global_position.y + Furniture.aabb("WoodenTable_03").end.y) if tbl else -99.0
+		out.append("home's lantern stands %.2f m above its table top (on it: %s)" % [home.global_position.y - top, str(absf(home.global_position.y - top) < 0.05)])
+	else:
+		out.append("home's lantern: missing")
+	await _tp(802.0, -52.0)
+	await _wait(30)
+	var lamp: Node3D = null
+	for f in find_children("hang_hanging_industrial_lamp", "Node3D", true, false):
+		if Vector2((f as Node3D).global_position.x - 802.0, (f as Node3D).global_position.z + 54.0).length() < 6.0:
+			lamp = f
+	if lamp:
+		# the ceiling boards' underside is at the walls' height
+		var gap: float = 2.7 - lamp.position.y
+		var low := lamp.global_position.y - Furniture.aabb("hanging_industrial_lamp").size.y * (lamp.get_child(0) as Node3D).scale.x - (lamp.get_parent() as Node3D).global_position.y
+		out.append("store's lamp: %.2f m below the ceiling boards, its bottom %.2f m over the floor (hung flush %s, over head height %s)" % [gap, low, str(absf(gap) < 0.06), str(low > 1.9)])
+	else:
+		out.append("store's lamp: missing")
+	# indoors the sky's light is turned down; it comes back when you step out
+	await _wait(60)
+	var amb_in := env.ambient_light_energy
+	var enc_in := atmos.enclosed
+	await _tp(802.0, -44.0)
+	await _wait(90)
+	out.append("inside the store: walls round you %s, ambient %.2f; outside: %s, ambient %.2f (darker inside %s)" % [str(enc_in), amb_in, str(atmos.enclosed), env.ambient_light_energy, str(amb_in < env.ambient_light_energy * 0.8)])
+	for l in out:
+		print("B23TEST ", l)
+	get_tree().quit()
+
 func _b22_test() -> void:
 	var out: Array = []
 	Game.booted = true
@@ -3482,21 +3581,27 @@ func _environment() -> void:
 		# a pinhole between two wall pieces shows this, so make it the colour of the room, not a black void
 		env.background_color = Color(0.26, 0.22, 0.18)
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = Color(0.95, 0.87, 0.75)
-		env.ambient_light_energy = 0.95
+		# build 23: the flat fill turned down, so the room's own lamps light it, with shadows from the one you're under
+		env.ambient_light_color = Color(0.9, 0.84, 0.76)
+		env.ambient_light_energy = 0.55
 		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 		env.fog_enabled = false
 		sun.visible = false
 		sun.shadow_enabled = false
 		var cy := float(Game.L.consts.CELLS.y)
+		cell_lights.clear()
 		for C in Game.CELLS:
 			var n := 1 if float(C.D2) < 16.0 else 2
+			cell_lights.append([])
 			for k in n:
 				var l := OmniLight3D.new()
+				cell_lights[-1].append(l)
 				l.light_color = Color(1.0, 0.84, 0.64)
-				l.light_energy = 2.3
+				l.light_energy = 2.4
+				l.shadow_bias = 0.08
+				l.shadow_blur = 1.5
 				l.omni_range = maxf(float(C.W2), float(C.D2) / n) * 0.8
-				l.omni_attenuation = 0.8
+				l.omni_attenuation = 1.1
 				l.shadow_enabled = false
 				add_child(l)
 				var dz := 0.0 if n == 1 else (k - 0.5) * float(C.D2) * 0.5
@@ -3512,7 +3617,7 @@ func _environment() -> void:
 		env.fog_enabled = false
 		sun.visible = false
 		sun.shadow_enabled = false
-		env.ambient_light_energy = 0.8
+		env.ambient_light_energy = 0.72
 		env.ambient_light_color = Color(0.72, 0.75, 0.78)
 		env.background_color = Color(0.24, 0.27, 0.26)
 		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED

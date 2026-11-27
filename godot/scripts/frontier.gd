@@ -47,6 +47,26 @@ static var _mats: Dictionary = {}
 var main
 var fires: Array = []
 
+# inside one of the frontier's buildings (a shack, a hall, a cabin, a longhouse)? Their roofs and ceilings have no
+# collision for a ray to find, so this goes by their footprints (build 23: indoor light; rain stays outside)
+static var _rooms: Array = []
+static func indoors(x: float, z: float) -> bool:
+	if _rooms.is_empty():
+		for d in layout():
+			if String(d.k) in ["shack", "hall", "cabin", "longhouse"]:
+				_rooms.append([float(d.x), float(d.z), int(d.r), float(d.get("w", 6)) * 0.5 - 0.1, float(d.get("d", 5)) * 0.5 - 0.1])
+		if _rooms.is_empty():
+			_rooms.append([INF, INF, 0, 0.0, 0.0])
+	for r in _rooms:
+		var dx: float = x - float(r[0])
+		var dz: float = z - float(r[1])
+		if absf(dx) > 9.0 or absf(dz) > 9.0:
+			continue
+		var l := Basis(Vector3.UP, -int(r[2]) * PI * 0.5) * Vector3(dx, 0, dz)
+		if absf(l.x) < float(r[3]) and absf(l.z) < float(r[4]):
+			return true
+	return false
+
 static func blocked(x: float, z: float) -> bool:
 	for k in SITES:
 		var s: Array = SITES[k]
@@ -578,29 +598,32 @@ func _furnish(n: Node3D, d: Dictionary) -> void:
 	var fl := 0.16
 	var l := OmniLight3D.new()
 	l.light_color = Color(1.0, 0.78, 0.5)
-	l.light_energy = 0.9
-	l.omni_range = maxf(w, dd) * 0.9
-	l.position = Vector3(0, float(d.get("h", 2.7)) - 0.5, 0)
+	l.light_energy = 1.25
+	l.omni_range = maxf(w, dd) * 1.05
+	l.omni_attenuation = 1.2
+	l.position = Vector3(0, float(d.get("h", 3.4 if d.k == "hall" else 2.7)) - 0.5, 0)
 	l.distance_fade_enabled = true
 	l.distance_fade_begin = 40.0
 	l.distance_fade_length = 10.0
 	n.add_child(l)
 	match String(d.role):
 		"home":
+			# a proper table to eat at (it was a knee-high side table with a lantern hovering over it: build 23)
 			_cot(n, Vector3(-hw + 0.45, fl, -hd + 1.0), 0.0)
-			_put(n, "WoodenTable_02", Vector3(hw - 0.6, fl, -hd + 0.5), 0.0)
-			_put(n, "SchoolChair_01", Vector3(hw - 0.6, fl, -hd + 1.3), PI, true)
-			_put(n, "Shelf_01", Vector3(hw - 0.2, fl, 0.3), -PI * 0.5)
+			_put(n, "WoodenTable_03", Vector3(hw - 0.85, fl, -hd + 0.4), 0.0)
+			_put(n, "SchoolChair_01", Vector3(hw - 0.85, fl, -hd + 1.15), PI, true)
+			_put(n, "Shelf_01", Vector3(hw - 0.2, fl, 0.75), -PI * 0.5)
 			_put(n, "k:q_Barrel", Vector3(-hw + 0.4, fl, hd - 0.5), 0.0)
-			_put(n, "Lantern_01", Vector3(hw - 0.6, fl + 0.78, -hd + 0.4), 0.0)
+			_put(n, "Lantern_01", Vector3(hw - 0.5, fl + _top("WoodenTable_03"), -hd + 0.35), 0.0)
+			_put(n, "wooden_bowl_01", Vector3(hw - 1.1, fl + _top("WoodenTable_03"), -hd + 0.45), 0.0)
 		"shop":
 			_counter(n, Vector3(0, fl, -0.2), w - 2.4)
 			_put(n, "Shelf_01", Vector3(-hw + 1.2, fl, -hd + 0.2), 0.0)
 			_put(n, "Shelf_01", Vector3(hw - 1.2, fl, -hd + 0.2), 0.0)
 			_put(n, "k:s_box-large", Vector3(-hw + 0.5, fl, hd - 0.6), 0.3)
 			_put(n, "k:q_Barrel", Vector3(hw - 0.5, fl, hd - 0.5), 0.0)
-			_put(n, "metal_jug", Vector3(-0.6, fl + 1.0, -0.2), 0.0)
-			_put(n, "hanging_industrial_lamp", Vector3(0, float(d.get("h", 2.7)) + 0.1, 0.4), 0.0)
+			_put(n, "metal_jug", Vector3(-0.6, fl + 1.05, -0.2), 0.0)
+			_hang(n, "hanging_industrial_lamp", Vector3(0, 0, 0.8), d, l)
 		"bar":
 			_counter(n, Vector3(-1.5, fl, -hd + 1.6), 5.5)
 			for i in 4:
@@ -614,7 +637,7 @@ func _furnish(n: Node3D, d: Dictionary) -> void:
 			_put(n, "WoodenTable_02", Vector3(-3.4, fl, hd - 1.2), 0.0)
 			_put(n, "GreenChair_01", Vector3(-3.4, fl, hd - 0.5), PI, true)
 			_put(n, "dartboard", Vector3(hw + 0.2, 1.7, -1.5), -PI * 0.5)
-			_put(n, "lantern_chandelier_01", Vector3(0.5, float(d.get("h", 3.4)) - 0.1, 0.5), 0.0)
+			_hang(n, "lantern_chandelier_01", Vector3(0.5, 0, 0.5), d, l)
 			_put(n, "k:q_Barrel", Vector3(1.6, fl, -hd + 0.6), 0.0)
 		"clinic":
 			_cot(n, Vector3(-hw + 0.45, fl, -hd + 1.0), 0.0)
@@ -622,8 +645,9 @@ func _furnish(n: Node3D, d: Dictionary) -> void:
 			_put(n, "WoodenTable_03", Vector3(hw - 0.7, fl, -hd + 0.6), 0.0)
 			_put(n, "brass_pot_01", Vector3(hw - 0.9, fl + 0.85, -hd + 0.6), 0.0)
 			_put(n, "modern_sideboard", Vector3(hw - 0.3, fl, 0.6), -PI * 0.5)
-			_put(n, "SchoolChair_01", Vector3(0.4, fl, -0.4), 0.0, true)
-			_put(n, "vintage_oil_lamp", Vector3(hw - 0.5, fl + 0.85, -hd + 0.8), 0.0)
+			# the doctor's chair at her table, not out in the middle of the floor
+			_put(n, "SchoolChair_01", Vector3(hw - 0.7, fl, -hd + 1.35), PI, true)
+			_put(n, "vintage_oil_lamp", Vector3(hw - 0.25, fl + _top("WoodenTable_03"), -hd + 0.6), 0.0)
 		"office":
 			_put(n, "modern_desk", Vector3(0, fl, -hd + 0.7), 0.0)
 			_put(n, "ArmChair_01", Vector3(0, fl, -hd + 0.2), 0.0, true)
@@ -637,7 +661,7 @@ func _furnish(n: Node3D, d: Dictionary) -> void:
 			_put(n, "Drill_01", Vector3(hw - 0.9, fl + 0.85, -hd + 0.6), 0.0)
 			_put(n, "k:q_Wheels_Stack", Vector3(hw - 0.7, fl, hd - 0.9), 0.0)
 			_put(n, "k:q_Pipes", Vector3(hw - 0.6, fl, 0.6), 0.3)
-			_put(n, "caged_hanging_light", Vector3(0, float(d.get("h", 2.7)) - 0.05, 0), 0.0)
+			_hang(n, "caged_hanging_light", Vector3(0, 0, 0), d, l)
 		"smoke":
 			for i in 3:
 				_put(n, "k:s_barrel-open", Vector3(-hw + 0.6 + i * 1.1, fl, -hd + 0.5), 0.0)
@@ -663,6 +687,22 @@ func _furnish(n: Node3D, d: Dictionary) -> void:
 			_put(n, "Shelf_01", Vector3(0, fl, -hd + 0.2), 0.0)
 			_put(n, "k:q_TrashBag_2", Vector3(hw - 0.6, fl, -hd + 0.6), 0.0)
 			_put(n, "Television_01", Vector3(-1.2, fl + 1.0, 0.6), 0.0)
+
+# how high a piece's top is (things set on it go there, not at a guessed height)
+func _top(id: String) -> float:
+	return Furniture.aabb(id).end.y + 0.002
+
+# a light hung from the shack's ceiling (the underside of the ceiling boards is at the wall height), flush with it;
+# the shack's lamp moves to it, and the fitting's own lamp stays off (one light, where the bulb is)
+func _hang(n: Node3D, id: String, at: Vector3, d: Dictionary, l: OmniLight3D) -> void:
+	var ch := float(d.get("h", 3.4 if d.k == "hall" else 2.7))
+	var f := Furniture.hang(id, ch, 0.16, false)
+	n.add_child(f)
+	f.position = Vector3(at.x, ch, at.z)
+	var ab := Furniture.aabb(id)
+	var s: float = (f.get_child(0) as Node3D).scale.x
+	l.position = Vector3(at.x, ch - ab.size.y * s * 0.85, at.z)
+	l.light_energy = 1.4
 
 func _counter(n: Node3D, at: Vector3, length: float) -> void:
 	var kit := Kit.new()

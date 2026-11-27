@@ -137,6 +137,39 @@ static func make(id: String, lit := true, solid_override := -1) -> Node3D:
 		root.add_child(l)
 	return root
 
+# ---------------------------------------------------------------- a light hung from a ceiling (build 23)
+# The node stands on the ceiling's underside (its origin there): the fitting's top is flush with it, on a small
+# ceiling plate, and it hangs no lower than `lowest` above the floor below; a fitting too long for the room is
+# shortened (scaled) to fit rather than left dangling in mid-air or poking into the roof. Its lamp hangs with it.
+static func hang(id: String, ceil_y: float, floor_y: float, lit := true, lowest := 2.15) -> Node3D:
+	var root := Node3D.new()
+	root.name = "hang_" + id
+	var piece := make(id, lit)
+	var ab := aabb(id)
+	var room := ceil_y - floor_y - lowest
+	var s := 1.0
+	if ab.size.y > room:
+		s = clampf(room / maxf(0.01, ab.size.y), 0.45, 1.0)
+	piece.scale = Vector3.ONE * s
+	piece.position.y = -ab.end.y * s
+	root.add_child(piece)
+	var plate := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.09
+	cm.bottom_radius = 0.11
+	cm.height = 0.035
+	cm.radial_segments = 12
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.16, 0.15, 0.14)
+	mat.metallic = 0.6
+	mat.roughness = 0.5
+	cm.material = mat
+	plate.mesh = cm
+	plate.position.y = -0.017
+	plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(plate)
+	return root
+
 # ---------------------------------------------------------------- where things can rest on a piece
 # Every upward-facing face of the model, rasterised into a 5 cm grid over its footprint: for each cell, the heights
 # of the surfaces there (a table top; a bookcase's shelf boards; a chair's seat and arms). Small things placed on a

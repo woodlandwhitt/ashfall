@@ -34,6 +34,8 @@ var geiger_t := 0.0
 var heart_t := 0.0
 var roof_t := 0.0
 var roofed := false
+var enclosed := false
+var indoor_k := 0.0
 var day := 1.0
 
 func setup(m) -> void:
@@ -185,9 +187,14 @@ func _process(dt: float) -> void:
 		sun_col = Color(0.55, 0.65, 0.9)
 	sun_col = sun_col.lerp(Color(0.7, 1.0, 0.6), green * 0.45)
 	sun.light_color = sun_col
-	sun.light_energy = (1.3 * day * (1.0 - cover * 0.45) * (1.0 - haze * 0.4)) if not moon else 0.12 * (1.0 - cover * 0.6)
+	sun.light_energy = (1.4 * day * (1.0 - cover * 0.45) * (1.0 - haze * 0.4)) if not moon else 0.12 * (1.0 - cover * 0.6)
 	var night := 1.0 - day
-	env.ambient_light_energy = 0.3 + 0.62 * day
+	# indoors the sky's light only gets in by the door and the windows (build 23: a shack's insides were lit as
+	# brightly as the street, flat and shadowless): eased down while you're under a roof with walls round you,
+	# so the lamp inside does the work and the doorway glows with the day outside
+	indoor_k = move_toward(indoor_k, 1.0 if enclosed else 0.0, dt * 1.5)
+	# a little less fill and a little more sun than before: shadows that read, the light with a direction to it
+	env.ambient_light_energy = (0.3 + 0.52 * day) * (1.0 - 0.55 * indoor_k)
 	if sm:
 		var top_d := Color(0.36, 0.47, 0.6).lerp(Color(0.5, 0.5, 0.5), cover * 0.5)
 		var hor_d := Color(0.86, 0.74, 0.58).lerp(Color(0.95, 0.6, 0.35), low * 0.6)
@@ -216,6 +223,19 @@ func _process(dt: float) -> void:
 		roof_t = 0.4
 		var q := PhysicsRayQueryParameters3D.create(pp + Vector3.UP * 1.7, pp + Vector3.UP * 12.0, 1)
 		roofed = not main.get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+		enclosed = false
+		if Game.area == "world" and Frontier.indoors(pp.x, pp.z) and pp.y - Game.height(pp.x, pp.z) < 2.0:
+			roofed = true
+			enclosed = true
+		elif roofed:
+			var walls := 0
+			for i in 8:
+				var a := i * TAU / 8.0
+				var hq := PhysicsRayQueryParameters3D.create(pp + Vector3.UP * 1.3, pp + Vector3(sin(a) * 7.0, 1.3, cos(a) * 7.0), 1)
+				hq.exclude = [Game.player.get_rid()]
+				if not main.get_world_3d().direct_space_state.intersect_ray(hq).is_empty():
+					walls += 1
+			enclosed = walls >= 6
 	var rn := float(cur.rain)
 	rain_p.emitting = rn > 0.1 and not roofed
 	rain_p.global_position = pp + Vector3.UP * 8.0

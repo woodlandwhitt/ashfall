@@ -213,12 +213,24 @@ func _area(parent: Node3D, r0: Rect2, kind: String, floor_y: float, doors: Array
 	_find_signs(parent.get_tree().current_scene if parent.get_tree() else parent, floor_y)
 	if hangar:
 		_hangar()
+	# where you can walk in the bare room (build 23): checked again once it's furnished, so nothing cuts off a doorway
+	var t0 := Time.get_ticks_usec()
+	_walk0(doors)
+	var t_grid := Time.get_ticks_usec() - t0
 	_walls(K)
 	if String(C.get("kind", "")) in ["storage", "workshop", "store"] and not hangar:
 		_aisles(K, String(C.get("kind", "")))
 	_tables(K)
 	if not no_lights or kind in ["storage", "workshop"]:
 		_junk(String(C.get("kind", "")))
+	var lost0 := _lost(_furnished()) if wg.has("r0") else -1.0
+	_unblock()
+	var lost1 := _lost(_furnished()) if wg.has("r0") else -1.0
+	audit.append("%s %s @%s: grid %s, %.1f ms; %d pieces; cut off %.2f m2 -> %.2f m2; took out %s; doorway cells %d; %s" % [key, kind, str(rect.get_center().round()),
+		("%dx%d" % [wg.nx, wg.nz]) if wg.has("nx") else "none", t_grid / 1000.0, pieces.size(), lost0, lost1, str(removed), int(wg.get("throats", 0)), String(wg.get("stat", "")) + " " + str(dropped)])
+	worst = maxf(worst, lost1)
+	if wg.has("r0"):
+		rooms_checked += 1
 	_decor(K)
 	_ceiling(K)
 	why = {}
@@ -271,6 +283,9 @@ func _free(id: String, pos: Vector2, yaw: float, y: float, clear := true) -> boo
 		for r in keep_clear:
 			if (r as Rect2).intersects(fp):
 				return _no("clear")
+	for r in throats:
+		if (r as Rect2).intersects(fp):
+			return _no("doorway")
 	# the walls, counters and bits of old furniture already standing in the room
 	var ab := Furniture.aabb(id)
 	var q := PhysicsShapeQueryParameters3D.new()
@@ -292,6 +307,10 @@ func _put(id: String, pos: Vector2, yaw: float, y: float, lit := false) -> Node3
 	n.global_position = Vector3(pos.x, y, pos.y)
 	n.rotation.y = yaw
 	taken.append(_footprint(id, pos, yaw, 0.0))
+	# a solid piece standing on the floor is something you'd have to walk round
+	if y < fy + 0.3 and bool(Furniture.CAT.get(id, ["", "", false])[2]):
+		var sq := absf(sin(yaw * 2.0)) > 0.2
+		pieces.append([n, _footprint(id, pos, yaw, 0.12 if sq else 0.0), id])
 	if nav_key != "" and TownLife.inst:
 		TownLife.inst.add_piece(nav_key, id, n)
 	return n
@@ -421,6 +440,378 @@ func _junk(kind: String) -> void:
 			_put(id, Vector2(cx, cz), yaw, fy)
 			n -= 1
 
+# ---------------------------------------------------------------- the way through (build 23)
+# A chair pulled out into a doorway, a sideboard across the gap to the next room: the bare room is mapped on a grid of
+# spots a body fits (the walls and anything already standing there, from the physics), and once the furniture is in,
+# every spot you could reach from the door before must still be reachable, round the furniture. Whatever cuts a
+# stretch of floor off is taken out again, with what was standing on it.
+const GC := 0.2
+var pieces: Array = []    # [node, footprint Rect2, id] of every solid piece on the floor
+var wg := {}              # the walk grid: origin, nx, nz, free (bare room), seeds
+func _walk0(doors: Array) -> void:
+	wg = {}
+	if space == null:
+		return
+	var g := rect.grow(1.0)
+	var nx := int(ceil(g.size.x / GC))
+	var nz := int(ceil(g.size.y / GC))
+	if nx * nz > 60000:
+		return
+	var free := PackedByteArray()     # nothing in the way
+	free.resize(nx * nz)
+	var free_w := PackedByteArray()   # no wall in the way (the old map's own chairs and crates don't count)
+	free_w.resize(nx * nz)
+	var props := {}                   # the old map's loose pieces (chair-sized solids) met on the way
+	var by_prop := {}                 # cell -> the loose pieces that are all that's in it
+	var q := PhysicsShapeQueryParameters3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(0.64, 1.15, 0.64)
+	q.shape = bs
+	q.collision_mask = 1
+	for i in nx:
+		for j in nz:
+			var c := g.position + Vector2(i + 0.5, j + 0.5) * GC
+			q.transform = Transform3D(Basis(), Vector3(c.x, fy + 0.4 + 0.575, c.y))
+			# walls and fixtures only: people standing about (in a doorway, say) aren't part of the room
+			var wall := false
+			var mine: Array = []
+			for h in space.intersect_shape(q, 6):
+				if h.collider is CharacterBody3D or h.collider is RigidBody3D:
+					continue
+				var pk := _prop_key(h)
+				if pk == "":
+					wall = true
+					break
+				if not props.has(pk):
+					props[pk] = h
+				mine.append(pk)
+			var k := i * nz + j
+			free_w[k] = 0 if wall else 1
+			free[k] = 1 if (not wall and mine.is_empty()) else 0
+			if not wall and not mine.is_empty():
+				by_prop[k] = mine
+	wg = {"o": g.position, "nx": nx, "nz": nz, "free": free_w}
+	wg["seeds"] = _seeds(free_w, doors)
+	# the doorways, found from the walls alone; any of the old map's loose pieces standing in one is taken away
+	# (build 23: the clinic's armchair stood square in the door to its back room)
+	var rw := _reach(free_w, wg.seeds)
+	_throats(free_w, rw)
+	var gone := {}
+	for pk in props:
+		var fp := _prop_rect(props[pk])
+		for tr in throats:
+			if (tr as Rect2).intersects(fp):
+				if _drop_prop(props[pk]):
+					gone[pk] = true
+				break
+	for k in by_prop:
+		var all_gone := true
+		for pk in by_prop[k]:
+			if not gone.has(pk):
+				all_gone = false
+		if all_gone:
+			free[k] = 1
+	wg.free = free
+	wg.seeds = _seeds(free, doors)
+	wg["props_gone"] = gone.size()
+	var r0 := _reach(free, wg.seeds)
+	# a room you can't get into from its edges (sealed, or a cell whose door is a teleport): from its biggest open patch
+	var inside := 0
+	for k in r0.size():
+		if r0[k] == 1 and _in_room(k):
+			inside += 1
+	if inside < 6:
+		var best: Array = []
+		var seen := PackedByteArray()
+		seen.resize(nx * nz)
+		for k in nx * nz:
+			if free[k] == 1 and seen[k] == 0 and _in_room(k):
+				var comp := _reach(free, [k])
+				var cs: Array = []
+				for m in comp.size():
+					if comp[m] == 1:
+						seen[m] = 1
+						cs.append(m)
+				if cs.size() > best.size():
+					best = cs
+		if best.is_empty():
+			wg = {}
+			return
+		wg.seeds = [best[0]]
+		r0 = _reach(free, wg.seeds)
+	wg["r0"] = r0
+	var nf := 0
+	var nr := 0
+	for k in r0.size():
+		nf += free[k]
+		nr += 1 if r0[k] == 1 and _in_room(k) else 0
+	wg["stat"] = "free %d reach-in %d seeds %d, old pieces out of doorways %d" % [nf, nr, wg.seeds.size(), int(wg.props_gone)]
+
+func _seeds(free: PackedByteArray, doors: Array) -> Array:
+	var nx: int = wg.nx
+	var nz: int = wg.nz
+	var seeds: Array = []
+	for i in nx:
+		for j in nz:
+			var c: Vector2 = wg.o + Vector2(i + 0.5, j + 0.5) * GC
+			if free[i * nz + j] == 1 and not rect.grow(-0.05).has_point(c):
+				seeds.append(i * nz + j)
+	for dp in doors:
+		var i := int(((dp as Vector2).x - wg.o.x) / GC)
+		var j := int(((dp as Vector2).y - wg.o.y) / GC)
+		if i >= 0 and j >= 0 and i < nx and j < nz and free[i * nz + j] == 1:
+			seeds.append(i * nz + j)
+	return seeds
+
+# one of the old map's loose pieces (a chair, a crate, a barrel: a solid no bigger than furniture, standing on the
+# floor, one of many boxes in the map's collision): "" for a wall or anything else
+func _prop_key(h: Dictionary) -> String:
+	var co := h.collider as CollisionObject3D
+	if co == null or not (co is StaticBody3D) or co.get_shape_owners().size() < 4:
+		return ""
+	var ow := co.shape_owner_get_owner(co.shape_find_owner(int(h.shape))) as CollisionShape3D
+	if ow == null or not (ow.shape is BoxShape3D) or ow.disabled:
+		return ""
+	var sz: Vector3 = (ow.shape as BoxShape3D).size
+	var bot := ow.global_position.y - sz.y * 0.5
+	if sz.x > 1.7 or sz.z > 1.7 or sz.y > 1.9 or sz.x * sz.z > 1.6 or absf(bot - fy) > 0.4:
+		return ""
+	# a locked door's leaf is a solid in its doorway too, and it stays
+	var p := ow.global_position
+	for d in Game.W.get("doors", []):
+		if Vector2(float(d.x) - p.x, float(d.z) - p.z).length() < 1.3:
+			return ""
+	# nor is a terminal's stand
+	for t in Game.W.get("terminals", []):
+		if Vector2(float(t.x) - p.x, float(t.z) - p.z).length() < 0.8:
+			return ""
+	return str(ow.get_instance_id())
+
+func _prop_rect(h: Dictionary) -> Rect2:
+	var co := h.collider as CollisionObject3D
+	var ow := co.shape_owner_get_owner(co.shape_find_owner(int(h.shape))) as CollisionShape3D
+	var sz: Vector3 = (ow.shape as BoxShape3D).size
+	var p := ow.global_position
+	return Rect2(Vector2(p.x, p.z) - Vector2(sz.x, sz.z) * 0.5, Vector2(sz.x, sz.z))
+
+var dropped: Array = []
+func _drop_prop(h: Dictionary) -> bool:
+	var co := h.collider as CollisionObject3D
+	var ow := co.shape_owner_get_owner(co.shape_find_owner(int(h.shape))) as CollisionShape3D
+	var sz: Vector3 = (ow.shape as BoxShape3D).size
+	var p := ow.global_position
+	# the piece you can see there
+	var seen: Array = []
+	var top := root.get_tree().current_scene if root.get_tree() else null
+	if top:
+		for c in top.find_children("*", "MeshInstance3D", true, false):
+			var mi := c as MeshInstance3D
+			var nm := String(mi.name)
+			if not (nm.begins_with("s_") or nm.begins_with("b_")) or not mi.visible or not mi.is_inside_tree():
+				continue
+			var ab: AABB = mi.global_transform * mi.get_aabb()
+			var cc := ab.get_center()
+			if Vector2(cc.x - p.x, cc.z - p.z).length() < 0.45 and absf(cc.y - p.y) < 0.6 and ab.size.x < sz.x + 0.6 and ab.size.z < sz.z + 0.6 \
+					and ab.size.x > minf(sz.x, sz.z) * 0.5 and ab.size.y < sz.y + 0.6:
+				seen.append(mi)
+	if seen.is_empty() and sz.y > 1.5 and maxf(sz.x, sz.z) <= 1.3 and maxf(sz.x, sz.z) >= 0.7 and minf(sz.x, sz.z) <= 0.6:
+		# a shut door, part of the room's own model: it stays, but it opens now (you step through, like the town's
+		# other doors) instead of shutting a back room away for good
+		var id := "fd_%d_%d" % [roundi(p.x * 10.0), roundi(p.z * 10.0)]
+		if Game.main and Game.main.get("objects"):
+			var o := {"id": id, "x": p.x, "z": p.z, "y": fy, "lock": 0,
+				"col": {"x0": p.x - sz.x * 0.5, "x1": p.x + sz.x * 0.5, "z0": p.z - sz.z * 0.5, "z1": p.z + sz.z * 0.5}}
+			var known := false
+			for k in Game.main.objects.grid:
+				for o2 in Game.main.objects.grid[k]:
+					if String(o2.get("id", "")) == id:
+						known = true
+			if not known:
+				Game.main.objects._add("ldoor", o)
+			Game.opened["d_" + id] = true
+			dropped.append("door made usable@" + str(p.snapped(Vector3.ONE * 0.1)))
+		return false
+	if seen.is_empty():
+		# no piece of its own to take away (it's part of the room's model): it stays as it is
+		return false
+	for mi in seen:
+		(mi as MeshInstance3D).visible = false
+		dropped.append(String(mi.name))
+	ow.set_deferred("disabled", true)
+	PhysicsServer3D.body_set_shape_disabled(co.get_rid(), int(h.shape), true)
+	dropped.append("solid@" + str(p.snapped(Vector3.ONE * 0.1)) + " size " + str(sz.snapped(Vector3.ONE * 0.01)))
+	return true
+
+# doorways and passages: floor squeezed between two walls (a gap no wider than THROAT across) that runs on the
+# other way. Nothing goes in one, or just either side of it, chairs included: you walk through a doorway, not round
+# the chair parked in it.
+const THROAT := 1.7
+var throats: Array = []
+func _throats(free: PackedByteArray, r0: PackedByteArray) -> void:
+	var nx: int = wg.nx
+	var nz: int = wg.nz
+	var lim := int(THROAT / GC)
+	# run lengths across x (for each cell, the free run it's in along x) and along z
+	var run_x := PackedInt32Array()
+	run_x.resize(nx * nz)
+	var walled_x := PackedByteArray()
+	walled_x.resize(nx * nz)
+	for j in nz:
+		var i := 0
+		while i < nx:
+			if free[i * nz + j] == 0:
+				i += 1
+				continue
+			var s := i
+			while i < nx and free[i * nz + j] == 1:
+				i += 1
+			var closed := 1 if s > 0 and i < nx else 0
+			for k in range(s, i):
+				run_x[k * nz + j] = i - s
+				walled_x[k * nz + j] = closed
+	var run_z := PackedInt32Array()
+	run_z.resize(nx * nz)
+	var walled_z := PackedByteArray()
+	walled_z.resize(nx * nz)
+	for i in nx:
+		var j := 0
+		while j < nz:
+			if free[i * nz + j] == 0:
+				j += 1
+				continue
+			var s := j
+			while j < nz and free[i * nz + j] == 1:
+				j += 1
+			var closed := 1 if s > 0 and j < nz else 0
+			for k in range(s, j):
+				run_z[i * nz + k] = j - s
+				walled_z[i * nz + k] = closed
+	var n := 0
+	for i in nx:
+		for j in nz:
+			var k := i * nz + j
+			if r0[k] == 0:
+				continue
+			var c: Vector2 = wg.o + Vector2(i + 0.5, j + 0.5) * GC
+			if not rect.grow(0.4).has_point(c):
+				continue
+			# only every other cell: the rects overlap anyway
+			if (i + j) % 2 == 1:
+				continue
+			if walled_x[k] == 1 and run_x[k] <= lim and run_z[k] * GC >= 2.4:
+				throats.append(Rect2(c - Vector2(GC * 0.5 + 0.25, 1.2), Vector2(GC + 0.5, 2.4)))
+				n += 1
+			elif walled_z[k] == 1 and run_z[k] <= lim and run_x[k] * GC >= 2.4:
+				throats.append(Rect2(c - Vector2(1.2, GC * 0.5 + 0.25), Vector2(2.4, GC + 0.5)))
+				n += 1
+	wg["throats"] = n
+
+func _in_room(k: int) -> bool:
+	var c: Vector2 = wg.o + Vector2(k / int(wg.nz) + 0.5, k % int(wg.nz) + 0.5) * GC
+	return rect.has_point(c)
+
+func _reach(free: PackedByteArray, seeds: Array) -> PackedByteArray:
+	var nz: int = wg.get("nz", 1)
+	var n := free.size()
+	var seen := PackedByteArray()
+	seen.resize(n)
+	var stack: Array = []
+	for s in seeds:
+		if free[s] == 1 and seen[s] == 0:
+			seen[s] = 1
+			stack.append(s)
+	while not stack.is_empty():
+		var k: int = stack.pop_back()
+		var j := k % nz
+		for nb in [k - nz, k + nz, k - 1 if j > 0 else -1, k + 1 if j < nz - 1 else -1]:
+			if nb >= 0 and nb < n and free[nb] == 1 and seen[nb] == 0:
+				seen[nb] = 1
+				stack.append(nb)
+	return seen
+
+# the grid with the furniture in it (all but the piece `skip`)
+func _furnished(skip := -1) -> PackedByteArray:
+	var f: PackedByteArray = (wg.free as PackedByteArray).duplicate()
+	var nz: int = wg.nz
+	var nx: int = wg.nx
+	for pi in pieces.size():
+		if pi == skip or pieces[pi][0] == null or not is_instance_valid(pieces[pi][0]):
+			continue
+		var r: Rect2 = (pieces[pi][1] as Rect2).grow(0.34)
+		var i0 := maxi(0, int(floor((r.position.x - wg.o.x) / GC - 0.5)))
+		var i1 := mini(nx - 1, int(ceil((r.end.x - wg.o.x) / GC - 0.5)))
+		var j0 := maxi(0, int(floor((r.position.y - wg.o.y) / GC - 0.5)))
+		var j1 := mini(nz - 1, int(ceil((r.end.y - wg.o.y) / GC - 0.5)))
+		for i in range(i0, i1 + 1):
+			for j in range(j0, j1 + 1):
+				var c: Vector2 = wg.o + Vector2(i + 0.5, j + 0.5) * GC
+				if r.has_point(c):
+					f[i * nz + j] = 0
+	return f
+
+# floor that could be walked to before and now can't (not counting what's under the furniture itself), in m²
+var lost_at: Array = []   # where, the last time it was counted
+func _lost(f: PackedByteArray) -> float:
+	var r1 := _reach(f, wg.seeds)
+	var r0: PackedByteArray = wg.r0
+	lost_at = []
+	for k in r0.size():
+		if r0[k] == 1 and f[k] == 1 and r1[k] == 0:
+			lost_at.append(wg.o + Vector2(k / int(wg.nz) + 0.5, k % int(wg.nz) + 0.5) * GC)
+	return lost_at.size() * GC * GC
+
+var removed: Array = []   # ids taken out again, for the tests
+static var audit: Array = []
+static var worst := 0.0       # the most floor any room was left cut off from its door, m²
+static var rooms_checked := 0
+func _unblock() -> void:
+	if wg.is_empty() or not wg.has("r0"):
+		return
+	for round_i in 6:
+		var lost := _lost(_furnished())
+		if lost < 1.0:
+			return
+		# only what stands next to the cut-off floor can be what cuts it off
+		var near: Array = lost_at.duplicate()
+		var best := -1
+		var best_l := lost
+		for pi in pieces.size():
+			if pieces[pi][0] == null or not is_instance_valid(pieces[pi][0]):
+				continue
+			var g: Rect2 = (pieces[pi][1] as Rect2).grow(0.7)
+			var by := false
+			for c in near:
+				if g.has_point(c):
+					by = true
+					break
+			if not by:
+				continue
+			var l := _lost(_furnished(pi))
+			if l < best_l - 0.05:
+				best_l = l
+				best = pi
+		if best < 0:
+			return
+		_take_out(best)
+
+func _take_out(pi: int) -> void:
+	var n: Node3D = pieces[pi][0]
+	var fp: Rect2 = pieces[pi][1]
+	removed.append(String(pieces[pi][2]))
+	# what was standing on it goes too
+	for c in root.get_children():
+		if c is Node3D and c != n and (c as Node3D).global_position.y > fy + 0.25 and fp.grow(0.05).has_point(Vector2((c as Node3D).global_position.x, (c as Node3D).global_position.z)):
+			c.queue_free()
+	if TownLife.inst:
+		TownLife.inst.spots = TownLife.inst.spots.filter(func(s): return s.node != n)
+	taken.erase(_footprint(String(pieces[pi][2]), Vector2(n.global_position.x, n.global_position.z), n.rotation.y, 0.0))
+	# gone from the physics now, not at the end of the frame
+	for b in n.find_children("*", "CollisionObject3D", true, false):
+		(b as CollisionObject3D).process_mode = Node.PROCESS_MODE_DISABLED
+		(b as CollisionObject3D).collision_layer = 0
+	n.queue_free()
+	pieces[pi][0] = null
+
 # ---------------------------------------------------------------- tables out in the room, chairs round them
 func _tables(K: Dictionary) -> void:
 	var want: int = K.sets
@@ -489,6 +880,10 @@ func _decor(K: Dictionary) -> void:
 		for sg in signs:
 			if (sg as Rect2).grow(0.4).has_point(Vector2(hp.x, hp.z)):
 				on_sign = true
+		# not on the edge of a doorway (a mirror hung on the jamb sticks out into the way through)
+		for tr in throats:
+			if (tr as Rect2).grow(0.1).has_point(Vector2(hp.x, hp.z)):
+				on_sign = true
 		if on_sign:
 			continue
 		var id: String = K.decor[rng.randi() % K.decor.size()]
@@ -510,8 +905,14 @@ func _ceiling(K: Dictionary) -> void:
 		for j in rows:
 			var p := Vector2(rect.position.x + rect.size.x * (i + 0.5) / cols, rect.position.y + rect.size.y * (j + 0.5) / rows)
 			var id: String = K.ceil[rng.randi() % K.ceil.size()]
-			var c := Furniture.make(id, lights < 4 and not no_lights)
+			# hung from the ceiling that's really there (build 23: they were hung at a guessed height, some in mid-air)
+			var cy := fy + (3.58 if no_lights else ROOM_H)
+			if space:
+				var h := space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(p.x, fy + 1.9, p.y), Vector3(p.x, fy + 9.0, p.y), 1))
+				if not h.is_empty():
+					cy = float(h.position.y)
+			var c := Furniture.hang(id, cy, fy, lights < 4 and not no_lights)
 			lights += 1
 			root.add_child(c)
-			c.global_position = Vector3(p.x, fy + (3.58 if no_lights else ROOM_H) - 0.02, p.y)
+			c.global_position = Vector3(p.x, cy, p.y)
 			c.rotation.y = rng.randf() * TAU
