@@ -251,6 +251,9 @@ func open() -> void:
 		Game.main.hud.visible = false
 		Game.main.hud.set_prompt("")
 	_world_camera()
+	# the valley keeps streaming in behind the menu while everything else waits
+	if Game.main and is_instance_valid(Game.main) and Game.main.chunks:
+		Game.main.chunks.process_mode = Node.PROCESS_MODE_ALWAYS
 	_fill()
 	side.visible = false
 	var P = get_node_or_null("/root/Patcher")
@@ -267,6 +270,8 @@ func close() -> void:
 	Game.paused = false
 	(Engine.get_main_loop() as SceneTree).paused = false
 	if Game.main and is_instance_valid(Game.main):
+		if Game.main.chunks:
+			Game.main.chunks.process_mode = Node.PROCESS_MODE_INHERIT
 		if Game.main.hud:
 			Game.main.hud.visible = true
 		if Game.player and is_instance_valid(Game.player):
