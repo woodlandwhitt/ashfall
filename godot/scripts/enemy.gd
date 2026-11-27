@@ -82,6 +82,11 @@ const PEOPLE := {
 	"synth": ["Male_Ranger", Color(0.8, 0.8, 0.82), Color(0.9, 0.9, 0.92)],
 	"guardbot": ["Male_Knight_Cloth", Color(0.35, 0.37, 0.4), Color(0.4, 0.42, 0.45)],
 	"warden": ["Male_Knight_Cloth", Color(0.3, 0.33, 0.25), Color(0.85, 0.7, 0.6)],
+	# build 22: the last gunmen still on the old stick rig (the sharpshooter held his rifle straight up at the sky)
+	"sniper": ["Male_Ranger", Color(0.36, 0.38, 0.3), Color(0.85, 0.7, 0.6)],
+	"hunter": ["Male_Ranger", Color(0.5, 0.4, 0.28), Color(0.9, 0.75, 0.62)],
+	"hired": ["Male_Peasant", Color(0.42, 0.42, 0.45), Color(0.95, 0.8, 0.68)],
+	"warlord": ["Male_Ranger", Color(0.45, 0.2, 0.18), Color(0.9, 0.75, 0.62)],
 }
 const MACHINES := ["synth", "guardbot", "warden"]
 
@@ -270,7 +275,7 @@ func _rel(n: Node3D) -> Transform3D:
 # a gun of their own (a handgun: the aiming pose is one-handed), and the arms held on it in a fight
 const SIDEARMS := {"raider": ["Pistol_4", "lp_pistol", "lp_machine_pistol", "Revolver_3", "lp_derringer"], "warlord": ["lp_revolver"],
 	"hired": ["lp_pistol", "Pistol_4"], "townguard": ["lp_revolver", "Revolver_3"], "townsfolk": ["lp_pistol", "Pistol_4"],
-	"marauder": ["lp_machine_pistol", "Pistol_4"], "tollking": ["lp_revolver"], "sniper": ["lp_pistol"], "hunter": ["Revolver_3"]}
+	"marauder": ["lp_machine_pistol", "Pistol_4"], "tollking": ["lp_revolver"], "sniper": ["Sniper_Rifle_West", "SniperRifle_4"], "hunter": ["Revolver_3"]}
 var aim_hold: AimHold
 func _arm(d: Dictionary) -> void:
 	var list: Array = SIDEARMS.get(type, ["Pistol_4"])
@@ -281,13 +286,21 @@ func _arm(d: Dictionary) -> void:
 	gf["glb"] = glb
 	if type == "warlord" or type == "tollking":
 		gf["finish"] = "gold"
-	Humanoid.hold_gun(model, load("res://guns/" + glb + ".glb"), fit, gf)
+	if not glb.begins_with("lp_") and not glb.begins_with("Pistol") and not glb.begins_with("Revolver"):
+		gf["pistol"] = false
+	else:
+		gf["pistol"] = true
 	var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
 	if sk:
 		sk.force_update_all_bone_transforms()
 		aim_hold = AimHold.new()
 		sk.add_child(aim_hold)
 		aim_hold.capture(sk)
+	# a rifle to the shoulder in both hands (build 22: the sharpshooter used to carry a pistol)
+	if gf.pistol:
+		Humanoid.hold_gun(model, load("res://guns/" + glb + ".glb"), fit, gf)
+	else:
+		Humanoid.shoulder_gun(model, load("res://guns/" + glb + ".glb"), fit, gf)
 
 # spawned inside a boulder or a wreck: step out to clear ground first
 func _unwedge() -> void:
@@ -709,7 +722,7 @@ func _physics_process(d: float) -> void:
 				elif zed:
 					a = "Zombie_Idle"
 				elif aim:
-					a = "Pistol_Aim_Neutral"
+					a = "Crouch_Idle_Loop" if def.get("sniper", false) and ap.has_animation("Crouch_Idle_Loop") else "Pistol_Aim_Neutral"
 				var sgn := LegTwist.drive(lt, face_yaw, velocity) if spd > 0.3 else LegTwist.drive(lt, face_yaw, Vector3.ZERO)
 				Humanoid.play(ap, a, (clampf(spd / 3.2, 0.8, 1.4) if spd > 2.0 else 1.0) * sgn)
 			if aim_hold:
@@ -803,6 +816,13 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 	# ---- gunmen
 	var want_lo := 7.0
 	var want_hi := 20.0
+	var reach_aim := 28.0
+	var sniper: bool = def.get("sniper", false)
+	if sniper:
+		# a sharpshooter keeps far off and works from where it is (build 22: it used to run up on you like the rest)
+		want_lo = 26.0
+		want_hi = 58.0
+		reach_aim = minf(float(def.get("range", 75.0)) - 5.0, 70.0)
 	if hurt < 0.5 and tac != "cover" and tac != "peek" and tac_t <= 0.0 and randf() < 0.5:
 		var c = _find_cover(pp)
 		if c != null:
@@ -835,10 +855,20 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 				tac = "cover" if hurt < 0.5 else "strafe"
 				tac_t = randf_range(2.5, 4.0)
 		_:
-			if not sees or dist > want_hi:
+			if sniper and dist < want_lo:
+				# a sharpshooter caught close breaks off and runs for distance, then turns to shoot again
+				spd = _move_to(global_position - dirv * 6.0 + side * strafe * 2.0, speed * 1.1 * leg, d)
+				aim = dist > 14.0 and sees
+			elif sniper and sees and dist <= want_hi:
+				# in its spot: still, low, the rifle on you
+				_face(pp, d)
+				aim = true
+			elif not sees or dist > want_hi:
 				tac = "advance"
-				spd = _move_to(pp, speed * leg, d)
-				aim = sees and dist < 26.0
+				# a sharpshooter only edges round for a line on you, never closer than its range
+				var goal := pp if not sniper else global_position + side * strafe * 4.0 + dirv * (2.0 if dist > want_hi else 0.0)
+				spd = _move_to(goal, speed * (0.6 if sniper else 1.0) * leg, d)
+				aim = sees and dist < reach_aim
 			elif dist < want_lo:
 				# too close for comfort: give ground while shooting
 				spd = _move_to(global_position - dirv * 3.0 + side * strafe, speed * 0.85 * leg, d)
@@ -856,7 +886,7 @@ func _tactics(d: float, pp: Vector3, dist: float) -> Array:
 				aim = true
 			if spd < 0.5:
 				_face(pp, d)
-	aiming = aim and sees and dist < 28.0
+	aiming = aim and sees and dist < reach_aim
 	if aiming:
 		face_yaw = lerp_angle(face_yaw, atan2(to.x, to.z), 1.0 - exp(-12.0 * d))
 		# it takes a moment to find you, then fires in bursts, and only down the barrel: never over its shoulder

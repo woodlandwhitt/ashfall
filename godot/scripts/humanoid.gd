@@ -249,6 +249,69 @@ static func hold_gun(root: Node3D, scene: PackedScene, fit: Basis, gf: Dictionar
 	seat(root, g, PALM, grip_of(bb, fit) if gf.is_empty() else grip_fit(bb, fit, gf))
 	return g
 
+# a long gun brought up to the shoulder (build 22). The gun rides the chest (so it follows the chest when the body
+# leans to aim up or down), its butt in the right shoulder and its muzzle where the body faces; the right hand reaches
+# for the pistol grip and the left for the handguard. Before this a rifle sat in the right hand like a pistol, held
+# out at arm's length, or pointing at the sky whenever the arm swung. Call with the body in its aiming pose.
+static func shoulder_gun(root: Node3D, scene: PackedScene, fit: Basis, gf: Dictionary) -> Node3D:
+	var sk := root.find_child("Skeleton3D", true, false) as Skeleton3D
+	var spine := sk.find_bone("spine_03")
+	var ua := sk.find_bone("upperarm_r")
+	if spine < 0 or ua < 0:
+		return hold_gun(root, scene, fit, gf)
+	sk.force_update_all_bone_transforms()
+	var ts: Transform3D = sk.get_bone_global_pose(spine)
+	var shoulder: Vector3 = sk.get_bone_global_pose(ua).origin
+	var ba := BoneAttachment3D.new()
+	ba.bone_name = "spine_03"
+	sk.add_child(ba)
+	var g := scene.instantiate() as Node3D
+	ba.add_child(g)
+	GunPaint.apply(g, gf)
+	var bb := gun_bounds(g)
+	var inv := fit.orthonormalized().inverse()
+	var fwd := (inv * Vector3(0, 0, -1)).normalized()
+	var up := (inv * Vector3.UP).normalized()
+	var half_len := absf(fwd.dot(bb.size)) * 0.5
+	var half_h := absf(up.dot(bb.size)) * 0.5
+	var rear := bb.get_center() - fwd * half_len * 0.92 + up * half_h * 0.2
+	# bodies face +Z: turn the gun's muzzle (-Z after fit) round to +Z
+	var gb := Basis(Vector3.UP, PI) * fit
+	var at := shoulder + Vector3(-0.03, 0.02, 0.05)
+	var xf := Transform3D(gb, at - gb * rear)
+	g.transform = ts.affine_inverse() * xf
+	var rt := Node3D.new()
+	g.add_child(rt)
+	rt.position = grip_fit(bb, fit, gf) - up * 0.02
+	var ikr := ArmIK.new()
+	sk.add_child(ikr)
+	ikr.setup(sk, "r", rt)
+	var lt := Node3D.new()
+	g.add_child(lt)
+	lt.position = guard_fit(bb, fit, gf) - up * 0.03
+	var ikl := ArmIK.new()
+	sk.add_child(ikl)
+	ikl.setup(sk, "l", lt)
+	g.set_meta("iks", [ikr, ikl])
+	return g
+
+# a long gun held in both hands (build 22): the left hand reaches for the handguard instead of hanging or cupping an
+# empty pistol grip. Returns the IK (or null for a handgun).
+static func two_hand(root: Node3D, g: Node3D, fit: Basis, gf: Dictionary) -> ArmIK:
+	if gf.get("pistol", false) or g == null:
+		return null
+	var sk := root.find_child("Skeleton3D", true, false) as Skeleton3D
+	if sk == null:
+		return null
+	var tgt := Node3D.new()
+	tgt.name = "SupportHand"
+	g.add_child(tgt)
+	tgt.position = guard_fit(gun_bounds(g), fit, gf)
+	var ik := ArmIK.new()
+	sk.add_child(ik)
+	ik.setup(sk, "l", tgt)
+	return ik
+
 # where the support hand goes on a long gun: under the handguard, about 0.6 of the way to the muzzle
 static func guard_fit(bb: AABB, fit: Basis, gf: Dictionary) -> Vector3:
 	var inv := fit.orthonormalized().inverse()

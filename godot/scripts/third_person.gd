@@ -14,6 +14,8 @@ var lt: LegTwist
 var held: Node3D
 var held_id := ""
 var cam_d := 2.7
+var aim: AimHold            # build 22: the gun stays up and on your aim whatever the legs do (it pointed at the sky)
+var support: ArmIK
 
 static func load_on() -> bool:
 	var cf := ConfigFile.new()
@@ -53,7 +55,13 @@ func _weapon() -> void:
 		return
 	held_id = Game.weapon
 	if held:
-		held.queue_free()
+		if held.has_meta("iks"):
+			for ik in held.get_meta("iks"):
+				(ik as Node).queue_free()
+		if held.get_parent() is BoneAttachment3D:
+			held.get_parent().queue_free()
+		else:
+			held.queue_free()
 		held = null
 	var it := Game.item(Game.weapon)
 	if Game.weapon != "" and String(it.get("kind", "")) != "melee":
@@ -61,7 +69,18 @@ func _weapon() -> void:
 		if not mdl.is_empty():
 			ap.play("Pistol_Aim_Neutral")
 			ap.seek(0.0, true)
-			held = Humanoid.hold_gun(body, load(mdl[0]), mdl[1], mdl[2])
+			var long_gun: bool = not mdl[2].get("pistol", false)
+			if aim == null:
+				var sk := body.find_child("Skeleton3D", true, false) as Skeleton3D
+				if sk:
+					sk.force_update_all_bone_transforms()
+					aim = AimHold.new()
+					sk.add_child(aim)
+					aim.capture(sk)
+			if long_gun:
+				held = Humanoid.shoulder_gun(body, load(mdl[0]), mdl[1], mdl[2])
+			else:
+				held = Humanoid.hold_gun(body, load(mdl[0]), mdl[1], mdl[2])
 			GunMods.attach(held, mdl[1], Game.weapon)
 
 func update(d: float) -> void:
@@ -94,8 +113,16 @@ func update(d: float) -> void:
 		a = "Jog_Fwd"
 	elif hs > 0.4:
 		a = "Walk"
-	elif armed:
-		a = "Pistol_Aim_Neutral" if p.trigger or p.fire_cd > 0.0 else "Idle"
+	elif armed and not p.holstered:
+		a = "Pistol_Aim_Neutral"
+	if held:
+		held.visible = not p.holstered
+	if aim:
+		aim.target_w = 1.0 if armed and not p.holstered else 0.0
+		aim.pitch = p.pitch
+	if held and held.has_meta("iks"):
+		for ik in held.get_meta("iks"):
+			(ik as ArmIK).active = armed and not p.holstered
 	if not ap.has_animation(a):
 		a = a + "_Loop" if ap.has_animation(a + "_Loop") else "Idle"
 	# body faces where you aim; moving sideways or back turns the hips (or plays the walk backwards)

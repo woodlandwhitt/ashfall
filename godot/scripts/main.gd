@@ -1474,6 +1474,27 @@ func _test_hooks() -> void:
 				events.start("caravan", Vector2(player.global_position.x + 14.0, player.global_position.z - 14.0))
 				Game.G.recruit("jory")
 				await _wait(30)
+	if args.has("sidecam_e") or args.has("tpside"):
+		# a camera beside the first fighter (or beside you in third person), following it: checking how they hold a gun
+		var scam := Camera3D.new()
+		scam.fov = 45.0
+		add_child(scam)
+		scam.current = true
+		var who: Node3D = player
+		var follow := func():
+			var e0 = null
+			for e in enemies:
+				if is_instance_valid(e) and not e.dead and (not args.has("fight") or String(e.type) in String(args.fight).split(",")):
+					e0 = e
+					break
+			var tgt: Node3D = e0 if args.has("sidecam_e") and e0 else player
+			var fw: Vector3 = Vector3(-sin(player.yaw), 0, -cos(player.yaw)) if tgt == player else Vector3(sin(tgt.model.rotation.y), 0, cos(tgt.model.rotation.y))
+			var rt := fw.cross(Vector3.UP).normalized()
+			var ang := float(args.get("camang", "90")) / 180.0 * PI
+			var off: Vector3 = (rt * cos(ang - PI * 0.5) * -1.0 + fw * sin(ang - PI * 0.5)).normalized() if false else (fw.rotated(Vector3.UP, ang)) * float(args.get("camd", "2.6"))
+			scam.global_position = tgt.global_position + off + Vector3.UP * 1.45
+			scam.look_at(tgt.global_position + Vector3.UP * 1.25, Vector3.UP)
+		get_tree().process_frame.connect(func(): if is_instance_valid(scam): follow.call())
 	if args.has("shot"):
 		for i in int(args.get("frames", "40")):
 			await get_tree().process_frame
