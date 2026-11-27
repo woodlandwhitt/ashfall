@@ -1381,6 +1381,17 @@ func _test_hooks() -> void:
 			hud.pip.sel_gun = "hunting_rifle"
 		hud.toggle_pip()
 		hud.pip.show_tab(String(args.pip))
+	if args.has("vmdump"):
+		await _wait(30)
+		for mi in player.gun.find_children("*", "GeometryInstance3D", true, false):
+			var gi := mi as GeometryInstance3D
+			var col := ""
+			if gi is MeshInstance3D and (gi as MeshInstance3D).mesh:
+				for si in (gi as MeshInstance3D).mesh.get_surface_count():
+					var m = (gi as MeshInstance3D).get_active_material(si)
+					col += " " + (str((m as StandardMaterial3D).albedo_color) if m is StandardMaterial3D else str(m))
+			print("VM ", gi.get_path(), " vis ", gi.is_visible_in_tree(), " at ", gi.global_position - player.cam.global_position, " ", col)
+		get_tree().quit()
 	if args.has("tonemap"):
 		env.tonemap_mode = {"filmic": Environment.TONE_MAPPER_FILMIC, "aces": Environment.TONE_MAPPER_ACES, "agx": Environment.TONE_MAPPER_AGX}.get(String(args.tonemap), env.tonemap_mode)
 		if args.has("white"):

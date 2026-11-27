@@ -310,7 +310,27 @@ Keep every existing quest and line, then deepen them:
    and hold still to shoot; the last gunmen still on the old stick rig (sharpshooters, hunters, hired guns,
    warlords) are people now. **Two-handed tools** (axe, pickaxe, shovel, sledge, bat) take both hands in first
    person and no longer run back past the camera. `--b22test`, `--sidecam_e`, `--tpside`.
-21. **godot-23:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
+21. **godot-23:** *Status: shipped as a patch (to build 15, and to build 13).* **DEV, Silo 9:** LAUNCH, SCUTTLE, WATCH
+   THE LAUNCH / WATCH THE SCUTTLE (from the ridge), TO THE SILO and RESET in the DEV panel's world page. **Gun
+   add-ons** sit on the gun: the scope and the reflex sight find the real top of the receiver from the mesh, the
+   muzzle line from its front slice (`GunMods._points/_section`). **Gunfire** (`scripts/gunfx.gd`, `GunFX`): a flame
+   of crossed quads and a star at the muzzle along the aim, sparks, a puff of smoke, a brass case that's thrown,
+   bounces and clicks; tracers that travel; enemies flash too. **Impacts** by what's hit (dirt, stone, wood, metal):
+   dust, chips, sparks, and a hole left on the surface (the last 48); an enemy's miss kicks up the ground near you.
+   **Interiors:** every furnished room (the town's cells, Haven 12) is mapped on a 20 cm grid of where a body fits;
+   doorways and passages (floor between two walls no wider than 1.7 m) are kept clear of furniture, chairs included,
+   and nothing hangs on a door jamb; if furniture still cuts floor off from the door the piece responsible is taken
+   out with what stood on it. The old map's own loose pieces in a doorway go (the clinics' armchairs); a shut door
+   baked into a room's model opens now (you step through, like the town's other doors). `--area=cells --furntest`,
+   `--area=vault --furntest`. **Furniture and lights:** the view across a wide phone screen is held to 100 degrees
+   (75 tall was nearly 120 across, which made every room and chair look tiny and far), the arms drawn as before;
+   frontier homes get a real table with the lantern on it, the clinic's chair at the doctor's table; hanging lights
+   (`Furniture.hang`) hang from the actual ceiling, flush on a ceiling plate, no lower than 2.15 m, the shack's lamp
+   at the bulb. **Light:** indoors (a frontier building, or roofed and walled in) the sky's fill eases down and the
+   lamps do the work; rain stays outside; the town's rooms have less flat fill and their lamps cast shadows in the
+   room you're in; Haven 12 a little dimmer; outdoors a little more sun and less fill. `--b23test`, `--fireat=N`,
+   `--tonemap=filmic|agx|aces`.
+22. **godot-24:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
    Overseer's secret, the other vaults), real road meshes and terrain variety (washes, rock shelves, erosion), better
    ground and building textures, more GitHub character models for townspeople, interiors (the Spire's upper floors,
    the silo shaft), companions from the north, a Forge tidy-up (brick and more materials), a closer pass on the
