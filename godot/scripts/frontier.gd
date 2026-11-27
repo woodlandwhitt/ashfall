@@ -526,6 +526,9 @@ func _after(n: Node3D, d: Dictionary) -> void:
 		if main and main.town:
 			main.town.add_fire(n.global_position, float(d.get("s", 1.0)))
 		return
+	if k == "ufo":
+		_ufo_after(n, d)
+		return
 	if k == "seat" and main and main.town:
 		main.town.add_piece("fr_" + str(roundi(float(d.x))), String(d.id), n)
 		return
@@ -1753,53 +1756,316 @@ static func _lift(d: Dictionary, lx: float, lz: float) -> float:
 	return Game.height(float(d.x) + lx, float(d.z) + lz) - _ground(d)
 
 static func _ufo(kit: Kit, d: Dictionary) -> void:
-	var tilt := Basis(Vector3.BACK, 0.2) * Basis(Vector3.RIGHT, -0.06)     # nose down to the west, a little roll
-	var c := Vector3(0, 0.3, 0)
-	var R := 8.6
+	# build 24: remade as one smooth hull (a lathe) instead of stacked cylinders; it is solid now (convex colliders:
+	# you walk up onto it from the buried west side, and nobody walks through it into the cockpit); the breach is a
+	# hole torn in the hull with its plates bent back from the edge; the dome is cracked open on the west, the cockpit
+	# under it furnished; the scorched pod lies burst in its own scorch mark; every loose piece rests on something.
+	var tilt := UFO_TILT
+	var c := UFO_C
 	var at := func(p: Vector3) -> Vector3: return c + tilt * p
-	# lower dish, the rim band, then the upper hull in two steps and the dome
-	kit.cyl("alien", at.call(Vector3(0, -0.2, 0)), R * 0.3, R, 1.0, 40, 2, tilt)
-	kit.cyl("dark", at.call(Vector3(0, 0.78, 0)), R + 0.06, R + 0.06, 0.34, 40, 0, tilt)
-	kit.cyl("alien", at.call(Vector3(0, 1.1, 0)), R, R * 0.64, 0.7, 40, 0, tilt)
-	kit.cyl("alien", at.call(Vector3(0, 1.8, 0)), R * 0.64, R * 0.4, 0.5, 32, 0, tilt)
-	kit.cyl("glass", at.call(Vector3(0, 2.3, 0)), R * 0.4, R * 0.08, 1.6, 24, 0, tilt)
-	kit.cyl("glow", at.call(Vector3(0, 2.25, 0)), R * 0.3, R * 0.3, 0.06, 24, 0, tilt)
-	# seams on the upper hull
-	for i in 12:
-		var a := i * TAU / 12.0
-		kit.box("dark", at.call(Vector3(cos(a) * R * 0.82, 1.48, sin(a) * R * 0.82)), Vector3(R * 0.34, 0.04, 0.08), 0, tilt * Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -0.22))
-	# ports in the rim band: most dead, three lit
-	for i in 24:
-		var a := i * TAU / 24.0
-		kit.box("glow" if i in [3, 4, 17] else "glass", at.call(Vector3(cos(a) * (R + 0.08), 0.95, sin(a) * (R + 0.08))), Vector3(0.7, 0.2, 0.12), 0, tilt * Basis(Vector3.UP, -a + PI * 0.5))
-	# the dome cracked open on one side
-	kit.box("dark", at.call(Vector3(1.6, 3.0, 0.8)), Vector3(1.6, 0.9, 0.12), 0, tilt * Basis(Vector3.UP, 0.7) * Basis(Vector3.RIGHT, 0.3))
-	# the hull breach on the east side, plating peeled back
-	kit.box("dark", at.call(Vector3(R - 1.2, 0.6, -2.6)), Vector3(2.2, 1.0, 1.6), 0, tilt * Basis(Vector3.UP, 0.5))
-	kit.box("alien", at.call(Vector3(R + 0.3, 1.5, -2.2)), Vector3(1.8, 0.08, 1.4), 0, tilt * Basis(Vector3.BACK, -1.0))
-	# the berm of earth it shoved up in front of it as it dug in (west), and soil thrown along its flanks
+	var seg := 48
+	var hull_lo := [[0.0, -0.95, "alien"], [1.6, -0.92, "alien"], [3.6, -0.78, "alien"], [5.6, -0.52, "alien"], [7.4, -0.12, "alien"],
+		[8.5, 0.22, "dark"], [8.78, 0.36, "dark"], [8.86, 0.5, "dark"], [8.76, 0.64, "alien"]]
+	var hull_hi := [[8.76, 0.64, "alien"], [8.1, 0.86, "alien"], [7.0, 1.14, "alien"], [5.8, 1.42, "alien"], [4.6, 1.68, "metal"],
+		[3.8, 1.86, "metal"], [3.6, 1.95, "dark"], [0.0, 1.97, "dark"]]
+	var dome := [[3.6, 1.95, "glass"], [3.45, 2.5, "glass"], [2.95, 3.05, "glass"], [2.05, 3.45, "glass"], [0.95, 3.66, "glass"], [0.0, 3.7, "glass"]]
+	# the breach: a hole torn through the rim and the upper hull on the north side, where you can see into it from
+	# the ground, and the dark of the inside behind it
+	kit.lathe(c, tilt, hull_lo, seg, [UFO_BREACH_A - 0.22, UFO_BREACH_A + 0.22, 5, 7])
+	kit.lathe(c, tilt, hull_hi, seg, [UFO_BREACH_A - 0.3, UFO_BREACH_A + 0.3, 0, 2])
+	var inner := [[7.9, 0.05, "dark"], [8.3, 0.6, "dark"], [7.6, 0.8, "dark"], [6.6, 1.0, "dark"], [5.6, 1.2, "dark"], [5.4, 0.62, "dark"], [7.9, 0.05, "dark"]]
+	kit.lathe(c, tilt, inner, seg, [0.0, UFO_BREACH_A - 0.45, 0, 9])
+	kit.lathe(c, tilt, inner, seg, [UFO_BREACH_A + 0.45, TAU, 0, 9])
+	# the dome, cracked open on the west where you climb up to it
+	kit.lathe(c, tilt, dome, 32, [PI - 0.45, PI + 0.3, 0, 2])
+	# colliders: the lower dish, the upper hull and the dome, each convex
+	kit.hull(Kit.ring_points(c, tilt, hull_lo, 16))
+	kit.hull(Kit.ring_points(c, tilt, hull_hi, 16))
+	kit.hull(Kit.ring_points(c, tilt, dome, 12))
+	# the hull's seams (radial lines in the upper skin) and the ring of ports in the rim, three still lit
+	for i in 16:
+		var a := i * TAU / 16.0
+		if absf(wrapf(a - UFO_BREACH_A, -PI, PI)) < 0.4:
+			continue
+		var p0 := _ufo_pt(8.6, 0.69, a)
+		var p1 := _ufo_pt(4.7, 1.7, a)
+		kit.pole("dark", p0, p1, 0.03)
+	for i in 30:
+		var a := i * TAU / 30.0
+		var p := _ufo_pt(8.9, 0.5, a)
+		kit.box("glow" if i in [3, 4, 21] else "glass", p, Vector3(0.12, 0.13, 0.55), 0, tilt * Basis(Vector3.UP, -a))
+	# the breach's edge: plating torn and bent back outward, each plate's root on the hull at the hole's rim
+	for k in 5:
+		var a := UFO_BREACH_A - 0.28 + k * 0.14
+		var rr := 6.6 + (k % 2) * 1.1
+		var yy := 1.0 + (1 - k % 2) * 0.28
+		var root := _ufo_pt(rr, yy, a)
+		var out := (tilt * Vector3(cos(a), 0.0, sin(a))).normalized()
+		var up := tilt * Vector3.UP
+		var bend := Basis(out.cross(up).normalized(), 0.6 + (k % 3) * 0.25)
+		var pb := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, 0.25)
+		kit.box("alien", root + bend * (out * 0.45 + up * 0.12), Vector3(0.9, 0.05, 0.55), 0, tilt * bend * pb)
+	# torn cable and a conduit still glowing inside the hole
+	var hc := _ufo_pt(7.2, 1.0, UFO_BREACH_A)
+	kit.pole("glow", hc + tilt * Vector3(0, -0.3, -0.5), hc + tilt * Vector3(0.3, 0.2, 0.7), 0.05)
+	kit.pole("dark", hc + tilt * Vector3(0, 0.1, 0.2), hc + tilt * Vector3(0.9, -0.5, -0.1), 0.03)
+	kit.pole("dark", hc + tilt * Vector3(-0.2, 0.0, -0.3), hc + tilt * Vector3(0.7, -0.6, 0.4), 0.025)
+	# the cockpit under the dome: its floor, three seats (two burnt), the console ring and the cell in its cradle
+	for i in 3:
+		var a := PI * 0.5 + i * TAU / 3.0
+		var sp := _ufo_pt(1.6, 1.97, a)
+		var sb := tilt * Basis(Vector3.UP, -a + PI * 0.5)
+		var sm := "burnt" if i > 0 else "metal"
+		kit.box(sm, sp + tilt * Vector3(0, 0.25, 0), Vector3(0.5, 0.1, 0.5), 0, sb)
+		kit.box(sm, sp + sb * Vector3(0, 0.55, -0.24), Vector3(0.5, 0.62, 0.08), 0, sb * Basis(Vector3.RIGHT, -0.15))
+		kit.box("metal", sp + tilt * Vector3(0, 0.12, 0), Vector3(0.12, 0.25, 0.12), 0, sb)
+	for i in 6:
+		var a := i * TAU / 6.0 + 0.3
+		var cp := _ufo_pt(2.85, 1.97, a)
+		var cb := tilt * Basis(Vector3.UP, -a + PI * 0.5)
+		kit.box("dark", cp + tilt * Vector3(0, 0.27, 0), Vector3(1.3, 0.55, 0.3), 0, cb)
+		kit.box("glow", cp + cb * Vector3(0, 0.52, 0.12), Vector3(1.0, 0.03, 0.2), 0, cb * Basis(Vector3.RIGHT, 0.5))
+	kit.cyl("metal", at.call(Vector3(0, 1.97, 0)), 0.35, 0.28, 0.5, 12, 0, tilt)
+	# the dug-in west edge: earth heaped against the hull in a low ridge you can walk up (each piece convex)
 	for i in 9:
-		var a := PI + (i - 4) * 0.16
-		var p := Vector3(cos(a) * (R + 1.0), 0.0, sin(a) * (R + 1.0))
-		p.y = _lift(d, p.x, p.z) - 0.3
-		kit.box("burnt" if i % 2 else "dark", p, Vector3(2.4, 1.2 + 0.5 * cos((i - 4) * 0.4), 1.8), 0, Basis(Vector3.UP, -a) * Basis(Vector3.BACK, 0.25))
-	# landing legs: one still under it, one torn off and thrown into the scar
-	kit.pole("metal", at.call(Vector3(-2.5, -0.1, 4.6)), at.call(Vector3(-3.2, -1.4, 5.6)), 0.14)
+		var a := PI + (i - 4) * 0.15
+		var rin := 8.3
+		var rout := 11.4
+		var w := 1.35
+		var dir := Vector3(cos(a), 0, sin(a))
+		var side := dir.cross(Vector3.UP)
+		var pts := PackedVector3Array()
+		var top: float = 0.65 - absf(i - 4) * 0.07
+		for rr in [rin, rin + 1.0, rout]:
+			for sw in [-w, w]:
+				var p: Vector3 = dir * rr + side * sw
+				var g := _lift(d, p.x, p.z)
+				var hgt: float = top if rr == rin + 1.0 else (top * 0.7 if rr == rin else -0.05)
+				pts.append(Vector3(p.x, g + hgt, p.z))
+				pts.append(Vector3(p.x, g - 0.4, p.z))
+		kit.hull(pts)
+		kit.tri3("burnt", pts[0], pts[4], pts[2])
+		kit.tri3("burnt", pts[2], pts[4], pts[6])
+		kit.tri3("burnt", pts[4], pts[8], pts[6])
+		kit.tri3("burnt", pts[6], pts[8], pts[10])
+		kit.tri3("dark", pts[0], pts[2], pts[4])
+	# landing legs: one still folded under it, one torn off and thrown into the scar
+	kit.pole("metal", at.call(Vector3(-2.5, -0.85, 4.6)), at.call(Vector3(-3.0, -1.3, 5.3)), 0.14)
 	var lp := Vector3(17.0, 0.0, 3.4)
-	lp.y = _lift(d, lp.x, lp.z) + 0.15
-	kit.pole("alien", lp, lp + Vector3(2.6, 0.1, 0.8), 0.16)
-	kit.cyl("dark", lp + Vector3(2.7, -0.12, 0.8), 0.5, 0.42, 0.18, 10, 0)
-	# plating strewn back along the furrow, each piece lying on the ground where it landed
+	lp.y = _lift(d, lp.x, lp.z) + 0.16
+	kit.pole("alien", lp, lp + Vector3(2.6, 0.06, 0.8), 0.16)
+	kit.cyl("dark", Vector3(lp.x + 2.7, _lift(d, lp.x + 2.7, lp.z + 0.8) + 0.02, lp.z + 0.8), 0.5, 0.42, 0.18, 10, 0)
+	# plating strewn back along the furrow, each piece lying on the ground where it landed (flat to the slope)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
 	for i in 18:
 		var x := 11.0 + i * 2.2 + rng.randf_range(-1.0, 1.0)
 		var z := sin(i * 1.7) * 3.0 + rng.randf_range(-2.0, 2.0)
-		var sz := Vector3(rng.randf_range(0.5, 1.6), rng.randf_range(0.06, 0.25), rng.randf_range(0.4, 1.2))
-		var y := _lift(d, x, z) + sz.y * 0.5 - 0.04
-		kit.box(["alien", "dark", "alien", "metal"][i % 4], Vector3(x, y, z), sz, 0, Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.15, 0.15)))
+		var sz := Vector3(rng.randf_range(0.5, 1.6), rng.randf_range(0.05, 0.14), rng.randf_range(0.4, 1.2))
+		var y := _lift(d, x, z) + sz.y * 0.5 - 0.03
+		var gx := _lift(d, x + 0.5, z) - _lift(d, x - 0.5, z)
+		var gz := _lift(d, x, z + 0.5) - _lift(d, x, z - 0.5)
+		var lie := Basis(Vector3.BACK, atan(gx)) * Basis(Vector3.RIGHT, -atan(gz))
+		kit.box(["alien", "dark", "alien", "metal"][i % 4], Vector3(x, y, z), sz, 0, lie * Basis(Vector3.UP, rng.randf() * TAU))
 		if i % 5 == 2:
-			kit.box("glow", Vector3(x, y + sz.y * 0.5 + 0.01, z), Vector3(sz.x * 0.6, 0.02, 0.08), 0, Basis(Vector3.UP, rng.randf() * TAU))
+			kit.box("glow", Vector3(x, y + sz.y * 0.5 + 0.005, z), Vector3(sz.x * 0.6, 0.012, 0.06), 0, lie * Basis(Vector3.UP, rng.randf() * TAU))
+	# shards of a strange crystal (the drive's?) grown up out of the scorched ground, glowing faintly
+	for i in 7:
+		var a := 0.7 + i * 0.55
+		var r := 12.5 + (i % 3) * 1.6
+		var p := Vector3(cos(a) * r, 0, sin(a) * r)
+		p.y = _lift(d, p.x, p.z) - 0.05
+		var hgt := 0.35 + (i % 4) * 0.18
+		kit.cone("crystal", p, 0.09 + (i % 2) * 0.05, hgt, 5, i * 0.7)
+		kit.cone("crystal", p + Vector3(0.14, 0, 0.06), 0.06, hgt * 0.6, 5, i * 1.3)
+	# the pod, flung clear and burst open in its own scorch: its lower shell, the lid thrown off beside it,
+	# blue spilled on the rim and the ground
+	var pc := UFO_POD
+	var pg := _lift(d, pc.x, pc.z)
+	kit.cyl("burnt", Vector3(pc.x, pg + 0.02, pc.z), 2.4, 2.4, 0.03, 20, 0)
+	kit.cyl("dark", Vector3(pc.x, pg + 0.035, pc.z), 1.5, 1.5, 0.03, 20, 0)
+	# the pod: a long egg split along its length, lying on its back with the open half up (a lathe round its long
+	# axis with the top half left out), dark inside; its lid, the other half, flung off upside-down beside it
+	var egg := []
+	for i in 9:
+		var t := -1.0 + i * 0.25
+		egg.append([0.78 * sqrt(maxf(0.0, 1.0 - t * t)) + 0.001, t * 1.55, "alien" if absf(t) < 0.9 else "metal"])
+	var egg_in := []
+	for i in 9:
+		var t := 1.0 - i * 0.25
+		egg_in.append([0.7 * sqrt(maxf(0.0, 1.0 - t * t)) + 0.001, t * 1.45, "dark"])
+	var pod_at := Vector3(pc.x, pg + 0.6, pc.z)
+	var lay := Basis(Vector3.UP, 0.6) * Basis(Vector3.BACK, PI * 0.5)
+	kit.lathe(pod_at, lay, egg, 20, [4.712, 1.571, 0, 9])
+	kit.lathe(pod_at, lay, egg_in, 20, [4.712, 1.571, 0, 9])
+	for sgn in [-1.0, 1.0]:
+		# the rim of the split, scorched
+		kit.box("burnt", pod_at + lay * Vector3(0, 0, sgn * 0.74), Vector3(0.05, 2.9, 0.08), 0, lay)
+	var lid_at := Vector3(pc.x + 1.5, pg + 0.12, pc.z - 1.6)
+	var lid_b := Basis(Vector3.UP, 2.0) * Basis(Vector3.BACK, PI * 0.5) * Basis(Vector3.UP, 0.25)
+	kit.lathe(lid_at, lid_b, egg, 20, [1.571, 4.712, 0, 9])
+	kit.box("glow", pod_at + Vector3(0, -0.1, 0) + lay * Vector3(0.0, 0.9, 0.3), Vector3(0.04, 0.25, 0.04), 0, lay)
+	var lb := BoxShape3D.new()
+	lb.size = Vector3(3.1, 0.6, 1.5)
+	if not kit.solids_only:
+		kit.cols.append([lb, Transform3D(Basis(Vector3.UP, 0.6), Vector3(pc.x, pg + 0.2, pc.z))])
+	for i in 6:
+		var bp := pc + Vector3(cos(i * 1.1) * (0.9 + i * 0.25), 0, sin(i * 1.1) * (0.9 + i * 0.25))
+		kit.box("blue", Vector3(bp.x, _lift(d, bp.x, bp.z) + 0.04, bp.z), Vector3(0.28 - i * 0.03, 0.012, 0.18), 0, Basis(Vector3.UP, i * 0.9))
+	kit.box("blue", pod_at + Vector3(0.3, 0.35, 0.4), Vector3(0.25, 0.02, 0.4), 0, Basis(Vector3.UP, 0.6) * Basis(Vector3.RIGHT, 0.3))
+	# a probe that came down with it, buried nose first, its fins up and one light still blinking (the light is a node)
+	var pr := Vector3(-6.5, 0, 12.5)
+	pr.y = _lift(d, pr.x, pr.z)
+	kit.cone("alien", pr + Vector3(0, 0.9, 0), 0.32, 0.6, 12)
+	kit.cyl("alien", pr + Vector3(0, -0.2, 0), 0.32, 0.32, 1.1, 12, 1)
+	for f in 3:
+		var fa := f * TAU / 3.0
+		kit.box("dark", pr + Vector3(cos(fa) * 0.42, 0.6, sin(fa) * 0.42), Vector3(0.3, 0.55, 0.04), 0, Basis(Vector3.UP, -fa))
+
+# the saucer's frame: where it sits and how it lies (shared with the furniture that's added after it stands)
+static var UFO_TILT := Basis(Vector3.BACK, 0.2) * Basis(Vector3.RIGHT, -0.06)
+const UFO_C := Vector3(0, 0.3, 0)
+const UFO_BREACH_A := 4.75       # the breach faces north, side-on to the furrow
+const UFO_POD := Vector3(16.0, 0.0, -12.0)
+static func _ufo_pt(r: float, y: float, a: float) -> Vector3:
+	return UFO_C + UFO_TILT * Vector3(cos(a) * r, y, sin(a) * r)
+
+# once the saucer stands: its lights, the cell in the cockpit (gone once it's taken), the two of the crew who didn't
+# walk away, the probe's blinking light, a thread of smoke from the breach, and the quest's places set on the things
+# themselves (the pod, the breach, the dome), at their height, easy to find (build 24: the pod was nowhere to be
+# seen, its spot an empty patch of ground you had to aim at)
+func _ufo_after(n: Node3D, d: Dictionary) -> void:
+	var g := _ground(d)
+	var w := func(p: Vector3) -> Vector3: return Vector3(float(d.x), g, float(d.z)) + p
+	var cockpit := OmniLight3D.new()
+	cockpit.light_color = Color(0.4, 1.0, 0.6)
+	cockpit.light_energy = 1.6
+	cockpit.omni_range = 6.0
+	n.add_child(cockpit)
+	cockpit.position = _ufo_pt(0.0, 2.8, 0.0)
+	var breach := OmniLight3D.new()
+	breach.light_color = Color(0.35, 0.95, 0.5)
+	breach.light_energy = 1.2
+	breach.omni_range = 4.0
+	n.add_child(breach)
+	breach.position = _ufo_pt(7.0, 1.0, UFO_BREACH_A)
+	var cell := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.16
+	cm.bottom_radius = 0.16
+	cm.height = 0.5
+	cell.mesh = cm
+	cell.material_override = _mat("crystal")
+	n.add_child(cell)
+	cell.position = _ufo_pt(0.0, 2.72, 0.0)
+	cell.rotation = UFO_TILT.get_euler()
+	var pod_l := OmniLight3D.new()
+	pod_l.light_color = Color(0.3, 0.5, 1.0)
+	pod_l.light_energy = 0.7
+	pod_l.omni_range = 3.5
+	n.add_child(pod_l)
+	pod_l.position = UFO_POD + Vector3(0, _lift(d, UFO_POD.x, UFO_POD.z) + 0.5, 0)
+	var blink := OmniLight3D.new()
+	blink.light_color = Color(1.0, 0.25, 0.2)
+	blink.omni_range = 3.0
+	n.add_child(blink)
+	blink.position = Vector3(-6.5, _lift(d, -6.5, 12.5) + 1.6, 12.5)
+	var bt := blink.create_tween().set_loops()
+	bt.tween_property(blink, "light_energy", 1.4, 0.08)
+	bt.tween_property(blink, "light_energy", 0.0, 0.3)
+	bt.tween_interval(1.2)
+	# a thread of smoke still rising from the breach
+	var smoke := CPUParticles3D.new()
+	smoke.amount = 14
+	smoke.lifetime = 6.0
+	smoke.direction = Vector3.UP
+	smoke.spread = 12.0
+	smoke.initial_velocity_min = 0.5
+	smoke.initial_velocity_max = 0.9
+	smoke.gravity = Vector3(0.25, 0.12, 0.0)
+	smoke.scale_amount_min = 0.8
+	smoke.scale_amount_max = 1.6
+	var sc := Curve.new()
+	sc.add_point(Vector2(0, 0.4))
+	sc.add_point(Vector2(1, 2.2))
+	smoke.scale_amount_curve = sc
+	var sq := QuadMesh.new()
+	sq.size = Vector2(1.2, 1.2)
+	var smat := StandardMaterial3D.new()
+	smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	smat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	smat.vertex_color_use_as_albedo = true
+	smat.albedo_texture = GunFX._soft()
+	sq.material = smat
+	smoke.mesh = sq
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.25, 0.25, 0.25, 0.35))
+	grad.set_color(1, Color(0.4, 0.4, 0.4, 0.0))
+	smoke.color_ramp = grad
+	n.add_child(smoke)
+	smoke.position = _ufo_pt(7.4, 1.0, UFO_BREACH_A)
+	# the dead: one fallen half out of the breach, one by the pod with its arm over its face
+	for dc in [[Vector3(10.6, 0, -3.4), 2.3], [UFO_POD + Vector3(-2.2, 0, 1.6), -0.9]]:
+		var body := Humanoid.alien(hash(str(dc[0])))
+		n.add_child(body)
+		var bp: Vector3 = dc[0]
+		body.position = Vector3(bp.x, _lift(d, bp.x, bp.z) + 0.02, bp.z)
+		body.rotation.y = float(dc[1])
+		var ap := body.get_node_or_null("AnimationPlayer") as AnimationPlayer
+		if ap and ap.has_animation("Death01"):
+			ap.play("Death01")
+			ap.seek(ap.current_animation_length - 0.01, true)
+			ap.pause()
+	# the quest's places: where the things are, at their height, a little generous to point at
+	var tick := Timer.new()
+	tick.wait_time = 1.0
+	tick.autostart = true
+	n.add_child(tick)
+	var st := {"regrid": true}
+	var place := func():
+		for p in Game.W.get("points", []):
+			if st.regrid and String(p.get("id", "")).begins_with("ufo_") and main and main.get("objects"):
+				main.objects.remove_dynamic(p)
+			match String(p.get("id", "")):
+				"ufo_pod":
+					var pp: Vector3 = w.call(UFO_POD)
+					p["x"] = pp.x
+					p["z"] = pp.z
+					p["y"] = g + _lift(d, UFO_POD.x, UFO_POD.z) + 0.1
+					p["r"] = 3.2
+					p["pr"] = 1.0
+				"ufo_breach":
+					var bp2: Vector3 = w.call(_ufo_pt(8.9, 0.0, UFO_BREACH_A))
+					p["x"] = bp2.x
+					p["z"] = bp2.z
+					p["y"] = g + _lift(d, bp2.x - float(d.x), bp2.z - float(d.z))
+					p["r"] = 3.4
+					p["pr"] = 1.0
+				"ufo_cockpit":
+					var cp: Vector3 = w.call(_ufo_pt(3.9, 1.95, PI))
+					p["x"] = cp.x
+					p["z"] = cp.z
+					p["y"] = cp.y
+					p["r"] = 3.0
+					p["pr"] = 0.8
+				"ufo_trail":
+					var tp: Vector3 = w.call(UFO_POD + Vector3(2.5, 0, -2.0))
+					p["x"] = tp.x
+					p["z"] = tp.z
+			if st.regrid and String(p.get("id", "")).begins_with("ufo_") and main and main.get("objects"):
+				main.objects._add("point", p)
+		st.regrid = false
+		cell.visible = not Game.flags.get("ufo_core_taken", false)
+		cockpit.light_energy = 1.6 if cell.visible else 0.0
+	place.call()
+	tick.timeout.connect(place)
+
+static func _ufo_scale(prof: Array, sr: float, sy: float) -> Array:
+	var out: Array = []
+	for p in prof:
+		out.append([float(p[0]) * sr, float(p[1]) * sy, p[2]])
+	return out
 
 # the scorched ground round the impact and the long furrow out to the east, laid on the ground in short pieces
 static func _crater(kit: Kit, d: Dictionary) -> void:
@@ -2080,6 +2346,20 @@ static func _mat(k: String) -> Material:
 			st.emission_enabled = true
 			st.emission = Color(1.0, 0.72, 0.38)
 			st.emission_energy_multiplier = 2.2
+		if k == "crystal":
+			st.albedo_color = Color(0.45, 0.95, 0.85, 0.8)
+			st.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			st.emission_enabled = true
+			st.emission = Color(0.3, 0.9, 0.75)
+			st.emission_energy_multiplier = 0.9
+			st.roughness = 0.1
+			st.metallic = 0.2
+		if k == "blue":
+			st.albedo_color = Color(0.15, 0.45, 1.0)
+			st.emission_enabled = true
+			st.emission = Color(0.1, 0.4, 1.0)
+			st.emission_energy_multiplier = 1.3
+			st.roughness = 0.1
 		if k == "glow":
 			st.albedo_color = Color(0.35, 0.85, 0.3)
 			st.emission_enabled = true
@@ -2211,6 +2491,74 @@ class Kit:
 			var dz := Vector3(0, 0, thick * 0.5)
 			Flora.tri(s, [a - dz, t - dz, t + dz], [n, n, n], [c, c, c])
 			Flora.tri(s, [a - dz, t + dz, a + dz], [n, n, n], [c, c, c])
+
+	# a surface of revolution (build 24: the saucer): prof is [[r, y, material], ...] from the bottom up, turned
+	# round the local Y of basis b at 'base'; normals follow the profile, so it shades smooth. gap = [a0, a1, i0, i1]
+	# leaves out the quads between those angles on those profile segments (a hole torn in it)
+	func lathe(base: Vector3, b: Basis, prof: Array, seg: int, gap: Array = []) -> void:
+		if solids_only:
+			return
+		var w := Color.WHITE
+		var n := prof.size()
+		var pn: Array = []
+		for i in n:
+			var p0: Array = prof[maxi(0, i - 1)]
+			var p1: Array = prof[mini(n - 1, i + 1)]
+			var t := Vector2(float(p1[0]) - float(p0[0]), float(p1[1]) - float(p0[1])).normalized()
+			pn.append(Vector2(t.y, -t.x))
+		for i in n - 1:
+			var A: Array = prof[i]
+			var Bp: Array = prof[i + 1]
+			var s := _s(String(A[2]))
+			# a hard edge where the material changes
+			var na: Vector2 = pn[i]
+			var nb: Vector2 = pn[i + 1]
+			if String(A[2]) != String(Bp[2]) or (i > 0 and String((prof[i - 1] as Array)[2]) != String(A[2])):
+				var t := Vector2(float(Bp[0]) - float(A[0]), float(Bp[1]) - float(A[1])).normalized()
+				var sn := Vector2(t.y, -t.x)
+				if String(A[2]) != String(Bp[2]):
+					nb = sn
+				if i > 0 and String((prof[i - 1] as Array)[2]) != String(A[2]):
+					na = sn
+			for k in seg:
+				var a0 := k * TAU / seg
+				var a1 := (k + 1) * TAU / seg
+				if not gap.is_empty() and i >= int(gap[2]) and i <= int(gap[3]):
+					var am := fposmod((a0 + a1) * 0.5, TAU)
+					var g0 := float(gap[0])
+					var g1 := float(gap[1])
+					# a gap may wrap past zero (g0 > g1)
+					if (g0 <= g1 and am >= g0 and am <= g1) or (g0 > g1 and (am >= g0 or am <= g1)):
+						continue
+				var d0 := Vector3(cos(a0), 0, sin(a0))
+				var d1 := Vector3(cos(a1), 0, sin(a1))
+				var P0 := base + b * (d0 * float(A[0]) + Vector3(0, float(A[1]), 0))
+				var P1 := base + b * (d1 * float(A[0]) + Vector3(0, float(A[1]), 0))
+				var T0 := base + b * (d0 * float(Bp[0]) + Vector3(0, float(Bp[1]), 0))
+				var T1 := base + b * (d1 * float(Bp[0]) + Vector3(0, float(Bp[1]), 0))
+				var nP0 := (b * (d0 * na.x + Vector3(0, na.y, 0))).normalized()
+				var nP1 := (b * (d1 * na.x + Vector3(0, na.y, 0))).normalized()
+				var nT0 := (b * (d0 * nb.x + Vector3(0, nb.y, 0))).normalized()
+				var nT1 := (b * (d1 * nb.x + Vector3(0, nb.y, 0))).normalized()
+				Flora.tri(s, [P0, T1, P1], [nP0, nT1, nP1], [w, w, w])
+				Flora.tri(s, [P0, T0, T1], [nP0, nT0, nT1], [w, w, w])
+
+	# a convex collider round the given points (local)
+	func hull(pts: PackedVector3Array) -> void:
+		if solids_only:
+			return
+		var cs := ConvexPolygonShape3D.new()
+		cs.points = pts
+		cols.append([cs, Transform3D()])
+
+	# the points of a lathe's profile section turned round (for hull)
+	static func ring_points(base: Vector3, b: Basis, prof: Array, seg: int) -> PackedVector3Array:
+		var out := PackedVector3Array()
+		for p in prof:
+			for k in seg:
+				var a := k * TAU / seg
+				out.append(base + b * (Vector3(cos(a), 0, sin(a)) * float(p[0]) + Vector3(0, float(p[1]), 0)))
+		return out
 
 	func pole(m: String, a: Vector3, b: Vector3, r: float) -> void:
 		if solids_only:

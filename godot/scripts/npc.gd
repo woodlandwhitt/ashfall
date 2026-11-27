@@ -109,7 +109,8 @@ func setup(d: Dictionary) -> void:
 			role = "boss"
 		elif id in ["preacher", "doc_osei", "halloran", "teacher", "wick"]:
 			role = "robe"
-		model = Humanoid.person(look, hash(id), role)
+		# the Visitor is one of them, not a grey-painted man (build 24)
+		model = Humanoid.alien(hash(id)) if id == "visitor" else Humanoid.person(look, hash(id), role)
 		ap = model.get_node("AnimationPlayer")
 		var sk := model.find_child("Skeleton3D", true, false) as Skeleton3D
 		if sk:

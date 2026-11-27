@@ -139,7 +139,11 @@ func setup(d: Dictionary, td: Dictionary) -> void:
 		ap.play("Idle")
 	elif PEOPLE.has(type) and not quad:
 		# every raider his own: cut, dye, skin, hair, beard, headgear (Humanoid.enemy_person)
-		model = Humanoid.enemy_person(type, PEOPLE[type], hash(String(d.get("id", "")) + type + str(d.x)))
+		# the wreck's sentinel is the saucer's last crewman, in his pressure suit (build 24)
+		if String(d.get("id", "")) == "sentinel":
+			model = Humanoid.alien(hash("sentinel"), true)
+		else:
+			model = Humanoid.enemy_person(type, PEOPLE[type], hash(String(d.get("id", "")) + type + str(d.x)))
 		add_child(model)
 		ap = model.get_node("AnimationPlayer")
 		_twist_setup()

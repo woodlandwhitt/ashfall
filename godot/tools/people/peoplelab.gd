@@ -25,7 +25,9 @@ func _ready():
 	for i in n:
 		var h: Node3D
 		var seed := s0 * 100 + i
-		if mode == "npc":
+		if mode == "alien":
+			h = Humanoid.alien(seed, i == 1)
+		elif mode == "npc":
 			var rng := RandomNumberGenerator.new()
 			rng.seed = seed
 			var look := {"fem": rng.randf() < 0.4, "body": Color.from_hsv(rng.randf(), 0.3, 0.6).to_html(), "skin": ["#9e7356", "#c8a080", "#6e4c36", "#b58a68"][i % 4]}

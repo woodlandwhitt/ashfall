@@ -1031,3 +1031,87 @@ static func face(root: Node3D, rng: RandomNumberGenerator, hair_col: Color, town
 	if not townsfolk and rng.randf() < 0.15:
 		# tape over a broken nose
 		_piece(hp, _box(Vector3(0.035, 0.012, 0.006) * k), _flat(Color(0.78, 0.74, 0.62), 0.9), Vector3(0, 0.068, 0.103) * k)
+
+# ---------------------------------------------------------------- the Visitor's people (build 24)
+# A grey: a slight body in a close-fitting flight suit, grey-green skin with a dull sheen, and the head they are
+# drawn with in every story: high-domed, narrow-chinned, two great black almond eyes. armoured: the wreck's sentinel,
+# in a ribbed pressure suit with a glowing visor band. dead: lying as it fell.
+static func alien(seed: int, armoured := false) -> Node3D:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var root := build("Male_Peasant", Color(0.5, 0.52, 0.55), Color(0.62, 0.68, 0.62), true, {"nohood": true, "acc": []})
+	var skel := root.find_child("Skeleton3D", true, false) as Skeleton3D
+	var skin := _mat("alien_skin", func():
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color(0.52, 0.58, 0.54)
+		m.roughness = 0.32
+		m.metallic = 0.05
+		m.rim_enabled = true
+		m.rim = 0.4
+		return m)
+	var suit := _mat("alien_suit_%s" % armoured, func():
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color(0.3, 0.33, 0.37) if armoured else Color(0.55, 0.6, 0.64)
+		m.metallic = 0.35
+		m.roughness = 0.38
+		return m)
+	for mi in skel.find_children("*", "MeshInstance3D", false, false):
+		var m := mi as MeshInstance3D
+		var nm := String(m.name)
+		if nm in ["Eyes", "Eyebrows"]:
+			m.visible = false
+			continue
+		for s in m.mesh.get_surface_count():
+			var src := m.mesh.surface_get_material(s)
+			if nm.begins_with("SuperHero") or (src and String(src.resource_name).begins_with("MI_Regular")):
+				m.set_surface_override_material(s, skin)
+			else:
+				m.set_surface_override_material(s, suit)
+		m.material_override = null
+	var hb := skel.get_bone_global_rest(skel.find_bone("Head")).origin
+	var hp := _on_bone(root, "Head", hb)
+	if hp:
+		var sm := SphereMesh.new()
+		sm.radius = 1.0
+		sm.height = 2.0
+		sm.radial_segments = 20
+		sm.rings = 12
+		# the cranium, swollen and domed, over the jaw that narrows to a small chin
+		_piece(hp, sm, skin, Vector3(0, 0.135, 0.0), Vector3(0.15, 0, 0), Vector3(0.135, 0.15, 0.15))
+		_piece(hp, sm, skin, Vector3(0, 0.035, 0.05), Vector3(-0.3, 0, 0), Vector3(0.075, 0.085, 0.08))
+		var eye := _mat("alien_eye", func():
+			var e := StandardMaterial3D.new()
+			e.albedo_color = Color(0.02, 0.02, 0.03)
+			e.metallic = 0.4
+			e.roughness = 0.05
+			e.clearcoat_enabled = true
+			return e)
+		for sx in [-1.0, 1.0]:
+			_piece(hp, sm, eye, Vector3(0.05 * sx, 0.1, 0.118), Vector3(0.1, 0.35 * sx, 0.55 * sx), Vector3(0.045, 0.024, 0.02))
+		# nostril slits and the line of a lipless mouth
+		var dk := _flat(Color(0.25, 0.28, 0.26), 0.6)
+		for sx in [-0.008, 0.008]:
+			_piece(hp, _box(Vector3(0.003, 0.008, 0.003)), dk, Vector3(sx, 0.052, 0.121))
+		_piece(hp, _box(Vector3(0.022, 0.002, 0.003)), dk, Vector3(0, 0.025, 0.112))
+		if armoured:
+			# the helmet: a smooth shell over the dome with a glowing band across the eyes
+			_piece(hp, sm, suit, Vector3(0, 0.14, -0.01), Vector3(0.15, 0, 0), Vector3(0.15, 0.165, 0.165))
+			var glow := _mat("alien_visor", func():
+				var g := StandardMaterial3D.new()
+				g.albedo_color = Color(0.3, 1.0, 0.6)
+				g.emission_enabled = true
+				g.emission = Color(0.25, 1.0, 0.55)
+				g.emission_energy_multiplier = 2.5
+				return g)
+			_piece(hp, _box(Vector3(0.2, 0.035, 0.02)), glow, Vector3(0, 0.1, 0.14), Vector3(0.1, 0, 0))
+	if armoured:
+		# ribs on the chest and the arms of the pressure suit
+		var s3 := skel.get_bone_global_rest(skel.find_bone("spine_03")).origin
+		var ch := _on_bone(root, "spine_03", s3)
+		if ch:
+			for i in 4:
+				_piece(ch, _box(Vector3(0.27, 0.02, 0.21)), suit, Vector3(0, -0.12 + i * 0.07, -0.01))
+	# slight and long in the limb
+	var h := rng.randf_range(0.9, 0.98)
+	root.scale = Vector3(h * 0.86, h, h * 0.86)
+	return root
