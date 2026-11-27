@@ -3,7 +3,7 @@ config_version=5
 
 [application]
 
-config/name="Ashfall Godot"
+config/name="Ashfall: Meridian"
 config/description="Ashfall: Meridian, native Godot test slice"
 run/main_scene="res://boot.tscn"
 boot_splash/bg_color=Color(0.03, 0.02, 0.015, 1)

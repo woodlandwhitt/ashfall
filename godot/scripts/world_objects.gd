@@ -128,6 +128,16 @@ func label_of(o: Dictionary) -> Variant:
 
 func best(pp: Vector3, fwd: Vector3, bd: float) -> Dictionary:
 	var found := {}
+	# what the crosshair points at, not what's merely nearby: the prompt is for the thing you're looking at, and
+	# looking away from a safe takes its prompt (and its USE) with it (build 20)
+	var eye := pp + Vector3.UP * 1.5
+	var aim := fwd
+	if Game.player and Game.player.get("cam"):
+		# from the look itself (the camera's transform can lag a frame behind it)
+		var yw := float(Game.player.yaw)
+		var pt := float(Game.player.pitch)
+		aim = Vector3(-sin(yw) * cos(pt), sin(pt), -cos(yw) * cos(pt))
+	var best_s := INF
 	var kx := floori((pp.x - Game.x0) / CH)
 	var kz := floori((pp.z - Game.z0) / CH)
 	for dx in [-1, 0, 1]:
@@ -159,18 +169,31 @@ func best(pp: Vector3, fwd: Vector3, bd: float) -> Dictionary:
 					prio = 0.0
 				if d > r or d - prio >= bd:
 					continue
-				if d > 1.2 and fwd.dot(to / d) < 0.45:
-					continue
+				var oy: float = float(o.y) if o.has("y") else Game.height(x, z)
+				var mid := Vector3(x, oy + (0.15 if o._k == "pickup" else 0.5), z)
+				var dot := 1.0
+				if o._k in ["ldoor", "door"] or o.has("pr"):
+					# doors and big quest points: facing them is enough
+					if d > 1.2 and fwd.dot(to / d) < 0.45:
+						continue
+				else:
+					var v := mid - eye
+					dot = aim.dot(v.normalized()) if v.length() > 0.05 else 1.0
+					var need := 0.82 if d > 1.6 else (0.6 if d > 0.8 else 0.3)
+					if dot < need:
+						continue
 				var l = label_of(o)
 				if l == null:
 					continue
-				bd = d - prio
-				found = {"k": "obj", "o": o, "label": String(l), "d": bd, "at": Vector3(x, float(o.y) if o.has("y") else Game.height(x, z), z)}
+				var sc := d - prio + (1.0 - dot) * 6.0
+				if sc >= best_s:
+					continue
+				best_s = sc
+				found = {"k": "obj", "o": o, "label": String(l), "d": d - prio, "at": Vector3(x, oy, z)}
 	# nothing through walls: the eye must see the object (doors and wall-mounted things are allowed their own wall)
 	if not found.is_empty() and found.o._k not in ["ldoor", "door"] and not found.o.has("pr"):
 		var small: bool = found.o._k == "pickup"
 		var at: Vector3 = found.at + Vector3.UP * (0.25 if small else 0.9)
-		var eye := pp + Vector3.UP * 1.5
 		var q := PhysicsRayQueryParameters3D.create(eye, at, 1)
 		var hit := get_world_3d().direct_space_state.intersect_ray(q)
 		# things on the ground must be in plain sight; furniture-sized things may sit against their own wall

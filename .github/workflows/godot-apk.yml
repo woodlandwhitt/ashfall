@@ -51,9 +51,9 @@ jobs:
           GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
         run: |
           mkdir -p godot/build
-          $HOME/bin/godot --headless --path godot --export-debug "Android" build/AshfallGodot.apk
+          $HOME/bin/godot --headless --path godot --export-debug "Android" build/AshfallMeridian.apk
           ls -la godot/build
-          cp godot/build/AshfallGodot.apk AshfallGodot.apk
+          cp godot/build/AshfallMeridian.apk AshfallMeridian.apk
       # the in-game updater's download: a base build keeps its whole pack; later builds ship only what changed since
       - name: Export the update packs
         env:
@@ -78,9 +78,9 @@ jobs:
           ls -la *.pck
       - uses: actions/upload-artifact@v6
         with:
-          name: AshfallGodot-apk
-          path: AshfallGodot.apk
+          name: AshfallMeridian-apk
+          path: AshfallMeridian.apk
       - name: Publish to Releases
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "godot-${{ github.run_number }}" AshfallGodot.apk $UPDATE_ASSETS --title "Ashfall Godot test (build ${{ github.run_number }})" --notes "Native Godot test build of the Dustwell slice. Installs alongside the regular game. Tap AshfallGodot.apk below to download." --target "${{ github.sha }}"
+        run: gh release create "godot-${{ github.run_number }}" AshfallMeridian.apk $UPDATE_ASSETS --title "Ashfall: Meridian (build ${{ github.run_number }})" --notes "Ashfall: Meridian, build ${{ github.run_number }}. Tap AshfallMeridian.apk below to install, or update from the title screen (the patch-bN.pck files are the in-game updates)." --target "${{ github.sha }}"

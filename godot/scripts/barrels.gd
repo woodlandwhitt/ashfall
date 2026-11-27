@@ -66,7 +66,9 @@ func _physics_process(d: float) -> void:
 func _spawn(b: Dictionary) -> void:
 	var space := get_world_3d().direct_space_state
 	var gy := Game.height(float(b.x), float(b.z))
-	var top := maxf(gy, float(b.y)) + 2.5
+	# from just above where the drum stood, not from high over it: the folded-away scenery drum's collider can still
+	# be there, and a ray from above landed on its lid, so the live drum stood on an invisible one (build 20)
+	var top := maxf(gy, float(b.y)) + 0.6
 	var q := PhysicsRayQueryParameters3D.create(Vector3(float(b.x), top, float(b.z)), Vector3(float(b.x), minf(gy, float(b.y)) - 2.0, float(b.z)), 1)
 	var hit := space.intersect_ray(q)
 	if hit.is_empty():
@@ -87,8 +89,6 @@ func _spawn(b: Dictionary) -> void:
 		if not space.intersect_shape(sq, 1).is_empty():
 			b["bad"] = true
 			return
-	if OS.get_cmdline_user_args().has("--drumlog"):
-		print("DRUM ", b.id, " at ", Vector3(float(b.x), y, float(b.z)), " ground ", gy, " hit ", hit.collider)
 	var n := Drum.new()
 	n.owner_list = self
 	n.info = b

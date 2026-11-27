@@ -13,10 +13,12 @@ extends Node3D
 const SITES := {"stillwater": [-60.0, -748.0, 52.0], "old_meridian": [420.0, -768.0, 165.0], "glass_camp": [1150.0, -612.0, 32.0], "silo9": [1150.0, -792.0, 34.0],
 	"cinder_gap": [820.0, -40.0, 62.0], "ashborn": [1310.0, -330.0, 40.0], "lookout": [990.0, -232.0, 22.0],
 	"mercy_falls": [1120.0, 300.0, 64.0], "drivein": [690.0, 232.0, 38.0],
-	"lantern_row": [604.0, 120.0, 54.0], "starfall": [676.0, -418.0, 40.0], "havens_door": [0.0, 205.0, 18.0]}
+	"lantern_row": [604.0, 120.0, 54.0], "starfall": [676.0, -418.0, 40.0], "havens_door": [0.0, 205.0, 18.0],
+	"wayside": [900.0, -600.0, 30.0], "holloway": [-300.0, -600.0, 32.0], "relay_k": [1000.0, 100.0, 26.0]}
 
 # build 17: ground levelled under a site before the terrain is built (x, z, inner radius flat, outer radius blended)
-const FLAT := [[684.0, -424.0, 17.0, 32.0], [652.0, -397.0, 6.0, 12.0], [604.0, 120.0, 30.0, 46.0]]
+const FLAT := [[684.0, -424.0, 17.0, 32.0], [652.0, -397.0, 6.0, 12.0], [604.0, 120.0, 30.0, 46.0],
+	[900.0, -600.0, 16.0, 28.0], [-300.0, -600.0, 16.0, 28.0], [1000.0, 100.0, 12.0, 24.0]]
 
 static func level_ground() -> void:
 	if Game.area != "world":
@@ -151,6 +153,7 @@ static func layout() -> Array:
 	L.append(R("campfire", 701.0, 226.0, 0, {"s": 0.7}))
 	_north(L)
 	_dress(L)
+	_ruins20(L)
 	# ---------------------------------------------------------------- build 17
 	# Lantern Row: a trading street east of Saltreach on the Kettle road, lamps on every post. The Lantern is its bar;
 	# behind the bar, the back room nobody admits is there: the Quiet Hands, the valley's thieves' guild
@@ -243,7 +246,7 @@ static func _north(L: Array) -> void:
 	L.append(R("log_seat", -56.0, -752.0, 0, {"yaw": 0.0}))
 	L.append(R("log_seat", -52.0, -757.5, 0, {"yaw": 1.4}))
 	L.append(R("seat", -76.2, -770.0, 3, {"id": "Rockingchair_01"}))
-	L.append(R("seat", -40.0, -731.4, 2, {"id": "ArmChair_01"}))
+	L.append(R("seat", -37.0, -732.2, 2, {"id": "ArmChair_01"}))
 	L.append(R("chest", -52.0, -776.4, 0, {"id": "sw_coop", "tier": "uncommon", "owned": true}))
 	L.append(R("chest", -95.5, -741.0, 0, {"id": "sw_boats", "tier": "common", "owned": true}))
 	L.append(R("bench", -89.0, -735.5, 3))
@@ -403,7 +406,7 @@ static func _ground(d: Dictionary) -> float:
 		return (lo + Game.height(x, z)) * 0.5 if String(d.k) == "kit" else lo + 0.04
 	match String(d.k):
 		"palisade", "campfire", "kit", "seat", "post", "log_seat", "chest", "bench", "sign", "snag", "totem", "tipi", "banner", "shards", "rubble", "ufo", "crater", \
-				"sandbags", "washline", "crates", "watertank", "table", "scrap", "lamp":
+				"fence", "pump", "canopy", "sandbags", "washline", "crates", "watertank", "table", "scrap", "lamp", "tripod", "tarp", "generator", "antenna", "board", "lights", "garden":
 			return Game.height(x, z)
 	var g := -INF
 	for p in [Vector2(-w, -dd), Vector2(w, -dd), Vector2(-w, dd), Vector2(w, dd), Vector2.ZERO]:
@@ -744,6 +747,15 @@ static func _shape(kit: Kit, d: Dictionary) -> void:
 		"table": _table(kit, d)
 		"scrap": _scrap(kit, d)
 		"lamp": _lamp(kit, d)
+		"tripod": _tripod(kit, d)
+		"pump": _pump(kit, d)
+		"canopy": _canopy(kit, d)
+		"tarp": _tarp(kit, d)
+		"generator": _generator(kit, d)
+		"antenna": _antenna(kit, d)
+		"board": _board(kit, d)
+		"lights": _lights(kit, d)
+		"garden": _garden(kit, d)
 		"reactor_dress": _reactor_dress(kit)
 		"post":
 			kit.cyl("metal", Vector3.ZERO, 0.05, 0.05, 1.2, 6, 0)
@@ -821,12 +833,29 @@ static func _shack(kit: Kit, d: Dictionary, h: float) -> void:
 		kit.box(m, Vector3(0, h + 0.75, hd + 0.02), Vector3(w + 0.2, 1.5, 0.14), 0)
 		kit.box("plank_dk", Vector3(0, h + 1.55, hd + 0.04), Vector3(w + 0.4, 0.12, 0.3), 0)
 		kit.box("plank_dk", Vector3(0, 0.08, hd + 1.1), Vector3(w, 0.16, 2.2), 1)
+		_door_ramp(kit, d, door, hd + 2.2, 2.0)
 		for px in [-hw + 0.2, -hw * 0.33, hw * 0.33, hw - 0.2]:
 			kit.box("log", Vector3(px, 1.35, hd + 2.05), Vector3(0.16, 2.7, 0.16), 0)
 		kit.box(roof, Vector3(0, 2.72, hd + 1.15), Vector3(w + 0.3, 0.07, 2.5), 0, Basis(Vector3.RIGHT, 0.12))
 	else:
-		# a step at the door
-		kit.box("plank_dk", Vector3(door, 0.06, hd + 0.4), Vector3(1.4, 0.12, 0.7), 0)
+		# a ramp of boards up to the door (build 20: the old decorative step had no collision, and the floor's edge
+		# stopped you in the doorway)
+		_door_ramp(kit, d, door, hd, 1.4)
+
+# boards sloping from the ground up to a floor's edge (local z = edge, outward +z), gentle enough to walk up
+static func _door_ramp(kit: Kit, d: Dictionary, x: float, edge: float, width: float) -> void:
+	var g := _lifty(d, Vector3(x, 0, edge + 0.6))
+	var rise := 0.16 - minf(g, 0.0)
+	var l := maxf(0.6, rise / 0.42)
+	g = _lifty(d, Vector3(x, 0, edge + l))
+	rise = 0.16 - minf(g, 0.0)
+	l = maxf(0.6, rise / 0.42)
+	var ang := atan2(rise, l)
+	var len := sqrt(l * l + rise * rise)
+	var c := Vector3(x, 0.16 - rise * 0.5 - 0.05, edge + l * 0.5)
+	kit.box("plank_dk", c, Vector3(width, 0.1, len), 2, Basis(Vector3.RIGHT, ang))
+	# a sill so the ramp meets the floor flush
+	kit.box("plank_dk", Vector3(x, 0.13, edge - 0.05), Vector3(width, 0.06, 0.14), 0)
 
 static func _cabin(kit: Kit, d: Dictionary) -> void:
 	var w := float(d.get("w", 6))
@@ -853,6 +882,7 @@ static func _cabin(kit: Kit, d: Dictionary) -> void:
 	# a stovepipe, a porch
 	kit.cyl("metal", Vector3(hw - 1.0, h + 0.6, -0.8), 0.12, 0.12, 1.6, 8, 0)
 	kit.box("plank_dk", Vector3(0, 0.08, hd + 0.9), Vector3(w, 0.16, 1.8), 1)
+	_door_ramp(kit, d, -0.8, hd + 1.8, 1.6)
 	var dl := Basis(Vector3.UP, -1.7)
 	kit.box("plank_v", Vector3(-1.35, 0, hd) + dl * Vector3(0.5, 1.0, 0.03), Vector3(1.0, 2.0, 0.05), 0, dl)
 
@@ -900,12 +930,19 @@ static func _fence(kit: Kit, d: Dictionary) -> void:
 	# a run of scrap sheets nailed to posts, along local x
 	var l := float(d.get("len", 10.0))
 	var n := int(l / 1.8)
+	# each sheet and post follows the ground under it, down into it on the low side (build 20: on a slope the run
+	# hung in the air at one end)
 	for i in n:
 		var x := -l * 0.5 + (i + 0.5) * l / n
+		var g := minf(_lifty(d, Vector3(x - l / n * 0.5, 0, 0)), _lifty(d, Vector3(x + l / n * 0.5, 0, 0)))
+		var gt := _lifty(d, Vector3(x, 0, 0))
 		var hh := 2.2 + sin(i * 1.9 + d.x) * 0.25
-		kit.box(["tin", "tin_red", "plank_v", "tin_teal"][(i + int(d.z)) % 4], Vector3(x, hh * 0.5, 0), Vector3(l / n + 0.05, hh, 0.06), 1, Basis(Vector3.FORWARD, sin(i * 3.1) * 0.03))
+		var bot := g - 0.15
+		kit.box(["tin", "tin_red", "plank_v", "tin_teal"][(i + int(d.z)) % 4], Vector3(x, (bot + gt + hh) * 0.5, 0), Vector3(l / n + 0.05, gt + hh - bot, 0.06), 1, Basis(Vector3.FORWARD, sin(i * 3.1) * 0.03))
 	for i in n + 1:
-		kit.box("log", Vector3(-l * 0.5 + i * l / n, 1.25, -0.1), Vector3(0.12, 2.5, 0.12), 0)
+		var px := -l * 0.5 + i * l / n
+		var g := _lifty(d, Vector3(px, 0, -0.1))
+		kit.box("log", Vector3(px, g + 1.25 - 0.15, -0.1), Vector3(0.12, 2.8, 0.12), 0)
 
 static func _signpost(kit: Kit) -> void:
 	kit.box("log", Vector3(-0.9, 1.2, 0), Vector3(0.12, 2.4, 0.12), 0)
@@ -1025,7 +1062,12 @@ static func _snag(kit: Kit) -> void:
 		kit.box("bone" if i % 2 == 0 else "red", end + Vector3(0, -0.4, 0), Vector3(0.12, 0.4, 0.04), 0)
 
 static func _log_seat(kit: Kit, d: Dictionary) -> void:
-	kit.cyl("log", Vector3(-0.9, 0.22, 0), 0.22, 0.22, 1.8, 7, 0, Basis(Vector3.UP, float(d.get("yaw", 0.0))) * Basis(Vector3.BACK, -PI * 0.5))
+	var yb := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	var lo := minf(_lifty(d, Vector3(-0.8, 0, 0)), _lifty(d, Vector3(0.8, 0, 0)))
+	kit.cyl("log", yb * Vector3(-0.9, 0.2 + lo * 0.5, 0), 0.22, 0.2, 1.8, 10, 0, yb * Basis(Vector3.BACK, -PI * 0.5))
+	# a bark split along the top where people sit, and a stub of branch
+	kit.box("plank_dk", yb * Vector3(0, 0.41 + lo * 0.5, 0), Vector3(1.5, 0.03, 0.2), 0, yb)
+	kit.cyl("log", yb * Vector3(0.5, 0.25 + lo * 0.5, 0.15), 0.05, 0.03, 0.3, 5, 0, yb * Basis(Vector3.RIGHT, 1.1))
 
 static func _lookout(kit: Kit) -> void:
 	var top := 12.0
@@ -1289,6 +1331,23 @@ static func _dress(L: Array) -> void:
 	L.append(R("kit", 15.5, 193.5, 0, {"id": "k:g_gravestone-cross", "len": 0.9, "yaw": PI}))
 	L.append(R("kit", 17.0, 194.0, 0, {"id": "k:g_gravestone-round", "len": 0.9, "yaw": PI + 0.2}))
 	L.append(R("kit", 9.5, 212.0, 0, {"id": "k:s_box-large", "len": 1.0, "yaw": 0.4}))
+	# build 20: a cook pot over the fire, a tarp over the stores, the generator and its aerial, the notice board,
+	# lights strung over the middle of the camp, a garden plot, more seats round the fire, water drums by the tank
+	L.append(R("tripod", 0.0, 203.0, 0))
+	L.append(R("log_seat", 0.4, 206.4, 0, {"yaw": 0.1}))
+	L.append(R("log_seat", -0.6, 199.8, 0, {"yaw": -0.15}))
+	L.append(R("tarp", -15.5, 215.0, 0, {"yaw": 0.3}))
+	L.append(R("crates", -15.6, 215.4, 0, {"seed": 20}))
+	L.append(R("generator", 15.5, 213.5, 0, {"yaw": -0.4}))
+	L.append(R("antenna", 17.5, 211.5, 0))
+	L.append(R("board", 5.0, 215.0, 0, {"yaw": 0.0}))
+	L.append(R("lights", 0.0, 199.6, 0, {"len": 10.0}))
+	L.append(R("garden", -17.5, 207.5, 0, {"w": 3.2, "d": 2.2, "yaw": 0.2}))
+	L.append(R("kit", 15.3, 207.6, 0, {"id": "k:q_Barrel", "len": 0.85, "yaw": 0.5}))
+	L.append(R("kit", 15.9, 211.0, 0, {"id": "k:s_barrel-open", "len": 0.85}))
+	L.append(R("kit", -5.5, 211.5, 0, {"id": "k:q_Pallet_Broken", "len": 1.3, "yaw": 1.0}))
+	L.append(R("kit", 11.0, 192.0, 0, {"id": "k:q_TrashBag_2", "len": 1.0}))
+	L.append(R("kit", -11.0, 193.0, 0, {"id": "k:q_Wheels_Stack", "len": 1.1}))
 	# Dustwell: posts on the north-west and south-east roads, a well-side market table
 	L.append(R("sandbags", -99.8, 73.2, 0, {"len": 4.0, "yaw": 0.38}))
 	L.append(R("lamp", -105.9, 75.6, 0))
@@ -1429,6 +1488,175 @@ static func _lamp(kit: Kit, d: Dictionary) -> void:
 	kit.box("metal", Vector3(0.58, 2.9, 0), Vector3(0.2, 0.3, 0.2), 0)
 	kit.box("warm", Vector3(0.58, 2.88, 0), Vector3(0.14, 0.2, 0.21), 0)
 	kit.box("warm", Vector3(0.58, 2.88, 0), Vector3(0.21, 0.2, 0.14), 0)
+
+# ---------------------------------------------------------------- build 20: three new places on the empty stretches
+static func _ruins20(L: Array) -> void:
+	# Wayside 9: a fuel stop on the old north-east highway, the canopy still up, the store gutted, raiders living in it
+	L.append(R("canopy", 900, -604, 0, {"w": 12.0, "d": 7.0}))
+	for px in [-3.0, 0.0, 3.0]:
+		L.append(R("pump", 900 + px, -604, 0))
+	L.append(R("ruin", 900, -590, 0, {"w": 12, "d": 8, "seed": 41}))
+	L.append(R("shack", 915, -591, 3, {"w": 6, "d": 5, "role": "workshop", "m": "tin", "roof": "tin_red", "sign": "SERVICE"}))
+	L.append(R("kit", 893, -612, 0, {"id": "k:q_Vehicle_Pickup", "len": 5.0, "yaw": 0.3, "burnt": true}))
+	L.append(R("kit", 908, -613, 0, {"id": "k:q_Vehicle_Sports", "len": 4.6, "yaw": 2.0, "burnt": true}))
+	L.append(R("kit", 887, -598, 0, {"id": "k:q_Container_Red", "len": 6.0, "yaw": 1.57}))
+	L.append(R("sandbags", 896, -618, 0, {"len": 4.0, "yaw": 0.1}))
+	L.append(R("sandbags", 905, -618.5, 0, {"len": 3.0, "yaw": -0.2}))
+	L.append(R("campfire", 902.0, -594.0, 0, {"s": 0.6}))
+	L.append(R("crates", 896.0, -594.5, 0, {"seed": 30}))
+	L.append(R("scrap", 915.0, -604.0, 0, {"seed": 31}))
+	L.append(R("kit", 897, -606.5, 0, {"id": "k:q_Barrel", "len": 0.9}))
+	L.append(R("chest", 898.0, -588.0, 0, {"id": "ws_stash", "tier": "uncommon"}))
+	L.append(R("sign", 900, -628, 0, {"text": "WAYSIDE 9\nFUEL  FOOD  REPAIRS\nCLOSED"}))
+	# Holloway Farm: a burnt farmhouse, the barn still standing, the windmill, the fields fenced and gone to weeds
+	L.append(R("ruin", -306, -598, 0, {"w": 10, "d": 8, "seed": 52}))
+	L.append(R("cabin", -288, -606, 3, {"w": 8, "d": 6}))
+	L.append(R("windmill", -312, -615, 0))
+	L.append(R("fence", -300, -582, 0, {"len": 18.0}))
+	L.append(R("fence", -291, -590, 1, {"len": 14.0}))
+	L.append(R("garden", -296, -588, 0, {"w": 6.0, "d": 4.0, "yaw": 0.0}))
+	L.append(R("garden", -306, -587, 0, {"w": 5.0, "d": 3.0, "yaw": 0.1}))
+	L.append(R("watertank", -313, -605, 0))
+	L.append(R("kit", -296, -612, 0, {"id": "k:q_Vehicle_Truck", "len": 6.0, "yaw": 0.9, "burnt": true}))
+	L.append(R("kit", -310, -592, 0, {"id": "k:g_debris-wood", "len": 2.2, "yaw": 0.4}))
+	L.append(R("kit", -284, -598, 0, {"id": "k:g_grave", "len": 1.4, "yaw": 1.57}))
+	L.append(R("kit", -283, -596, 0, {"id": "k:g_gravestone-broken", "len": 0.9, "yaw": 1.57}))
+	L.append(R("chest", -290.0, -607.5, 0, {"id": "hf_cellar", "tier": "common"}))
+	L.append(R("sign", -300, -575, 0, {"text": "HOLLOWAY FARM\nEGGS  MILK  HONEY\nNO TRESPASSERS"}))
+	# Relay Station K: a signals post on a rise in the Ashwood's south, the mast still up, the sentries still on
+	L.append(R("blockhouse", 1000, 96, 0, {"w": 8, "d": 6}))
+	L.append(R("antenna", 1006, 104, 0))
+	L.append(R("antenna", 994, 105, 0))
+	L.append(R("sandbags", 996, 110, 0, {"len": 4.0, "yaw": 0.0}))
+	L.append(R("sandbags", 1004.5, 110, 0, {"len": 4.0, "yaw": 0.0}))
+	L.append(R("crates", 990.5, 98.0, 0, {"seed": 33}))
+	L.append(R("generator", 1009, 96, 0, {"yaw": 1.57}))
+	L.append(R("kit", 1012, 101, 0, {"id": "k:q_Container_Green", "len": 6.0, "yaw": 0.0}))
+	L.append(R("chest", 1000.0, 94.8, 0, {"id": "rk_locker", "tier": "rare"}))
+	L.append(R("sign", 1000, 122, 0, {"text": "RELAY STATION K\nAUTHORIZED PERSONNEL\nSENTRIES ACTIVE"}))
+
+static func _pump(kit: Kit, d: Dictionary) -> void:
+	kit.box("concrete", Vector3(0, 0.1, 0), Vector3(1.2, 0.2, 0.7), 1)
+	kit.box("tin_red", Vector3(0, 0.95, 0), Vector3(0.6, 1.5, 0.45), 1)
+	kit.box("paint", Vector3(0, 1.45, 0.23), Vector3(0.45, 0.35, 0.02), 0)
+	kit.box("dark", Vector3(0, 1.05, 0.23), Vector3(0.3, 0.2, 0.02), 0)
+	kit.pole("dark", Vector3(0.28, 1.1, 0.1), Vector3(0.55, 0.3, 0.4), 0.02)
+	kit.box("metal", Vector3(0.55, 0.3, 0.4), Vector3(0.08, 0.2, 0.08), 0)
+
+static func _canopy(kit: Kit, d: Dictionary) -> void:
+	var w := float(d.get("w", 12.0))
+	var dd := float(d.get("d", 7.0))
+	for p in [Vector3(-w * 0.4, 0, 0), Vector3(w * 0.4, 0, 0)]:
+		var g := _lifty(d, p)
+		kit.box("concrete", Vector3(p.x, (g - 0.3 + 4.6) * 0.5, 0), Vector3(0.5, 4.6 - g + 0.3, 0.5), 1)
+	kit.box("paint", Vector3(0, 4.75, 0), Vector3(w, 0.35, dd), 0)
+	kit.box("red", Vector3(0, 4.75, dd * 0.5 + 0.01), Vector3(w, 0.3, 0.03), 0)
+	kit.box("red", Vector3(0, 4.75, -dd * 0.5 - 0.01), Vector3(w, 0.3, 0.03), 0)
+	# a corner of it has come down
+	kit.box("tin", Vector3(w * 0.42, 3.2, dd * 0.4), Vector3(2.4, 0.06, 1.8), 0, Basis(Vector3.BACK, 0.9))
+
+static func _tripod(kit: Kit, d: Dictionary) -> void:
+	# three poles over the fire and a blackened pot on a chain
+	var top := Vector3(0, 1.55, 0)
+	for i in 3:
+		var a := i * TAU / 3.0 + 0.3
+		var foot := Vector3(cos(a) * 0.85, _lifty(d, Vector3(cos(a) * 0.85, 0, sin(a) * 0.85)) - 0.05, sin(a) * 0.85)
+		kit.pole("log", foot, top + Vector3(cos(a) * 0.06, 0.12, sin(a) * 0.06), 0.035)
+	kit.pole("dark", top, Vector3(0, 0.85, 0), 0.008)
+	kit.cyl("burnt", Vector3(0, 0.55, 0), 0.2, 0.24, 0.3, 10, 0)
+	kit.cyl("dark", Vector3(0, 0.84, 0), 0.24, 0.22, 0.03, 10, 0)
+
+static func _tarp(kit: Kit, d: Dictionary) -> void:
+	# a lean-to: two tall poles at the front, two short at the back, a canvas sheet sloping between them
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	var front := 2.3
+	var back := 1.3
+	for p in [Vector3(-1.5, 0, 1.2), Vector3(1.5, 0, 1.2), Vector3(-1.5, 0, -1.2), Vector3(1.5, 0, -1.2)]:
+		var g := _lifty(d, p)
+		var top := front if p.z > 0 else back
+		kit.cyl("log", b * Vector3(p.x, g - 0.2, p.z), 0.045, 0.04, top - g + 0.2, 5, 0)
+	var ang := atan2(front - back, 2.4)
+	kit.box("canvas_green", b * Vector3(0, (front + back) * 0.5 + 0.02, 0), Vector3(3.3, 0.03, sqrt(2.4 * 2.4 + pow(front - back, 2)) + 0.3), 0, b * Basis(Vector3.RIGHT, ang))
+	for sx in [-1.5, 1.5]:
+		kit.pole("dark", b * Vector3(sx, front, 1.2), b * Vector3(sx * 1.25, _lifty(d, Vector3(sx * 1.25, 0, 2.4)), 2.4), 0.006)
+
+static func _generator(kit: Kit, d: Dictionary) -> void:
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	var g := minf(_lifty(d, Vector3(-0.6, 0, 0)), _lifty(d, Vector3(0.6, 0, 0)))
+	kit.box("plank_dk", b * Vector3(0, g + 0.06, 0), Vector3(1.5, 0.12 - g * 0.0, 0.9), 0, b)
+	kit.box("tin_red", b * Vector3(0.15, g + 0.5, 0), Vector3(1.0, 0.7, 0.7), 0, b)
+	kit.cyl("metal", b * Vector3(-0.55, g + 0.12, 0), 0.26, 0.26, 0.62, 12, 0)
+	kit.box("dark", b * Vector3(0.15, g + 0.5, 0.36), Vector3(0.7, 0.4, 0.02), 0, b)
+	kit.cyl("metal", b * Vector3(0.45, g + 0.85, -0.15), 0.05, 0.05, 0.35, 6, 0)
+	kit.cyl("dark", b * Vector3(0.45, g + 1.2, -0.15), 0.07, 0.05, 0.08, 6, 0)
+	kit.pole("dark", b * Vector3(0.6, g + 0.5, 0.2), b * Vector3(1.6, _lifty(d, Vector3(1.6, 0, 0.6)) + 0.02, 0.6), 0.015)
+	if not kit.solids_only:
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(1.5, 0.9, 0.9)
+		kit.cols.append([bs, Transform3D(b, Vector3(0, g + 0.45, 0))])
+
+static func _antenna(kit: Kit, d: Dictionary) -> void:
+	kit.cyl("metal", Vector3(0, -0.3, 0), 0.06, 0.03, 7.0, 6, 0)
+	for i in 3:
+		var y := 4.6 + i * 0.75
+		var w := 1.4 - i * 0.35
+		kit.box("metal", Vector3(0, y, 0), Vector3(w, 0.03, 0.03), 0)
+	kit.box("red", Vector3(0, 6.75, 0), Vector3(0.1, 0.1, 0.1), 0)
+	for i in 3:
+		var a := i * TAU / 3.0
+		kit.pole("dark", Vector3(0, 5.0, 0), Vector3(cos(a) * 2.6, _lifty(d, Vector3(cos(a) * 2.6, 0, sin(a) * 2.6)), sin(a) * 2.6), 0.006)
+
+static func _board(kit: Kit, d: Dictionary) -> void:
+	# the camp's notice board: rosters, ration lists and a hand-drawn map pinned to boards on two posts
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	for sx in [-0.8, 0.8]:
+		kit.cyl("log", b * Vector3(sx, _lifty(d, Vector3(sx, 0, 0)) - 0.3, 0), 0.06, 0.05, 2.3 - _lifty(d, Vector3(sx, 0, 0)), 5, 0)
+	kit.box("plank", b * Vector3(0, 1.35, 0.05), Vector3(1.8, 1.0, 0.06), 0, b)
+	kit.box("tin", b * Vector3(0, 1.95, 0.08), Vector3(2.0, 0.06, 0.3), 0, b * Basis(Vector3.RIGHT, -0.2))
+	var paper := ["mattress", "bone", "mattress", "canvas", "bone"]
+	for i in 5:
+		var px := -0.6 + i * 0.3 + sin(i * 2.3) * 0.05
+		var py := 1.35 + sin(i * 1.7) * 0.25
+		kit.box(paper[i], b * Vector3(px, py, 0.09), Vector3(0.22, 0.3, 0.01), 0, b * Basis(Vector3.BACK, sin(i * 3.3) * 0.12))
+
+static func _lights(kit: Kit, d: Dictionary) -> void:
+	# a string of bulbs on two poles, sagging over the middle of the camp
+	var l := float(d.get("len", 10.0))
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	var a := Vector3(-l * 0.5, 0, 0)
+	var e := Vector3(l * 0.5, 0, 0)
+	for p in [a, e]:
+		var g := _lifty(d, p)
+		kit.cyl("log", b * (p + Vector3(0, g - 0.3, 0)), 0.05, 0.045, 3.3 - g, 5, 0)
+	var n := 12
+	var prev := Vector3.ZERO
+	for i in n + 1:
+		var t := float(i) / n
+		var p := a.lerp(e, t) + Vector3(0, 3.0 - sin(t * PI) * 0.55, 0)
+		if i > 0:
+			kit.pole("dark", b * prev, b * p, 0.006)
+			kit.box("warm", b * (p + Vector3(0, -0.08, 0)), Vector3(0.07, 0.1, 0.07), 0)
+		prev = p
+
+static func _garden(kit: Kit, d: Dictionary) -> void:
+	# a dug plot of rows with a few hardy greens coming up, and a low board edge
+	var w := float(d.get("w", 3.0))
+	var dd := float(d.get("d", 2.0))
+	var b := Basis(Vector3.UP, float(d.get("yaw", 0.0)))
+	var g := _lifty(d, Vector3.ZERO)
+	kit.box("burnt", b * Vector3(0, g + 0.02, 0), Vector3(w, 0.08, dd), 0, b)
+	for side in [[Vector3(0, 0, dd * 0.5), Vector3(w + 0.1, 0.2, 0.06)], [Vector3(0, 0, -dd * 0.5), Vector3(w + 0.1, 0.2, 0.06)],
+			[Vector3(w * 0.5, 0, 0), Vector3(0.06, 0.2, dd)], [Vector3(-w * 0.5, 0, 0), Vector3(0.06, 0.2, dd)]]:
+		var p: Vector3 = side[0]
+		kit.box("plank_dk", b * (p + Vector3(0, _lifty(d, p) + 0.06, 0)), side[1], 0, b)
+	var rows := int(dd / 0.5)
+	for r in rows:
+		var z := -dd * 0.5 + (r + 0.5) * dd / rows
+		for i in int(w / 0.45):
+			var x := -w * 0.5 + 0.25 + i * 0.45
+			if (r * 7 + i * 3) % 5 == 0:
+				continue
+			kit.cone("canvas_green", b * Vector3(x, g + 0.05, z), 0.13, 0.22 + fmod(i * 0.37 + r, 0.18), 5)
 
 static func _lift(d: Dictionary, lx: float, lz: float) -> float:
 	return Game.height(float(d.x) + lx, float(d.z) + lz) - _ground(d)
@@ -1849,6 +2077,8 @@ class Kit:
 			Flora.tri(s, [b0, t0, t1], [n0, n0, n1], [w, w, w])
 			var up := b * Vector3.UP
 			Flora.tri(s, [t0, t1, base + b * Vector3(0, h, 0)], [up, up, up], [w, w, w])
+			# and the bottom end closed too (a log lying on its side showed its hollow end - build 20)
+			Flora.tri(s, [b1, b0, base], [-up, -up, -up], [w, w, w])
 
 	func cone(m: String, base: Vector3, r: float, h: float, seg: int, rot := 0.0, band := false) -> void:
 		if solids_only:

@@ -629,7 +629,13 @@ func recruit(id: String, silent := false) -> void:
 
 # loyal companions hit harder and take more punishment
 func _comp_stats(id: String, c: Dictionary) -> Dictionary:
-	if not Game.is_loyal(id) or c.get("dog", false):
+	if c.get("dog", false):
+		# build 20: Biscuit took most things down in two bites; a little gentler, a little slower between bites
+		var dg := c.duplicate(true)
+		dg["dmg"] = float(c.get("dmg", 16)) * 0.75
+		dg["atk"] = float(c.get("atk", 0.85)) * 1.15
+		return dg
+	if not Game.is_loyal(id):
 		return c
 	var d := c.duplicate(true)
 	d["dmg"] = float(c.get("dmg", 12)) * 1.3
@@ -754,6 +760,7 @@ func _forgive_tick(d: float) -> void:
 	_unstick()
 	_furnish_tick()
 	_terminal_desks()
+	_chest_shells()
 	for e in enemies.duplicate():
 		if not is_instance_valid(e) or e.dead or e.get("npc") == null:
 			continue
@@ -841,6 +848,98 @@ func _terminal_desks() -> void:
 		cs.position.y = h * 0.5
 		sb.add_child(cs)
 		desk.add_child(sb)
+
+# a container with nothing to show for it (its mesh never made the export, or a later build's walls took its place):
+# give it a body you can see, a squat safe if it's locked, a footlocker if not (build 20: "invisible safes")
+var _shelled := {}
+func _chest_shells() -> void:
+	if Game.interior():
+		return
+	for c in Game.W.get("chests", []):
+		var id := String(c.id)
+		if _shelled.has(id):
+			continue
+		var cp := Vector3(float(c.x), float(c.get("y", Game.height(float(c.x), float(c.z)))), float(c.z))
+		if Vector2(cp.x - player.global_position.x, cp.z - player.global_position.z).length() > 40.0:
+			continue
+		var ck: String = chunks.key_of(cp)
+		if not chunks.loaded.has(ck):
+			continue
+		_shelled[id] = true
+		var seen := false
+		var roots: Array = [chunks.loaded[ck]]
+		if frontier:
+			roots.append(frontier)
+		for r in roots:
+			for m in (r as Node).find_children("*", "MeshInstance3D", true, false):
+				var mi := m as MeshInstance3D
+				if not mi.is_visible_in_tree():
+					continue
+				var ab: AABB = mi.global_transform * mi.get_aabb()
+				if ab.size.length() > 4.0 or ab.size.length() < 0.2:
+					continue
+				var cc := ab.get_center()
+				if Vector2(cc.x - cp.x, cc.z - cp.z).length() < 0.7 and ab.end.y > cp.y - 0.2 and ab.position.y < cp.y + 1.0:
+					seen = true
+					break
+			if seen:
+				break
+		if seen:
+			continue
+		# stand it on whatever floor is under it
+		var fy := Game.height(cp.x, cp.z)
+		var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(cp + Vector3.UP * 0.8, cp + Vector3.DOWN * 3.0, 1, [player.get_rid()]))
+		if not hit.is_empty():
+			fy = float(hit.position.y)
+		var body := Node3D.new()
+		body.name = "Shell_" + id
+		add_child(body)
+		body.global_position = Vector3(cp.x, fy, cp.z)
+		body.rotation.y = float(hash(id) % 4) * PI * 0.5
+		var locked: bool = c.get("lock") != null
+		var steel := VaultDress.mat(Color(0.24, 0.27, 0.26) if locked else Color(0.3, 0.33, 0.25), 0.35, 0.6)
+		var dark := VaultDress.mat(Color(0.08, 0.08, 0.08), 0.3, 0.5)
+		var brass := VaultDress.mat(Color(0.62, 0.5, 0.26), 0.6, 0.4)
+		var part := func(sz: Vector3, at: Vector3, m: Material, cyl := false) -> void:
+			var mi := MeshInstance3D.new()
+			if cyl:
+				var cm := CylinderMesh.new()
+				cm.top_radius = sz.x
+				cm.bottom_radius = sz.x
+				cm.height = sz.y
+				cm.radial_segments = 14
+				mi.mesh = cm
+				mi.rotation.x = PI * 0.5
+			else:
+				var bm := BoxMesh.new()
+				bm.size = sz
+				mi.mesh = bm
+			mi.material_override = m
+			mi.position = at
+			body.add_child(mi)
+		var sz := Vector3(0.7, 0.85, 0.6) if locked else Vector3(0.95, 0.5, 0.55)
+		part.call(sz, Vector3(0, sz.y * 0.5, 0), steel)
+		if locked:
+			part.call(Vector3(0.6, 0.72, 0.02), Vector3(0, 0.44, 0.305), dark)
+			part.call(Vector3(0.09, 0.04, 0), Vector3(0.05, 0.5, 0.33), brass, true)
+			part.call(Vector3(0.14, 0.03, 0.03), Vector3(-0.18, 0.42, 0.33), brass)
+			for hy in [0.2, 0.68]:
+				part.call(Vector3(0.04, 0.12, 0.05), Vector3(0.33, hy, 0.31), dark)
+		else:
+			for bx in [-0.3, 0.3]:
+				part.call(Vector3(0.06, 0.52, 0.57), Vector3(bx, 0.26, 0), dark)
+			part.call(Vector3(0.12, 0.1, 0.03), Vector3(0, 0.4, 0.285), brass)
+		Weathering.apply(body, 0.7, false, true)
+		var sb := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = sz
+		cs.shape = bs
+		cs.position.y = sz.y * 0.5
+		sb.add_child(cs)
+		body.add_child(sb)
+		# the label's anchor follows the body (the prompt and the safe are one thing)
+		c["y"] = fy + 0.1
 
 # the room you're standing in gets its furniture (and the one you left gives it back)
 var furnished := -1
@@ -1053,6 +1152,10 @@ func _test_hooks() -> void:
 		await _b19_test()
 	if args.has("floataudit"):
 		_float_audit()
+	if args.has("doortest"):
+		await _door_test()
+	if args.has("b20test"):
+		await _b20_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -2255,6 +2358,99 @@ func _float_audit() -> void:
 		if g - lo > 0.3:
 			print("FLOAT %s %s at %.1f,%.1f hangs %.2f m" % [k, String(d.get("id", "")), float(d.x), float(d.z), g - lo])
 	print("FLOAT done")
+	get_tree().quit()
+
+# build 20: containers you can see and must look at, a gentler dog, the new places
+func _b20_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	Game.dev["god"] = true
+	await _wait(10)
+	var c13 = null
+	for c in Game.W.get("chests", []):
+		if String(c.id) == "c13":
+			c13 = c
+	await _tp(float(c13.x) + 1.6, float(c13.z))
+	await _wait(150)
+	out.append("reactor safe c13 shell %s at y %.2f" % [str(get_node_or_null("Shell_c13") != null), float(c13.y)])
+	# look at it, then away
+	var cp := Vector3(float(c13.x), float(c13.y) + 0.4, float(c13.z))
+	player.global_position = Vector3(float(c13.x) + 1.4, float(c13.y) + 0.1, float(c13.z))
+	await _wait(5)
+	var to: Vector3 = cp - (player.global_position + Vector3.UP * 1.5)
+	player.yaw = atan2(-to.x, -to.z)
+	player.pitch = atan2(to.y, Vector2(to.x, to.z).length())
+	await _wait(5)
+	out.append("looking at it: %s" % str(_best_target().get("label", "nothing")))
+	player.yaw += PI
+	await _wait(5)
+	out.append("looking away: %s" % str(_best_target().get("label", "nothing")))
+	player.yaw -= PI
+	player.pitch = 1.2
+	await _wait(5)
+	out.append("looking at the sky: %s" % str(_best_target().get("label", "nothing")))
+	# Biscuit
+	recruit("biscuit", true)
+	for p in party:
+		if String(p.id) == "biscuit":
+			out.append("biscuit dmg %.1f atk %.2f (was 16, 0.85)" % [float(p.comp.dmg), float(p.comp.atk)])
+	dismiss("biscuit", true)
+	# the new places: their pieces and their people
+	var have := {}
+	for d in Frontier.layout():
+		if String(d.k) == "chest" and String(d.id) in ["ws_stash", "hf_cellar", "rk_locker"]:
+			have[String(d.id)] = true
+	out.append("new stashes %s; locs %s" % [str(have.keys()), str(["wayside", "holloway", "relay_k"].filter(func(k): return Game.DB.locs.has(k)))])
+	var sp := 0
+	for s0 in Game.W.get("spawns", []):
+		if String(s0.id).substr(0, 2) in ["ws", "hf", "rk"]:
+			sp += 1
+	out.append("new spawns %d" % sp)
+	await _tp(900, -625)
+	await _wait(60)
+	out.append("wayside foes near %d" % enemies.filter(func(e): return is_instance_valid(e) and not e.dead and e.global_position.distance_to(Vector3(900, e.global_position.y, -600)) < 40.0).size())
+	out.append("run speed %.1f" % player.RUN)
+	for l in out:
+		print("B20TEST ", l)
+	get_tree().quit()
+
+# build 20: walk in through the door of every building the frontier puts up (doorsteps, porches, sloping ground)
+func _door_test() -> void:
+	Game.booted = true
+	Game.dev["god"] = true
+	await _wait(10)
+	var ok := 0
+	var bad: Array = []
+	for d in Frontier.layout():
+		var k := String(d.k)
+		if not k in ["shack", "hall", "cabin"]:
+			continue
+		var hd := float(d.get("d", 5)) * 0.5
+		var lx := float(d.get("door", 0.0)) if k != "cabin" else -0.8
+		var b := Basis(Vector3.UP, int(d.r) * PI * 0.5)
+		var out: Vector3 = b * Vector3(0, 0, 1)
+		var start: Vector3 = Vector3(float(d.x), 0, float(d.z)) + b * Vector3(lx, 0, hd + (5.0 if k == "hall" else 3.5))
+		var inside: Vector3 = Vector3(float(d.x), 0, float(d.z)) + b * Vector3(lx, 0, hd - 1.6)
+		await _tp(start.x, start.z)
+		player.yaw = atan2(out.x, out.z)
+		Game.touch_move = Vector2(0, -1)
+		for f in 200:
+			await get_tree().physics_frame
+			var to: Vector3 = inside - player.global_position
+			to.y = 0
+			player.yaw = atan2(-to.x, -to.z) if to.length() > 0.3 else player.yaw
+			if to.length() < 0.5:
+				break
+		Game.touch_move = Vector2.ZERO
+		var dd: float = Vector2(player.global_position.x - inside.x, player.global_position.z - inside.z).length()
+		if dd < 1.0:
+			ok += 1
+		else:
+			bad.append("%s %s at %d,%d r%d (stuck %.1f m short, y %.2f vs floor %.2f)" % [k, String(d.get("sign", d.get("role", ""))), int(d.x), int(d.z), int(d.r), dd, player.global_position.y, Frontier._ground(d) + 0.16])
+	print("DOORTEST walked in %d, failed %d" % [ok, bad.size()])
+	for l in bad:
+		print("DOORTEST fail ", l)
 	get_tree().quit()
 
 # build 19: the towns fight back, and factions remember

@@ -14,7 +14,7 @@ Hard rules:
 - Assets must be free with no sign-up: CC0, or CC BY with credit in `godot/CREDITS.md`. Pull them from GitHub or
   other places the build machine can reach. Never use paid or "free with account" assets.
 - Ship every milestone. Merge to `main` → GitHub Actions builds `godot-N` → send the user
-  `https://github.com/woodlandwhitt/ashfall/releases/download/godot-N/AshfallGodot.apk`.
+  `https://github.com/woodlandwhitt/ashfall/releases/download/godot-N/AshfallMeridian.apk`.
 - Work on the `godot-slice` branch and only merge to `main` when the self-test passes. Pushes to other branches
   don't build.
 - Test before shipping: `-- --selftest` (headless) must pass, and look at `-- --shot` screenshots of anything visual.

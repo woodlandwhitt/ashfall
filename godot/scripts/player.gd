@@ -3,7 +3,7 @@
 extends CharacterBody3D
 
 const WALK := 4.4
-const RUN := 8.6
+const RUN := 7.9           # build 17 ran at 8.6 (too fast), before it 7.2: the middle of the two (build 20)
 const JUMP_V := 5.9
 const STEP := 0.5             # the tallest step walked up without jumping (doorsteps, porches, kerbs)
 const GRAV := 14.0
@@ -277,28 +277,32 @@ func _physics_process(d: float) -> void:
 # if that's clear and there's floor to land on, climb by however much the floor is higher
 func _step_up(want: Vector3) -> void:
 	var wh := Vector2(want.x, want.z)
-	if not is_on_floor() or wh.length() < 0.5 or not is_on_wall():
+	if not is_on_floor() or wh.length() < 0.5:
 		return
-	if Vector2(velocity.x, velocity.z).length() > wh.length() * 0.6:
+	# blocked: moving much slower than you're trying to (is_on_wall misses a low edge the capsule's round foot rides)
+	if Vector2(velocity.x, velocity.z).length() > wh.length() * 0.6 and not is_on_wall():
 		return
 	var dir := Vector3(want.x, 0, want.z).normalized()
 	var t := global_transform
-	if test_move(t, Vector3(0, STEP, 0)):
+	# a low step first (under a door's lintel there's no room to lift half a metre), then a tall one
+	for h in [0.28, STEP]:
+		if test_move(t, Vector3(0, h, 0)):
+			continue
+		var up := t.translated(Vector3(0, h, 0))
+		if test_move(up, dir * 0.3):
+			continue
+		var ahead := up.translated(dir * 0.3)
+		var col := KinematicCollision3D.new()
+		if not test_move(ahead, Vector3(0, -h - 0.05, 0), col):
+			continue
+		if col.get_normal().y < 0.7:
+			continue
+		var climb: float = h - col.get_travel().length()
+		if climb < 0.03:
+			return
+		global_position += Vector3(0, climb + 0.02, 0) + dir * 0.06
+		velocity.y = 0.0
 		return
-	var up := t.translated(Vector3(0, STEP, 0))
-	if test_move(up, dir * 0.3):
-		return
-	var ahead := up.translated(dir * 0.3)
-	var col := KinematicCollision3D.new()
-	if not test_move(ahead, Vector3(0, -STEP - 0.05, 0), col):
-		return
-	if col.get_normal().y < 0.7:
-		return
-	var climb := STEP - col.get_travel().length()
-	if climb < 0.03:
-		return
-	global_position += Vector3(0, climb + 0.02, 0) + dir * 0.06
-	velocity.y = 0.0
 
 # ---------------------------------------------------------------- sitting down (TownLife seats)
 var seat: Dictionary = {}
