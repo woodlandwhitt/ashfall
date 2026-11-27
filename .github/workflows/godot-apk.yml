@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GODOT: 4.5.1-stable
+      # build numbers run behind the workflow's run counter by the runs that failed before publishing anything
+      # (three, on a bad workflow file, before build 20)
+      BUILD_SKIP: 3
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -31,7 +34,7 @@ jobs:
       # builds; "self" makes this build a new base too, whose full pack is kept on its release for later patches)
       - name: Stamp the build number
         run: |
-          N=${{ github.run_number }}
+          N=$(( ${{ github.run_number }} - BUILD_SKIP ))
           BASES=$(cat godot/patch_base.txt 2>/dev/null || echo self)
           [ -z "$(echo $BASES | tr -d '[:space:]')" ] && BASES=self
           B=""
@@ -59,7 +62,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          N=${{ github.run_number }}
+          N=$(( ${{ github.run_number }} - BUILD_SKIP ))
           ASSETS=""
           for t in $PATCH_BASES; do
             if [ "$t" = "self" ]; then
@@ -83,4 +86,6 @@ jobs:
       - name: Publish to Releases
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "godot-${{ github.run_number }}" AshfallMeridian.apk $UPDATE_ASSETS --title "Ashfall: Meridian (build ${{ github.run_number }})" --notes "Ashfall: Meridian, build ${{ github.run_number }}. Tap AshfallMeridian.apk below to install, or update from the title screen (the patch-bN.pck files are the in-game updates)." --target "${{ github.sha }}"
+        run: |
+          N=$(( ${{ github.run_number }} - BUILD_SKIP ))
+          gh release create "godot-$N" AshfallMeridian.apk $UPDATE_ASSETS --title "Ashfall: Meridian (build $N)" --notes "Ashfall: Meridian, build $N. Tap AshfallMeridian.apk below to install, or update from the title screen (the patch-bN.pck files are the in-game updates)." --target "${{ github.sha }}"
