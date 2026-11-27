@@ -42,6 +42,8 @@ func setup(mat: Material, mask: Image, grass: Mesh) -> void:
 			if f.ends_with(".glb") and f.begins_with("c_"):
 				var ij := f.trim_prefix("c_").trim_suffix(".glb").split("_")
 				files[str(int(ij[0]) + di) + "_" + str(int(ij[1]) + dj)] = Game.dir() + "world/" + f
+	# the coarse ground of every chunk: its node now, its mesh (and far trees) a few at a time over the next frames,
+	# nearest first (build 24: building them all at once froze the loading screen for seconds)
 	for j in nz:
 		for i in nx:
 			var k := str(i) + "_" + str(j)
@@ -51,13 +53,32 @@ func setup(mat: Material, mask: Image, grass: Mesh) -> void:
 				add_child(mi)
 				coarse[k] = mi
 				continue
-			mi.mesh = _ground(i, j, 8)
 			mi.material_override = mat
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mi)
 			coarse[k] = mi
-			if Game.area == "world":
-				Flora.far(mi, i, j, SIZE, mask)
+			coarse_todo.append(k)
+	# under the test hooks (no loading screen to wait behind) it's all built now, as before
+	if LoadScreen.quiet():
+		build_coarse(Vector3.ZERO, 1000000)
+
+var coarse_todo: Array = []
+var coarse_total := 0
+# build the coarse ground for up to a few milliseconds' worth of chunks, the ones nearest p first
+func build_coarse(p: Vector3, budget_ms := 6) -> void:
+	if coarse_todo.is_empty():
+		return
+	if coarse_total == 0:
+		coarse_total = coarse_todo.size()
+		coarse_todo.sort_custom(func(x, y): return _dist(x, p) < _dist(y, p))
+	var t0 := Time.get_ticks_msec()
+	while not coarse_todo.is_empty() and Time.get_ticks_msec() - t0 < budget_ms:
+		var k: String = coarse_todo.pop_front()
+		var ij := k.split("_")
+		var mi: MeshInstance3D = coarse[k]
+		mi.mesh = _ground(int(ij[0]), int(ij[1]), 8)
+		if Game.area == "world":
+			Flora.far(mi, int(ij[0]), int(ij[1]), SIZE, mask_img)
 
 func set_material(mat: Material) -> void:
 	terrain_mat = mat
@@ -188,10 +209,21 @@ func _dist(k: String, p: Vector3) -> float:
 	return Vector2(Game.x0 + (int(ij[0]) + 0.5) * SIZE - p.x, Game.z0 + (int(ij[1]) + 0.5) * SIZE - p.z).length()
 
 # blocking build of everything around a spot (start and after travel, behind the loading screen)
-func load_now(p: Vector3) -> void:
+func load_now(p: Vector3, near_only := false) -> void:
+	var c0 := _key_at(p)
 	for k in wanted(p):
 		if loaded.has(k):
 			continue
+		if near_only:
+			# the ground you stand on and round you now; the rest streams in behind the loading screen
+			var ij0: PackedStringArray = String(k).split("_")
+			if absi(int(ij0[0]) - c0.x) > 1 or absi(int(ij0[1]) - c0.y) > 1:
+				if not queue.has(k):
+					if files.has(k) and not pending.has(k) and not ready_scenes.has(k):
+						pending[k] = files[k]
+						ResourceLoader.load_threaded_request(files[k], "PackedScene", true)
+					queue.append(k)
+				continue
 		var ps: PackedScene = null
 		if pending.has(k):
 			# already loading on a worker thread: wait for that load rather than starting a second one
@@ -383,6 +415,9 @@ func _unload(k: String) -> void:
 	coarse[k].visible = true
 
 func _process(d: float) -> void:
+	if not coarse_todo.is_empty():
+		var behind := LoadScreen._it != null and is_instance_valid(LoadScreen._it) and LoadScreen._it.visible
+		build_coarse(Game.player.global_position if Game.player else Vector3.ZERO, 24 if behind else 5)
 	# one chunk is built per frame, so streaming never costs more than one chunk's work in a frame
 	if not queue.is_empty():
 		var k: String = queue.pop_front()

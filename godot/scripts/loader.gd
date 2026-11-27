@@ -35,6 +35,29 @@ const TIPS := [
 	"Haven 12's service pistol takes 10mm. Don't let anyone sell you 9mm for it.",
 	"The radio changes with the valley: what you do gets talked about.",
 	"Sneak attacks on something that hasn't seen you do double damage, triple with a blade.",
+	"A fall of more than four metres hurts. Twelve can nearly kill you. Take the stairs.",
+	"Hold your breath with FOCUS to steady a scoped shot.",
+	"Raiders in scrap-plate vests shrug off light rounds. Bring armour-piercing, or aim for the head.",
+	"Stimpaks heal over a few seconds, not at once. Use one before the fight goes bad, not after.",
+	"Radiation builds up slowly and leaves slowly. RadAway clears it; rad tea only slows it down.",
+	"Companions carry what you give them. Ask them to hand it back when you need it.",
+	"Shops buy back at a loss. Haggle by being liked: a good word in town lowers their prices.",
+	"Workbenches strip guns for parts. One broken rifle can keep three others running.",
+	"A gun's condition matters: worn guns jam and miss. Repair kits fix them on the road.",
+	"Fire spreads to dry grass. A campfire in the wrong place is a weapon.",
+	"Explosive barrels have a short fuse once lit. Count to three and be somewhere else.",
+	"Night is darker out here than you're used to. Carry a lamp, or travel by day.",
+	"Ghouls are slow until they see you. Then they aren't.",
+	"Doors marked with red text are someone's property. Picking them is still a crime if you're seen.",
+	"The compass marks your quest in orange. Distances are shown under it as you get close.",
+	"You can sit on chairs and benches: walk up and USE them. It passes the time.",
+	"Sleeping in a bed you own restores you fully and saves the game.",
+	"Water from a dirty puddle quenches thirst and gives you rads. Boil it at a campfire first.",
+	"Hostiles hear gunfire from a long way off. A knife in the dark keeps a camp asleep.",
+	"Tyres, cones and crates can be knocked about. Some hide things underneath.",
+	"Settlers remember who helped them. So do raiders.",
+	"The DEV menu (top right) can teleport you, spawn things and run story beats for testing.",
+	"If you get lost, open the PIP map: it shows every place you've found and where you are.",
 ]
 
 var root: Control
@@ -47,7 +70,8 @@ var tip: Label
 var status: Label
 var bar: Bar
 var skip_l: Label
-var card: Label          # build 21: the cards before the title (engine, headphones)
+var card: Label          # build 21: the cards before the title (engine, headphones); build 24: unused
+var studio: Studio       # build 24: the WhitCo Productions card that opens the intro
 var card_sub: Label
 var stages: Label
 var tip_i := 0
@@ -76,6 +100,7 @@ func _build() -> void:
 	var sh := Shader.new()
 	sh.code = """shader_type canvas_item;
 uniform float t = 0.0;
+uniform float dim = 0.0;
 float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
 	return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
@@ -93,7 +118,7 @@ void fragment(){
 	sky = mix(sky, vec3(0.02, 0.015, 0.01), smoothstep(ridge, ridge + 0.004, uv.y));
 	float scan = 0.94 + 0.06 * sin(FRAGCOORD.y * 1.4);
 	float vig = smoothstep(1.05, 0.35, length(uv - 0.5) * 1.3);
-	COLOR = vec4(sky * scan * vig, 1.0);
+	COLOR = vec4(sky * scan * vig * (1.0 - dim), 1.0);
 }"""
 	var m := ShaderMaterial.new()
 	m.shader = sh
@@ -126,7 +151,7 @@ void fragment(){
 	tip = _label("", 19, Color(0.8, 0.74, 0.62))
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD
 	status = _label("", 17, Color(1.0, 0.76, 0.36))
-	skip_l = _label("tap to skip", 15, Color(0.7, 0.62, 0.5))
+	skip_l = _label("best with headphones on", 15, Color(0.7, 0.62, 0.5))
 	card = _label("", 46, Color(0.95, 0.9, 0.8))
 	card.add_theme_constant_override("outline_size", 6)
 	card.add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.01))
@@ -134,7 +159,11 @@ void fragment(){
 	stages = _label("", 14, Color(0.75, 0.68, 0.55))
 	bar = Bar.new()
 	root.add_child(bar)
-	root.gui_input.connect(_tap)
+	studio = Studio.new()
+	studio.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	studio.set_anchors_preset(Control.PRESET_FULL_RECT)
+	studio.visible = false
+	root.add_child(studio)
 	root.resized.connect(_layout)
 	visible = false
 	_layout()
@@ -190,9 +219,17 @@ func play_intro(skip: Callable) -> void:
 	sub.modulate.a = 0.0
 	emblem.modulate.a = 0.0
 	skip_l.visible = true
-	card.visible = true
-	card_sub.visible = true
-	Sfx.play("geiger", -12.0, 0.8)
+	skip_l.modulate.a = 0.0
+	card.visible = false
+	card_sub.visible = false
+	studio.visible = true
+	studio.t = 0.0
+	bar.modulate.a = 0.0
+	status.modulate.a = 0.0
+	tip.modulate.a = 0.0
+	stages.modulate.a = 0.0
+	(bg.material as ShaderMaterial).set_shader_parameter("dim", 1.0)
+	Sfx.play("geiger", -14.0, 0.8)
 
 # a load: a save, a door to another area, a long trip. Returns false (and shows nothing) under the test hooks.
 func begin(text: String) -> bool:
@@ -200,6 +237,12 @@ func begin(text: String) -> bool:
 		return false
 	intro = false
 	skip_l.visible = false
+	studio.visible = false
+	ash.modulate.a = 1.0
+	bar.modulate.a = 1.0
+	status.modulate.a = 1.0
+	stages.modulate.a = 1.0
+	(bg.material as ShaderMaterial).set_shader_parameter("dim", 0.0)
 	_show(text)
 	title.modulate.a = 1.0
 	sub.modulate.a = 1.0
@@ -239,11 +282,6 @@ func building() -> void:
 	bar.value = shown_p
 	bar.queue_redraw()
 
-func _tap(ev: InputEvent) -> void:
-	var down: bool = (ev is InputEventMouseButton and ev.pressed) or (ev is InputEventScreenTouch and ev.pressed)
-	if down and intro and on_skip.is_valid():
-		on_skip.call()
-
 func _process(d: float) -> void:
 	if not visible:
 		return
@@ -269,19 +307,20 @@ func _process(d: float) -> void:
 		line += ("●  " if shown_p >= float(at[i]) else "○  ") + String(names[i]) + ("        " if i < names.size() - 1 else "")
 	stages.text = line
 	if intro:
-		# first the cards (the engine, then headphones), each faded in and out, then the emblem and the title
-		var c0 := clampf(minf(t / 0.6, (2.2 - t) / 0.5), 0.0, 1.0)
-		var c1 := clampf(minf((t - 2.3) / 0.6, (CARD_T - t) / 0.5), 0.0, 1.0)
-		if t < 2.25:
-			card_sub.text = "P O W E R E D   B Y"
-			card.text = "GODOT ENGINE"
-			card.modulate.a = c0
-			card_sub.modulate.a = c0
-		else:
-			card_sub.text = "B E S T   W I T H"
-			card.text = "HEADPHONES ON"
-			card.modulate.a = c1
-			card_sub.modulate.a = c1
+		# build 24: WhitCo Productions first (its name kindles letter by letter, an ember line runs out under it,
+		# and it burns away upward into the ash), the sky coming up out of the dark behind it as it goes; then the
+		# emblem and the title rise over the valley, and the bar and the tips last
+		studio.t = t
+		studio.queue_redraw()
+		(bg.material as ShaderMaterial).set_shader_parameter("dim", clampf(1.0 - (t - CARD_T + 1.0) / 1.6, 0.0, 1.0))
+		ash.modulate.a = clampf(0.35 + (t - 3.2) * 0.6, 0.35, 1.0)
+		var ui := clampf((t - CARD_T - 2.2) / 1.0, 0.0, 1.0)
+		bar.modulate.a = ui
+		status.modulate.a = ui
+		stages.modulate.a = ui
+		skip_l.modulate.a = clampf((t - CARD_T - 1.0) / 1.0, 0.0, 0.8)
+		if tip_t <= 7.0:
+			tip.modulate.a = minf(tip.modulate.a, ui)
 		var ti := t - CARD_T
 		emblem.modulate.a = clampf(ti / 1.2, 0.0, 1.0)
 		title.modulate.a = clampf((ti - 0.8) / 1.0, 0.0, 1.0)
@@ -294,7 +333,7 @@ func _process(d: float) -> void:
 		var ch = Game.main.get("chunks")
 		var left := 0
 		if ch:
-			left = (ch.queue as Array).size() + (ch.pending as Dictionary).size()
+			left = (ch.queue as Array).size() + (ch.pending as Dictionary).size() + int((ch.coarse_todo as Array).size() / 12)
 		chunk_total = maxi(chunk_total, left)
 		var f := 1.0 if chunk_total == 0 else 1.0 - float(left) / float(chunk_total)
 		progress(0.7 + 0.3 * f, "Streaming the valley in" if left > 0 else "Ready")
@@ -319,6 +358,75 @@ func finish() -> void:
 	fading = true
 	card.visible = false
 	card_sub.visible = false
+	studio.visible = false
+
+# WhitCo Productions (build 24): the studio's name in wide-set capitals, each letter catching like an ember (white
+# hot, then cooling to bone), an ember line drawn out from the middle beneath it, PRODUCTIONS fading up, and then
+# the whole card burning away from the bottom up, its letters lifting and reddening into the ash
+class Studio extends Control:
+	var t := 0.0
+	const WORD := "WHITCO"
+	func _draw() -> void:
+		var s := size if size.x > 10 else Vector2(1280, 720)
+		var font := ThemeDB.fallback_font
+		var fs := int(clampf(s.y * 0.15, 48.0, 130.0))
+		var gap := float(fs) * 0.32
+		var widths: Array = []
+		var total := 0.0
+		for ch in WORD:
+			var wch := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			widths.append(wch)
+			total += wch
+		total += gap * (WORD.length() - 1)
+		var cy := s.y * 0.47
+		var x := (s.x - total) * 0.5
+		var burn := clampf((t - 3.4) / 1.1, 0.0, 1.0)
+		for i in WORD.length():
+			var t0 := 0.35 + i * 0.13
+			var k := clampf((t - t0) / 0.55, 0.0, 1.0)
+			if k <= 0.0:
+				x += float(widths[i]) + gap
+				continue
+			# hot when it catches, cooling as it settles
+			var heat := 1.0 - smoothstep(0.0, 1.0, (t - t0) / 1.4)
+			var col := Color(0.93, 0.87, 0.77).lerp(Color(1.0, 0.62, 0.22), heat)
+			# burning away: each letter goes in its own moment, lifting and reddening
+			var bi := clampf(burn * 1.6 - (WORD.length() - 1 - i) * 0.1, 0.0, 1.0)
+			col = col.lerp(Color(0.85, 0.25, 0.08), bi)
+			var a := k * (1.0 - bi)
+			var lift := (1.0 - k) * 14.0 + bi * bi * 40.0
+			var pos := Vector2(x, cy - lift)
+			# a soft glow under each letter (drawn a few times round itself)
+			for g in 6:
+				var o := Vector2.from_angle(g * TAU / 6.0) * (3.0 + heat * 4.0)
+				draw_string(font, pos + o, WORD[i], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.5, 0.15, a * (0.07 + heat * 0.12)))
+			draw_string(font, pos, WORD[i], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(col, a))
+			x += float(widths[i]) + gap
+		# the ember line, drawn out from the middle, its two heads bright
+		var lk := clampf((t - 1.25) / 0.8, 0.0, 1.0)
+		if lk > 0.0:
+			var half := total * 0.5 * smoothstep(0.0, 1.0, lk)
+			var ly := cy + float(fs) * 0.28
+			var la := 1.0 - burn
+			draw_line(Vector2(s.x * 0.5 - half, ly), Vector2(s.x * 0.5 + half, ly), Color(1.0, 0.62, 0.24, 0.85 * la), 2.0)
+			draw_line(Vector2(s.x * 0.5 - half, ly), Vector2(s.x * 0.5 + half, ly), Color(1.0, 0.55, 0.18, 0.2 * la), 7.0)
+			for sx in [-1.0, 1.0]:
+				var hp := Vector2(s.x * 0.5 + sx * half, ly)
+				draw_circle(hp, 3.5 + 2.0 * sin(t * 30.0), Color(1.0, 0.85, 0.55, la * (1.0 - lk * 0.6)))
+		# PRODUCTIONS beneath
+		var pk := clampf((t - 1.8) / 0.8, 0.0, 1.0) * (1.0 - burn)
+		if pk > 0.0:
+			var sub := "P  R  O  D  U  C  T  I  O  N  S"
+			var sfs := int(fs * 0.22)
+			var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs).x
+			draw_string(font, Vector2((s.x - sw) * 0.5, cy + float(fs) * 0.28 + sfs * 2.2), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sfs, Color(1.0, 0.76, 0.36, pk))
+		# "presents", last and quietest
+		var qk := clampf((t - 2.5) / 0.7, 0.0, 1.0) * (1.0 - burn)
+		if qk > 0.0:
+			var pr := "p r e s e n t s"
+			var pfs := int(fs * 0.17)
+			var pw := font.get_string_size(pr, HORIZONTAL_ALIGNMENT_LEFT, -1, pfs).x
+			draw_string(font, Vector2((s.x - pw) * 0.5, s.y * 0.8), pr, HORIZONTAL_ALIGNMENT_LEFT, -1, pfs, Color(0.85, 0.8, 0.7, qk * 0.8))
 
 # a slow-turning trefoil over the sun
 class Emblem extends Control:

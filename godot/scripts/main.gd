@@ -147,7 +147,7 @@ func _ready() -> void:
 	hud = preload("res://scripts/hud.gd").new()
 	add_child(hud)
 	set_quality(Quality.load_level())
-	chunks.load_now(start_pos)
+	chunks.load_now(start_pos, true)
 	if Game.area != "khole":
 		_restore_party()
 	atmos = Atmos.new()
@@ -3862,6 +3862,12 @@ func _propscan() -> void:
 			mis.append([mi, sb])
 		await get_tree().physics_frame
 		await get_tree().physics_frame
+		# roads, pads and ground cover lie under everything: touching them isn't being held by them
+		var flats: Array = []
+		for e in mis:
+			var fab: AABB = (e[0] as MeshInstance3D).global_transform * (e[0] as MeshInstance3D).get_aabb()
+			if fab.size.y < 1.0 and fab.size.x * fab.size.z > 20.0:
+				flats.append((e[1] as StaticBody3D).get_rid())
 		for e in mis:
 			var mi: MeshInstance3D = e[0]
 			if not String(mi.name).begins_with("s_"):
@@ -3887,7 +3893,9 @@ func _propscan() -> void:
 			q.shape = bs
 			q.transform = Transform3D(Basis(), ab.get_center())
 			q.collision_mask = 1 << 19
-			q.exclude = [(e[1] as StaticBody3D).get_rid()]
+			q.exclude = flats + [(e[1] as StaticBody3D).get_rid()]
+			if ab.size.y < 0.05 or minf(ab.size.x, ab.size.z) < 0.03:
+				continue
 			var held := false
 			for h in space.intersect_shape(q, 4):
 				held = true
