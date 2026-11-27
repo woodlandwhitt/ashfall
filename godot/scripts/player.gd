@@ -270,6 +270,12 @@ func _physics_process(d: float) -> void:
 	var was_air := not is_on_floor()
 	var fall_v := -velocity.y
 	move_and_slide()
+	# walking into a loose tyre or cone shoves it along (build 24)
+	for i in get_slide_collision_count():
+		var sc := get_slide_collision(i)
+		var hv := Vector3(velocity.x, 0, velocity.z)
+		if hv.length() > 0.5:
+			Havoc.bump(sc.get_collider(), hv.normalized() * minf(hv.length(), 6.0) * 0.4)
 	if was_air and is_on_floor():
 		_landed(fall_v)
 	_step_up(want)
@@ -578,6 +584,8 @@ func _ray(dmg: float, rng: float, spread: float, energy: bool) -> void:
 					Sfx.play("k_click", -10.0, 1.6)
 		else:
 			Game.main.impact(hit.position, hit.normal, GunFX.surface(hit))
+			# a loose tyre, cone or can takes the shot and goes (build 24)
+			Havoc.shot(c, hit.position, dir, clampf(dmg / 14.0, 0.5, 3.0))
 		if round_kind == "ex" and burst_ok:
 			_ex_burst(hit.position, dmg * 0.35, c)
 

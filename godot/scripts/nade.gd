@@ -350,6 +350,7 @@ func _explode() -> void:
 # other drums, and makes the whole neighbourhood look
 static func blast(at: Vector3, r: float, dmg: float, col: Color, by_enemy: bool) -> void:
 	_flash_at(at, col, r)
+	Havoc.blast(at, r, clampf(dmg / 60.0, 0.6, 2.5))
 	Sfx.play_at("x_boom1" if randf() < 0.5 else "x_boom3", at, 8.0, randf_range(0.85, 1.0))
 	Sfx.play_at("x_rock1", at, 4.0, 0.55)
 	for e in Game.main.enemies.duplicate():

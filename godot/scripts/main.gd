@@ -153,6 +153,11 @@ func _ready() -> void:
 	atmos = Atmos.new()
 	add_child(atmos)
 	atmos.setup(self)
+	if Game.area == "world":
+		var hv := Havoc.new()
+		hv.name = "Havoc"
+		add_child(hv)
+		hv.setup(self)
 	if not Game.interior():
 		buggy = Buggy.new()
 		add_child(buggy)

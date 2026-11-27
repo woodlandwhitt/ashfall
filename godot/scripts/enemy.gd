@@ -933,5 +933,6 @@ func _attack(dist: float, moving := 0.0) -> void:
 		var mh := get_world_3d().direct_space_state.intersect_ray(q)
 		if mh:
 			GunFX.impact(Game.main, mh.position, mh.normal, GunFX.surface(mh))
+			Havoc.shot(mh.collider, mh.position, to - from, 0.8)
 	if hit_it:
 		_deal(dmg * randf_range(0.7, 1.1))
