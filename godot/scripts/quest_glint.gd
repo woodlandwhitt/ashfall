@@ -4,7 +4,7 @@ extends Node3D
 # tent — shows a slow pale glint where it is while the quest wants it and you're within 35 m, and a ring of light on
 # the ground under it when you're close, so a thing you need is never only a word on the screen.
 
-const RANGE := 35.0
+const RANGE := 50.0
 const MAX := 6
 var pool: Array = []      # [sprite, ring]
 var t := 0.0

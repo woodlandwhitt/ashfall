@@ -330,8 +330,33 @@ Keep every existing quest and line, then deepen them:
    lamps do the work; rain stays outside; the town's rooms have less flat fill and their lamps cast shadows in the
    room you're in; Haven 12 a little dimmer; outdoors a little more sun and less fill. `--b23test`, `--fireat=N`,
    `--tonemap=filmic|agx|aces`.
-22. **godot-24:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
+22. **godot-24:** *Status: shipped as a patch (to build 15) and as its own base.* **Updates:** every build is now a
+   base of its own (its APK says so and its whole pack, base-N.pck, stays on its release); each release carries
+   patches for the last three bases before it, plus build 15's (the base of every APK from 15 to 23). Build 13's
+   patch is gone: no APK still made from it needs one. **Starfall remade:** a smooth solid saucer half buried in its
+   furrow, the breach on the north side, a cracked dome over a furnished cockpit, the pod split open in its own
+   scorch, crystals, a probe, the dead crew, the Visitor and the Wreck Sentinel as greys; nothing loose floats, and
+   you can't walk into the cockpit through its hull. **Quest spots glint** (`QuestGlint`): anything a quest wants
+   searched shows a slow pale glint within 50 m and a ring of light on the ground close by, while the quest wants
+   it. **Floating things:** wrecks are laid on the slope with all four wheels down; seats, benches, tables, crates
+   and the like come down to the lowest ground under them; eleven of the old map's props that hung in the air are
+   lowered (`--propscan`, data/settle.json); the fire lookout's cab has a ceiling, its aerial on the roof's peak and
+   its bell on a bracket. **Dead trees regrown** (`DeadTree`, data/deadtrees.json from tools/trees/scan.gd): the 910
+   old dead trees, whose limbs were flat boards stood off the trunk, are grown again where they stood and as tall:
+   a tapering crooked trunk, six to nine limbs from inside it, forks, the old mossy bark wrapped round. **Arms:**
+   rifles held with the elbows down and the shoulders out of view; the sledge's left hand grips the haft. **Havoc**
+   (`Havoc`): tyres, traffic cones, buckets, cans, crates and fuel cans lie round the settlements and road stops
+   (no cones out in the wilds), real rigid bodies that a bullet sends skidding, a blast throws and you kick aside.
+   **People:** clothes fitted (no borrowed sleeves or foreign armour, hats seated), grime on clothes, raiders in gas
+   masks, bandanas, goggles, tyre and scrap pauldrons, bandoliers and scrap-plate vests; faces with eye colour,
+   brows, scars, glasses. **Hit glow:** a broad soft glow towards the screen edge on the side a hit came from (no
+   more thin red slivers round the sights), none in god mode. **Intro and loading:** no engine card and no tap to
+   skip; WhitCo Productions first (the name kindling letter by letter, burning away into the ash) with the sky
+   rising behind it into the title; the boot splash is the dark the intro starts from; 38 tips; the far ground is
+   built a few chunks a frame behind the loading screen (no more eight-second freeze) and the bar follows it.
+   `--b24test`, `--quest=id`, `--at=x,z,yaw,pitch,height`.
+23. **godot-25:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
    Overseer's secret, the other vaults), real road meshes and terrain variety (washes, rock shelves, erosion), better
    ground and building textures, more GitHub character models for townspeople, interiors (the Spire's upper floors,
    the silo shaft), companions from the north, a Forge tidy-up (brick and more materials), a closer pass on the
-   first-person pistol hands (the support arm crosses wide on the bigger pistols), and the WebView build retired.
+   first-person pistol hands, and the WebView build retired.

@@ -1187,6 +1187,8 @@ func _test_hooks() -> void:
 		await _b22_test()
 	if args.has("b23test"):
 		await _b23_test()
+	if args.has("b24test"):
+		await _b24_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -2522,6 +2524,139 @@ func _float_audit() -> void:
 	get_tree().quit()
 
 # build 22: falls hurt, fires sit in pits, sharpshooters keep their distance and shoulder their rifles
+# build 24: wrecks and loose things on the ground, the dead trees regrown, the quest glints, the loose junk you can
+# knock about, the hit glow, the intro and the update packs
+func _b24_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	await _wait(10)
+	out.append("update: this build is its own base %s (build %s); the updater asks for %s" % [str(int(get_node("/root/Patcher").base_build) == int(get_node("/root/Patcher").build)), str(get_node("/root/Patcher").build), "patch-b%d.pck" % int(get_node("/root/Patcher").base_build)])
+	# Cinder Gap: the truck on its slope, the seats and benches down on the ground
+	await _tp(850.0, -60.0)
+	await _wait(10)
+	# whatever opened over the game on the way (a level-up page) is shut, so the world runs
+	if hud.screens.is_open():
+		out.append("(closed the %s screen that opened over the game)" % hud.screens.mode)
+		hud.screens.close()
+	get_tree().paused = false
+	Game.paused = false
+	await get_tree().create_timer(2.5).timeout
+	await _wait(10)
+	var worst_car := 0.0
+	var worst_small := 0.0
+	var n_car := 0
+	var n_small := 0
+	for c in frontier.get_children():
+		if not (c is Node3D):
+			continue
+		var cp := (c as Node3D).global_position
+		if Vector2(cp.x - 850.0, cp.z + 60.0).length() > 90.0:
+			continue
+		var box := AABB()
+		var first := true
+		for mi in c.find_children("*", "MeshInstance3D", true, false):
+			var g := mi as MeshInstance3D
+			if g.mesh == null or not g.is_visible_in_tree():
+				continue
+			var b := g.global_transform * g.get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		if first or box.size.x > 8.0 or box.size.z > 8.0 or box.size.y > 4.0:
+			continue
+		var lo := INF
+		for fx in [0.2, 0.5, 0.8]:
+			for fz in [0.2, 0.5, 0.8]:
+				lo = minf(lo, Game.height(box.position.x + box.size.x * fx, box.position.z + box.size.z * fz))
+		var gap := box.position.y - lo
+		if maxf(box.size.x, box.size.z) > 3.0:
+			n_car += 1
+			worst_car = maxf(worst_car, gap)
+		else:
+			n_small += 1
+			worst_small = maxf(worst_small, gap)
+	out.append("Cinder Gap: %d wrecks, the most daylight under one %.2f m (on the ground: %s); %d smaller things, the worst %.2f m (%s)" % [n_car, worst_car, str(worst_car < 0.2), n_small, worst_small, str(worst_small < 0.12)])
+	# loose junk to knock about: there, asleep till touched, and a bullet sends one off
+	var bodies: Array = []
+	if Havoc.inst:
+		for k in Havoc.inst.live:
+			for b in Havoc.inst.live[k]:
+				if is_instance_valid(b):
+					bodies.append(b)
+	var moved := false
+	if hud.screens.is_open():
+		out.append("(closed the %s screen that opened over the game)" % hud.screens.mode)
+		hud.screens.close()
+	get_tree().paused = false
+	Game.paused = false
+	if not bodies.is_empty():
+		# the lightest thing lying about (a can, a cone), shot from the player's side
+		bodies.sort_custom(func(x, y): return (x as RigidBody3D).mass < (y as RigidBody3D).mass)
+		var b: RigidBody3D = bodies[0]
+		var p0 := b.global_position
+		var sd: Vector3 = b.global_position - player.global_position
+		sd.y = 0.0
+		Havoc.shot(b, b.global_position + Vector3.UP * 0.1, sd.normalized(), 1.0)
+		await _wait(30)
+		moved = b.global_position.distance_to(p0) > 0.05 or b.linear_velocity.length() > 0.05
+		out.append("(a %s shot: thrown %.2f m)" % [String(b.get_meta("kind", "?")), b.global_position.distance_to(p0)])
+	out.append("loose junk round Cinder Gap: %d pieces; one shot shoves it %s" % [bodies.size(), str(moved)])
+	# the dead trees on the hill above Haven's door: grown new, the old board-limbed ones hidden
+	await _tp(-30.0, 140.0)
+	await _wait(40)
+	var mm := 0
+	var trees := 0
+	for n in chunks.find_children("DeadTrees*", "MultiMeshInstance3D", true, false):
+		mm += 1
+		trees += (n as MultiMeshInstance3D).multimesh.instance_count
+	var old_shown := 0
+	for k in chunks.loaded:
+		var fname := String(chunks.files.get(k, "")).get_file().get_basename()
+		var e: Dictionary = DeadTree.data().get(fname, {})
+		for path in e.get("meshes", []):
+			for c in (chunks.loaded[k] as Node).get_children():
+				var mn := c.get_node_or_null(NodePath(String(path)))
+				if mn is MeshInstance3D and (mn as MeshInstance3D).visible:
+					old_shown += 1
+	out.append("dead trees round Haven's door: %d grown in %d batches; old board-limbed ones still showing %d" % [trees, mm, old_shown])
+	# Starfall: with the quest on, the places to search glint, and each can be searched
+	Game.start("lights_over_ridge")
+	await _tp(684.0, -398.0)
+	if hud.screens.is_open():
+		hud.screens.close()
+	get_tree().paused = false
+	Game.paused = false
+	await _wait(40)
+	var gl: QuestGlint = null
+	for c in get_children():
+		if c is QuestGlint:
+			gl = c
+	var lit := 0
+	if gl:
+		for e in gl.pool:
+			if (e[0] as MeshInstance3D).visible:
+				lit += 1
+	var want: Array = []
+	for k in objects.grid:
+		for o in objects.grid[k]:
+			if String(o.get("id", "")).begins_with("ufo_"):
+				want.append("%s %s %.0f m" % [String(o.id), "wanted" if QuestGlint.wanted(o) else "not wanted", Vector2(float(o.x) - player.global_position.x, float(o.z) - player.global_position.z).length()])
+	out.append("Starfall with Lights over the Ridge on: %d places glinting (%s) " % [lit, ", ".join(want)])
+	# the hit glow: none in god mode
+	Game.dev["god"] = true
+	hud.dmgdir.hits.clear()
+	hud.hurt_from(player.global_position + Vector3(5, 0, 0))
+	var god_glow: int = hud.dmgdir.hits.size()
+	Game.dev["god"] = false
+	hud.hurt_from(player.global_position + Vector3(5, 0, 0))
+	out.append("hit glow in god mode %d, out of it %d" % [god_glow, hud.dmgdir.hits.size()])
+	# the intro: no engine card, no tap to skip, the tips
+	var ls := LoadScreen.it()
+	out.append("intro: %d tips; bottom line reads '%s'" % [LoadScreen.TIPS.size(), ls.skip_l.text if ls and ls.skip_l else "-"])
+	for l in out:
+		print("B24TEST ", l)
+	get_tree().quit()
+
 # build 23: gunfire (flash, brass, impacts), the view's width, the shacks' furniture and lamps, indoor light
 func _b23_test() -> void:
 	var out: Array = []

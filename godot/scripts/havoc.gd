@@ -286,7 +286,9 @@ static func shot(c: Object, at: Vector3, dir: Vector3, force := 1.0) -> bool:
 		return false
 	var b := c as RigidBody3D
 	b.sleeping = false
-	b.apply_impulse(dir.normalized() * 3.2 * force + Vector3.UP * 0.9 * force, at - b.global_position)
+	# enough to see: a can leaps away, a cone goes over and skids, a tyre lurches and rolls
+	var j := (2.5 + b.mass * 0.55) * force
+	b.apply_impulse(dir.normalized() * j + Vector3.UP * j * 0.35, at - b.global_position)
 	return true
 
 # a blast: everything in reach thrown outward and up, harder the closer it was
