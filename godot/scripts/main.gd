@@ -2583,6 +2583,22 @@ func _b24_test() -> void:
 			for b in Havoc.inst.live[k]:
 				if is_instance_valid(b):
 					bodies.append(b)
+	# all of it lying on something: the lowest point of each piece against the ground (or whatever is under it)
+	var hang := 0.0
+	var hung := ""
+	for b in bodies:
+		var bb := AABB()
+		var f0 := true
+		for mi in (b as Node).find_children("*", "MeshInstance3D", true, false):
+			var ab: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+			bb = ab if f0 else bb.merge(ab)
+			f0 = false
+		var down := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(bb.get_center(), bb.get_center() + Vector3.DOWN * 4.0, 1, [(b as RigidBody3D).get_rid()]))
+		var under: float = float(down.position.y) if not down.is_empty() else Game.height(bb.get_center().x, bb.get_center().z)
+		if bb.position.y - under > hang:
+			hang = bb.position.y - under
+			hung = String((b as Node).get_meta("kind", "?"))
+	out.append("loose junk settled: the most air under any piece %.2f m (%s)" % [hang, hung])
 	var moved := false
 	if hud.screens.is_open():
 		out.append("(closed the %s screen that opened over the game)" % hud.screens.mode)

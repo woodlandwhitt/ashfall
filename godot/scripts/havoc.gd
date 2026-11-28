@@ -85,11 +85,13 @@ func _scatter(site: String, s: Array) -> Array:
 					at.y += 0.24 * i                      # stacked flat
 				elif n == 1 and rng.randf() < 0.45:
 					rot = Vector3(0, yaw, PI * 0.5)       # standing on its tread
-					at.y += 0.12
 			var b := make(kind, rng)
 			add_child(b)
 			b.global_position = at + Vector3(0, _lift(kind, rot), 0)
 			b.rotation = rot
+			# let it settle onto the ground as it really lies (a slope, a stone under it), then it sleeps by itself
+			# (build 24: a tyre stood on its tread was set down 12 cm up and slept there, hanging in the air)
+			b.sleeping = false
 			out.append(b)
 	return out
 
