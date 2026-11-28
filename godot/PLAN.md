@@ -333,7 +333,8 @@ Keep every existing quest and line, then deepen them:
 22. **godot-24:** *Status: shipped as a patch (to build 15) and as its own base.* **Updates:** every build is now a
    base of its own (its APK says so and its whole pack, base-N.pck, stays on its release); each release carries
    patches for the last three bases before it, plus build 15's (the base of every APK from 15 to 23). Build 13's
-   patch is gone: no APK still made from it needs one. **Starfall remade:** a smooth solid saucer half buried in its
+   patch goes from build 25 (build 24's own release still carried one: the roll reached back past the builds that
+   kept no base pack; it now starts at 24, ROLL_FROM in the workflow). **Starfall remade:** a smooth solid saucer half buried in its
    furrow, the breach on the north side, a cracked dome over a furnished cockpit, the pod split open in its own
    scorch, crystals, a probe, the dead crew, the Visitor and the Wreck Sentinel as greys; nothing loose floats, and
    you can't walk into the cockpit through its hull. **Quest spots glint** (`QuestGlint`): anything a quest wants

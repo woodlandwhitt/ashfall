@@ -36,12 +36,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ROLL: 3
+          ROLL_FROM: 24
         run: |
           N=$(( ${{ github.run_number }} - BUILD_SKIP ))
           echo "{\"build\": $N, \"base\": $N}" > godot/data/build.json
           BASES=""
           for t in $(gh release list --repo "${{ github.repository }}" --limit 30 --json tagName --jq '.[].tagName' | grep '^godot-' | sed 's/godot-//' | sort -rn); do
             [ "$t" -ge "$N" ] && continue
+            # only builds from the rolling era (24 on) roll; older bases come only from patch_base.txt
+            [ "$t" -lt "$ROLL_FROM" ] && break
             if gh release view "godot-$t" --repo "${{ github.repository }}" --json assets --jq '.assets[].name' | grep -qx "base-$t.pck"; then
               BASES="$BASES $t"
               [ $(echo $BASES | wc -w) -ge $ROLL ] && break
