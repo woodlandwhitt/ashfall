@@ -338,7 +338,7 @@ static func cap_res(id: String) -> int:
 	return 2 if has_up(id, "bunks") else 0
 
 static func bunk_spot(id: String, i: int) -> Vector3:
-	return world(id, Vector3(-HW + 1.35, FL, 0.6 + i * 1.0))
+	return world(id, Vector3(-HW + 1.75, FL, 0.35 + i * 1.1))
 
 static func move_in(id: String, comp: String) -> bool:
 	if not owns(id) or cap_res(id) <= H(id).get("res", []).size():

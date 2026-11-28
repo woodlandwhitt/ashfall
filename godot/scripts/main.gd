@@ -1498,6 +1498,10 @@ func _test_hooks() -> void:
 				Homes.buy_up(hv[0], k)
 			for s in Homes.FURN_ORDER:
 				Homes.furnish(hv[0], s, mini(1, Homes.FURNISH[s].opts.size() - 1) if s != "light" else 2)
+		if hv.size() > 2:
+			# a third part: that companion lives there (--home=cinder:full:jory)
+			recruit(hv[2], true)
+			Homes.move_in(hv[0], hv[2])
 		Game.caps -= 99999
 		Game.caps = maxi(Game.caps, 25)
 	if args.has("homescreen"):
