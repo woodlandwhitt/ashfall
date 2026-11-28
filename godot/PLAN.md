@@ -356,8 +356,32 @@ Keep every existing quest and line, then deepen them:
    rising behind it into the title; the boot splash is the dark the intro starts from; 38 tips; the far ground is
    built a few chunks a frame behind the loading screen (no more eight-second freeze) and the bar follows it.
    `--b24test`, `--quest=id`, `--at=x,z,yaw,pitch,height`.
-23. **godot-25:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
+23. **godot-25:** *Status: shipped as patches (to builds 24 and 15).* **Houses for sale** (`scripts/homes.gd`, `Homes`;
+   story layer `story25.mjs`). The Tinsmith's Shack at the east end of Cinder Gap (Mags Tinley sells it), Row House
+   Nine on Lantern Row (Orla Penn) and the Lockwood Place by the water at Stillwater (Deacon Hale), each an 8 by 7 m
+   shack with a FOR SALE board by its door. **Their quests:** Squatters' Rights (scuttlers nested under the shack's
+   floor: a quarter off), A Roof Over Your Head (look at the roof, bring Orla six scrap and two rolls of tape: 30%
+   off), The Lockwood Deed (the deed is in a lockbox under the boathouse floor: the house for its filing fee), and
+   Housewarming once you own one (three pieces of furniture, a companion living with you, a night in your own bed).
+   **Prices:** the town's standing (hated: no sale; disliked +20%; liked -10%, respected -20%, idolised -30%), the
+   house's quest, karma, Charisma, and a Charisma 6 haggle (-10%); the town's standing takes up to 22% off upgrades
+   and furnishings too. **Upgrades:** a proper bed (you wake Well Rested: +10% XP for a while, +15% after
+   Housewarming), wall lockers (+250 lbs in the stash), a workbench, an armory (racks and a stand, a store for
+   weapons, armour and ammo with no weight limit), a water purifier (three bottles a day), a planter and grow lamp
+   (two pickings a day), companion bunks, a medicine cabinet (a night at home takes 40 rads off). **Furnishing:** a
+   rug, a table (and chairs), a chair, shelves, something on the wall, a light, a keepsake, from three to five choices
+   each, all from the house's ledger by the door (UPGRADES, FURNISH, WHO LIVES HERE). **Companions:** with the bunks
+   up to two live in a house; they stand by their bunk while you're away, come along when you ask, go back there when
+   you part, and bring home what they find (Jory food and medicine, Sable caps and parts, Renn ammunition, Biscuit
+   whatever he digs up). **The stash:** one stash for every house you own (150 lbs, 400 with lockers), filled by the
+   purifier, the planter and the residents while you're away (up to a week's worth). Sleeping at home: morning, full
+   health, the game saved. **Chests:** every chest and safe out in the world is blasted (`Scorch`): no gloss, charred
+   from the side a blast came from and from the bottom up, blistered paint, soot, ash on top, shrapnel pits; the old
+   chest model, whose texture never loaded (plain white and glossy), is now planks under iron straps with iron
+   handles and a brass lock. DEV world page: GIVE, FIT OUT and GO for each house. `--b25test`,
+   `--home=id[:full[:companion]]`, `--homescreen=id[:tab]`.
+24. **godot-26:** carried over: the main quest longer still (a fourth act between Meridian and the door: the
    Overseer's secret, the other vaults), real road meshes and terrain variety (washes, rock shelves, erosion), better
    ground and building textures, more GitHub character models for townspeople, interiors (the Spire's upper floors,
    the silo shaft), companions from the north, a Forge tidy-up (brick and more materials), a closer pass on the
-   first-person pistol hands, and the WebView build retired.
+   first-person pistol hands, a house in Dustwell, and the WebView build retired.
