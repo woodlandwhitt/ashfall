@@ -44,8 +44,14 @@ func _scatter(site: String, s: Array) -> Array:
 	var space := get_world_3d().direct_space_state
 	var r: float = minf(float(s[2]) * 0.8, 45.0)
 	var kinds := ["tyre", "tyre", "tyre", "cone", "cone", "cone", "bucket", "can", "can", "crate", "fuelcan", "tyre", "cone"]
+	# out in the wilds (a crash site, a tribe's camp, a lookout, a farm) there are no roadworks: no traffic cones,
+	# fewer tyres, and less of it all
+	var wild := site in ["starfall", "ashborn", "lookout", "holloway", "havens_door", "glass_camp"]
+	if wild:
+		kinds = ["can", "can", "bucket", "crate", "crate", "fuelcan", "tyre"]
+	var per := PER_SITE / 2 if wild else PER_SITE
 	var tries := 0
-	while out.size() < PER_SITE and tries < PER_SITE * 6:
+	while out.size() < per and tries < PER_SITE * 6:
 		tries += 1
 		var a := rng.randf() * TAU
 		var rr := sqrt(rng.randf()) * r

@@ -102,6 +102,8 @@ func _ready() -> void:
 	objects = WorldObjects.new()
 	add_child(objects)
 	objects.setup(self)
+	# the spots a quest wants searched glint (build 24)
+	add_child(QuestGlint.new())
 	events = RoadEvents.new()
 	add_child(events)
 	events.setup(self)
@@ -1113,6 +1115,9 @@ func _test_hooks() -> void:
 		player.global_position = Vector3(float(v[0]), Game.height(float(v[0]), float(v[1])) + 0.1, float(v[1]))
 		player.yaw = float(v[2]) if v.size() > 2 else 0.0
 		player.pitch = float(v[3]) if v.size() > 3 else 0.0
+		# a fifth number: that high above the ground (on a tower, a roof)
+		if v.size() > 4:
+			player.global_position.y += float(v[4])
 	if args.has("trade"):
 		await _wait(5)
 		Game.caps = 900
@@ -1439,6 +1444,10 @@ func _test_hooks() -> void:
 					col += " " + (str((m as StandardMaterial3D).albedo_color) if m is StandardMaterial3D else str(m))
 			print("VM ", gi.get_path(), " vis ", gi.is_visible_in_tree(), " at ", gi.global_position - player.cam.global_position, " ", col)
 		get_tree().quit()
+	if args.has("quest"):
+		# start a quest for a screenshot (--quest=lights_over_ridge)
+		for q in String(args.quest).split(","):
+			Game.start(q)
 	if args.has("tonemap"):
 		env.tonemap_mode = {"filmic": Environment.TONE_MAPPER_FILMIC, "aces": Environment.TONE_MAPPER_ACES, "agx": Environment.TONE_MAPPER_AGX}.get(String(args.tonemap), env.tonemap_mode)
 		if args.has("white"):

@@ -519,7 +519,63 @@ func build(d: Dictionary) -> Node3D:
 	return root
 
 # things added once the building stands in the world: its furniture, lights, signs, people's seats
+# Loose things down onto the ground (build 24: a truck stood on the high side of a slope with its far wheels in the
+# air, a rocking chair hovered over a hilltop): a vehicle (a kit piece longer than 2.5 m) is laid on the slope, its
+# wheels on the ground all round; anything smaller standing by itself comes down to the lowest ground under it.
+const SETTLE := ["seat", "bench", "table", "chest", "crates", "log_seat", "generator", "watertank", "scrap", "lamp",
+	"tripod", "post", "board", "pump", "strongbox", "rack", "cage", "kit", "sign", "antenna"]
+func _settle(n: Node3D, d: Dictionary) -> void:
+	var k := String(d.k)
+	if d.has("y") or not k in SETTLE:
+		return
+	if k == "kit" and float(d.get("len", 1.0)) > 2.5 and n.get_child_count() > 0:
+		var kn := n.get_child(0) as Node3D
+		var id := String(d.id)
+		var ab := Furniture.aabb(id)
+		var sc := float(d.get("len", 2.0)) / maxf(0.1, maxf(ab.size.x, ab.size.z))
+		var hx := ab.size.x * sc * 0.42
+		var hz := ab.size.z * sc * 0.42
+		var cx := ab.get_center().x * sc
+		var cz := ab.get_center().z * sc
+		var yaw := float(d.get("yaw", 0.0))
+		var wb := Basis(Vector3.UP, yaw + int(d.r) * PI * 0.5)
+		var o := n.global_position
+		var h := func(lx: float, lz: float) -> float:
+			var w: Vector3 = wb * Vector3(cx + lx, 0, cz + lz)
+			return Game.height(o.x + w.x, o.z + w.z)
+		var hxp: float = h.call(hx, 0.0)
+		var hxn: float = h.call(-hx, 0.0)
+		var hzp: float = h.call(0.0, hz)
+		var hzn: float = h.call(0.0, -hz)
+		var sx := clampf((hxp - hxn) / (2.0 * hx), -0.3, 0.3)
+		var sz := clampf((hzp - hzn) / (2.0 * hz), -0.3, 0.3)
+		var mid := (hxp + hxn + hzp + hzn) * 0.25
+		kn.basis = Basis(Vector3.UP, yaw) * Basis(Vector3(0, 0, 1), atan(sx)) * Basis(Vector3(1, 0, 0), -atan(sz))
+		# sunk a hand's breadth, the way a wreck's tyres sit in the dirt
+		n.global_position.y = mid - 0.06
+		return
+	# anything else: its lowest point onto the lowest ground under its footprint
+	var box := AABB()
+	var first := true
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var g := mi as MeshInstance3D
+		if g.mesh == null:
+			continue
+		var b := g.global_transform * g.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	if first or box.size.x > 7.0 or box.size.z > 7.0:
+		return
+	var lo := INF
+	for fx in [0.15, 0.5, 0.85]:
+		for fz in [0.15, 0.5, 0.85]:
+			lo = minf(lo, Game.height(box.position.x + box.size.x * fx, box.position.z + box.size.z * fz))
+	var gap := box.position.y - lo
+	if gap > 0.03:
+		n.global_position.y -= minf(gap - 0.01, 0.8)
+
 func _after(n: Node3D, d: Dictionary) -> void:
+	_settle(n, d)
 	var k := String(d.k)
 	if k == "campfire":
 		n.global_position.y = Game.height(n.global_position.x, n.global_position.z)

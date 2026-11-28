@@ -814,6 +814,9 @@ class HitMark extends Control:
 class DmgDir extends Control:
 	var hits: Array = []   # [world position, time left]
 	func add(src: Vector3) -> void:
+		# no hurt, no warning (god mode in DEV left thin red slivers round the sights with nothing taken: build 24)
+		if bool(Game.dev.get("god", false)):
+			return
 		hits.append([src, 1.3])
 		if hits.size() > 6:
 			hits.pop_front()
@@ -828,21 +831,31 @@ class DmgDir extends Control:
 		var cam := get_viewport().get_camera_3d()
 		if cam == null:
 			return
+		# build 24: a broad soft glow out towards the edge of the screen on the side the hit came from, fading at its
+		# ends and inwards, instead of a hard thin sliver round the sights that read as something stuck in the world
 		var c := size * 0.5
-		var r := minf(size.x, size.y) * 0.36
+		var rx := size.x * 0.44
+		var ry := size.y * 0.42
 		for h in hits:
 			var lp: Vector3 = cam.global_transform.affine_inverse() * (h[0] as Vector3)
 			var ang := atan2(lp.x, -lp.z)   # 0 ahead, + to the right
 			var a := ang - PI / 2.0
-			var col := Color(0.95, 0.1, 0.05, clampf(float(h[1]), 0.0, 1.0) * 0.8)
-			var pts := PackedVector2Array()
-			for k in 9:
-				var aa := a - 0.28 + 0.56 * k / 8.0
-				pts.append(c + Vector2(cos(aa), sin(aa)) * r)
-			for k in range(8, -1, -1):
-				var aa := a - 0.2 + 0.4 * k / 8.0
-				pts.append(c + Vector2(cos(aa), sin(aa)) * (r - 16.0))
-			draw_colored_polygon(pts, col)
+			var k0 := clampf(float(h[1]), 0.0, 1.0)
+			# one smooth band: strongest at its outer edge and its middle, gone at its inner edge and its ends
+			var n := 24
+			var ro := 1.04
+			var ri := 0.8
+			for s in n:
+				var f0 := float(s) / n
+				var f1 := float(s + 1) / n
+				var a0 := a - 0.45 + 0.9 * f0
+				var a1 := a - 0.45 + 0.9 * f1
+				var c0 := Color(0.85, 0.05, 0.03, k0 * 0.5 * sin(PI * f0))
+				var c1 := Color(0.85, 0.05, 0.03, k0 * 0.5 * sin(PI * f1))
+				var clear := Color(0.85, 0.05, 0.03, 0.0)
+				var e0 := Vector2(cos(a0) * rx, sin(a0) * ry)
+				var e1 := Vector2(cos(a1) * rx, sin(a1) * ry)
+				draw_polygon(PackedVector2Array([c + e0 * ro, c + e1 * ro, c + e1 * ri, c + e0 * ri]), PackedColorArray([c0, c1, clear, clear]))
 
 # the hostiles you'd know about: anything already after you, or close enough for your Perception to pick out
 static func spotted(range_m := 0.0) -> Array:

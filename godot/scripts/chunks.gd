@@ -268,6 +268,7 @@ func _build(k: String, ps: PackedScene) -> void:
 		_settle_cut(root)
 	if ps and Game.area == "world":
 		_settle_slabs(root, String(files.get(k, "")).get_file().get_basename())
+		DeadTree.plant(root, String(files.get(k, "")).get_file().get_basename())
 	loaded[k] = root
 	coarse[k].visible = false
 	_tune(root)
