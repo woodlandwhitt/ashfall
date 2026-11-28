@@ -181,6 +181,27 @@ func approve(id = "", n = 0, why = "") -> void: Game.approve(_s(id), int(vm.num(
 func approval(id = "") -> int: return Game.approval(_s(id))
 func loyal(id = "") -> bool: return Game.is_loyal(_s(id))
 func makeLoyal(id = "") -> void: Game.make_loyal(_s(id))
+# ---------------------------------------------------------------- homes (build 25)
+func ownsHome(id = "") -> bool: return Homes.owns(_s(id))
+func ownsAnyHome() -> bool: return Homes.owns_any()
+func homePrice(id = "") -> int: return int(Homes.quote(_s(id)).get("price", 0))
+func homeRefused(id = "") -> bool: return bool(Homes.quote(_s(id)).get("refused", false))
+func homeQuote(id = "") -> String:
+	var q := Homes.quote(_s(id))
+	if q.refused:
+		return String(q.why)
+	var bits: Array = []
+	for p in q.parts:
+		bits.append("%s %s%d%%" % [String(p[0]), "-" if float(p[1]) > 0 else "+", int(round(absf(float(p[1])) * 100.0))])
+	return "%d caps (asking %d%s)" % [int(q.price), int(q.base), ("; " + ", ".join(bits)) if not bits.is_empty() else ""]
+func buyHome(id = "") -> bool: return Homes.buy(_s(id))
+func homeFurnished() -> int: return Homes.furnished_count()
+func homeResidents() -> int: return Homes.residents().size()
+func homeUpgrades() -> int:
+	var n := 0
+	for id in Homes.S().owned:
+		n += (Homes.H(String(id)).get("up", {}) as Dictionary).size()
+	return n
 func inParty(id = "") -> bool:
 	return Game.main != null and Game.main.party_state(_s(id)) != null
 func partyState(id = ""):

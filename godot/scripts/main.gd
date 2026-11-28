@@ -83,6 +83,9 @@ func _ready() -> void:
 		start_pos = Vector3(pp[0], Game.height(pp[0], pp[2]) + 0.2, pp[2])
 		start_yaw = float(pp[3])
 		Game.pending_pos = null
+	# companions who live in a house of yours are at home there (build 25)
+	Homes.interiors.clear()
+	Homes.apply_residents()
 	# townsfolk and hostiles are spawned chunk by chunk as the world streams in
 	for i in R.npcs.size():
 		var d: Dictionary = R.npcs[i]
@@ -581,6 +584,39 @@ func _despawn_chunk(k: String) -> void:
 			e.queue_free()
 
 # ---------------------------------------------------------------- companions
+# someone moves house (a companion moving into one of yours, or back out): their place in the region, the chunk they
+# belong to, and where they stand if they're about now
+func relocate_npc(id: String, x: float, z: float) -> void:
+	var i := _npc_index(id)
+	if i < 0:
+		return
+	var d: Dictionary = Game.region.npcs[i]
+	var k0: String = chunks.key_of(Vector3(float(d.x), 0, float(d.z)))
+	d["x"] = x
+	d["z"] = z
+	d["wander"] = null
+	var k1: String = chunks.key_of(Vector3(x, 0, z))
+	if people.has(k0):
+		for e in (people[k0] as Array).duplicate():
+			if e[0] == "n" and int(e[1]) == i:
+				people[k0].erase(e)
+	if not people.has(k1):
+		people[k1] = []
+	people[k1].append(["n", i])
+	var n = live_npc.get(i)
+	if n and is_instance_valid(n):
+		var at := Vector3(x, maxf(Game.height(x, z), Frontier.floor_at(x, z)), z)
+		n.home = at
+		if not n.follow:
+			n.global_position = at
+	elif chunks.loaded.has(k1) and not Game.flags.has("npcDead_" + id):
+		var nn = preload("res://scripts/npc.gd").new()
+		add_child(nn)
+		nn.setup(d)
+		nn.set_meta("idx", i)
+		npcs.append(nn)
+		live_npc[i] = nn
+
 func _npc_index(id: String) -> int:
 	for i in Game.region.npcs.size():
 		if String(Game.region.npcs[i].id) == id:
@@ -888,6 +924,9 @@ func _chest_shells() -> void:
 				var cc := ab.get_center()
 				if Vector2(cc.x - cp.x, cc.z - cp.z).length() < 0.7 and ab.end.y > cp.y - 0.2 and ab.position.y < cp.y + 1.0:
 					seen = true
+					# the chest the old map drew there gets the same blasted finish (only a chest-sized thing)
+					if ab.size.length() < 2.2 and maxf(ab.size.x, ab.size.z) < 1.6:
+						Scorch.apply(mi, float(absi(hash(id))))
 					break
 			if seen:
 				break
@@ -936,7 +975,8 @@ func _chest_shells() -> void:
 			for bx in [-0.3, 0.3]:
 				part.call(Vector3(0.06, 0.52, 0.57), Vector3(bx, 0.26, 0), dark)
 			part.call(Vector3(0.12, 0.1, 0.03), Vector3(0, 0.4, 0.285), brass)
-		Weathering.apply(body, 0.7, false, true)
+		# build 25: nothing loot-worthy out here is shiny: scorched, sooted and pitted as if a blast went off by it
+		Scorch.apply(body, float(absi(hash(id))))
 		var sb := StaticBody3D.new()
 		var cs := CollisionShape3D.new()
 		var bs := BoxShape3D.new()
@@ -1189,6 +1229,8 @@ func _test_hooks() -> void:
 		await _b23_test()
 	if args.has("b24test"):
 		await _b24_test()
+	if args.has("b25test"):
+		await _b25_test()
 	if args.has("ashtest"):
 		await _ash_test()
 	if args.has("storytest"):
@@ -1446,6 +1488,26 @@ func _test_hooks() -> void:
 					col += " " + (str((m as StandardMaterial3D).albedo_color) if m is StandardMaterial3D else str(m))
 			print("VM ", gi.get_path(), " vis ", gi.is_visible_in_tree(), " at ", gi.global_position - player.cam.global_position, " ", col)
 		get_tree().quit()
+	if args.has("home"):
+		# --home=cinder[:full] owns a house for a screenshot (full: every upgrade and a furnishing in each slot)
+		var hv := String(args.home).split(":")
+		Game.caps += 99999
+		Homes.buy(hv[0])
+		if hv.size() > 1 and hv[1] == "full":
+			for k in Homes.UP_ORDER:
+				Homes.buy_up(hv[0], k)
+			for s in Homes.FURN_ORDER:
+				Homes.furnish(hv[0], s, mini(1, Homes.FURNISH[s].opts.size() - 1) if s != "light" else 2)
+		Game.caps -= 99999
+		Game.caps = maxi(Game.caps, 25)
+	if args.has("homescreen"):
+		# --homescreen=cinder[:up|furn|res] opens a house's ledger for a screenshot
+		await _wait(5)
+		var hs := String(args.homescreen).split(":")
+		hud.screens.open_home(hs[0])
+		if hs.size() > 1:
+			hud.screens.home_tab = hs[1]
+			hud.screens._render_home()
 	if args.has("quest"):
 		# start a quest for a screenshot (--quest=lights_over_ridge)
 		for q in String(args.quest).split(","):
@@ -2524,6 +2586,129 @@ func _float_audit() -> void:
 	get_tree().quit()
 
 # build 22: falls hurt, fires sit in pits, sharpshooters keep their distance and shoulder their rifles
+# build 25: houses for sale, their quests, prices by standing, upgrades, furnishing, residents, the stash; chests
+func _b25_test() -> void:
+	var out: Array = []
+	Game.booted = true
+	Game.flags["leftVault"] = 1
+	await _wait(10)
+	var unpause := func():
+		if hud.screens.is_open():
+			hud.screens.close()
+		get_tree().paused = false
+		Game.paused = false
+	# Cinder Gap: the price as a stranger, then liked
+	await _tp(848.0, -44.0)
+	unpause.call()
+	var q0 := Homes.quote("cinder")
+	Game.flags["rep_cinder"] = 3
+	var q1 := Homes.quote("cinder")
+	out.append("Tinsmith's Shack: %d caps to a stranger, %d when Cinder Gap likes you (%s)" % [int(q0.price), int(q1.price), str(int(q1.price) < int(q0.price))])
+	out.append("sale notice: " + str(objects.point_label(_obj_point("home:cinder:sale"))) + "; Mags here " + _live(["mags_t"]))
+	# Squatters' Rights
+	out.append(_dlg2("mags_t", ["Tell me about the shack", "I'll clear them out"]))
+	await _wait(20)
+	var sq := 0
+	for e in enemies:
+		if String(e.get("eid") if e.get("eid") != null else "").begins_with("sq"):
+			sq += 1
+	out.append("scuttlers under the floor: %d" % sq)
+	for i in 3:
+		Game.killed["sq%d" % i] = 1
+	Game.check_quests()
+	out.append(_dlg2("mags_t", ["The scuttlers are dead", "Glad to help"]))
+	var q2 := Homes.quote("cinder")
+	out.append("squatters done %s; price now %d (%s)" % [str(Game.is_done("squatters_rights")), int(q2.price), Game.G.homeQuote("cinder")])
+	# buying it from Mags (after a haggle)
+	Game.stats["charm"] = 6
+	Game.caps = 2000
+	out.append(_dlg2("mags_t", ["What would it cost", "Could you do any better", "Thank you", "I'll take it", "Thank you"]))
+	out.append("owns it %s; caps left %d; housewarming known %s; ledger: %s" % [str(Homes.owns("cinder")), Game.caps, str(Game.known("housewarming")), str(objects.point_label(_obj_point("home:cinder:ledger")))])
+	# build it up and furnish it
+	Game.caps = 5000
+	for k in Homes.UP_ORDER:
+		Homes.buy_up("cinder", k)
+	for s in ["rug", "table", "seat", "wall"]:
+		Homes.furnish("cinder", s, 1)
+	var dress: Node = Homes.interiors.get("cinder")
+	var parts: Array = []
+	if dress:
+		for nm in ["Bed", "Footlocker", "Locker", "MedCabinet", "Armory", "Purifier", "Planter", "Bunks"]:
+			if dress.find_child(nm, true, false) == null:
+				parts.append("missing " + nm)
+	out.append("upgrades %d, pieces of furniture %d; the house shows them all %s; housewarming at stage %d" % [Game.G.homeUpgrades(), Homes.furnished_count(), str(parts) if not parts.is_empty() else "yes", Game.stage("housewarming")])
+	# a companion moves in
+	recruit("jory", true)
+	var moved := Homes.move_in("cinder", "jory")
+	var jd: Dictionary = Game.region.npcs[_npc_index("jory")]
+	var jat := Vector3(float(jd.x), 0, float(jd.z))
+	out.append("Jory moves in %s; lives %.1f m from the house; in the party %s; housewarming stage %d" % [str(moved), Vector2(jat.x - 846.0, jat.z + 53.0).length(), str(party.any(func(p): return String(p.id) == "jory")), Game.stage("housewarming")])
+	# days pass: the purifier, the planter and Jory fill the stash
+	Game.day += 2
+	var notes := Homes.collect("cinder")
+	var st: Array = Homes.S().stash
+	out.append("two days away: %s; the stash holds %s" % [" ".join(notes), str(st)])
+	# the stash only takes so much
+	Game.give("scrap_metal", 400)
+	hud.screens.loot_cap = Homes.stash_cap()
+	hud.screens.open_loot("Home stash", st, func(_e): pass)
+	hud.screens._put("scrap_metal", 400)
+	out.append("put 400 scrap in: the stash weighs %.0f of %.0f lbs (within %s)" % [Homes.stash_weight(st), Homes.stash_cap(), str(Homes.stash_weight(st) <= Homes.stash_cap() + 0.01)])
+	hud.screens.close()
+	unpause.call()
+	# a night at home
+	Game.rad = 60.0
+	Homes.sleep("cinder")
+	out.append("slept: rads %.0f, Well Rested %s, housewarming done %s" % [Game.rad, str(Game.buffs.has("xp")), str(Game.is_done("housewarming"))])
+	# saved and loaded (as the save file carries it: JSON, every number a float)
+	Game.homes = JSON.parse_string(JSON.stringify(Game.homes))
+	Homes.normalize()
+	out.append("after a load: owns %s, Jory lives there %s, stash counts are whole numbers %s" % [str(Homes.owns("cinder")), str("jory" in Homes.residents()), str(Homes.S().stash.all(func(it): return it[1] is int))])
+	Homes.move_out("jory")
+	var jd2: Dictionary = Game.region.npcs[_npc_index("jory")]
+	out.append("Jory moves out: back %.1f m from the house" % Vector2(float(jd2.x) - 846.0, float(jd2.z) + 53.0).length())
+	# Stillwater: the deed
+	await _tp(-90.0, -742.0)
+	unpause.call()
+	out.append(_dlg2("deacon", ["Why not", "I'll look in the boathouse"]))
+	var lb = _obj_point("lw_lockbox")
+	out.append("lockbox: %s" % str(objects.point_label(lb) if lb else "-"))
+	if lb:
+		objects.point_use(lb)
+	await _tp(-18.0, -748.0)
+	unpause.call()
+	out.append(_dlg2("deacon", ["I found Silas", "Thank you, Deacon"]))
+	out.append("Lockwood Place now %d caps (%s)" % [Game.G.homePrice("stillwater"), Game.G.homeQuote("stillwater")])
+	# Lantern Row: the roof
+	await _tp(626.0, 126.0)
+	unpause.call()
+	out.append(_dlg2("orla", ["What happened to the roof", "I'll help you patch it"]))
+	var rr = _obj_point("rh_roof")
+	if rr:
+		objects.point_use(rr)
+	Game.give("scrap_metal", 6)
+	Game.give("duct_tape", 2)
+	out.append(_dlg2("orla", ["Here's the scrap", "Good as new"]))
+	out.append("roof done %s; Row House Nine %s" % [str(Game.is_done("roof_over_head")), Game.G.homeQuote("lantern")])
+	# hated: no sale
+	Game.flags["rep_lamplight"] = -8
+	out.append("hated on Lantern Row: refused %s" % str(Game.G.homeRefused("lantern")))
+	# chests: blasted, not shiny
+	await _tp(800.0, -52.0)
+	unpause.call()
+	var scorched := 0
+	var chests := 0
+	for c in frontier.find_children("f_treasure_chest", "Node3D", true, false):
+		chests += 1
+		for mi in c.find_children("*", "MeshInstance3D", true, false):
+			if mi.get_meta("scorched", false):
+				scorched += 1
+				break
+	out.append("chests in the frontier towns: %d, scorched %d" % [chests, scorched])
+	for l in out:
+		print("B25TEST ", l)
+	get_tree().quit()
+
 # build 24: wrecks and loose things on the ground, the dead trees regrown, the quest glints, the loose junk you can
 # knock about, the hit glow, the intro and the update packs
 func _b24_test() -> void:

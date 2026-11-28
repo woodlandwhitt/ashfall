@@ -13,7 +13,7 @@ for (const base of [here, '/home/claude/godot/tools', process.cwd()]) {
 const OUT = process.argv[2] || path.join(here, '../../data/story.json');
 // every build's layer, oldest first: objects merge key by key (a dialogue's nodes merge too), arrays join end to end
 const S = {};
-for (const f of ['story10.mjs', 'story11.mjs', 'story12.mjs', 'story15.mjs', 'story16.mjs', 'story17.mjs', 'story18.mjs', 'story19.mjs', 'story20.mjs', 'story21.mjs']) {
+for (const f of ['story10.mjs', 'story11.mjs', 'story12.mjs', 'story15.mjs', 'story16.mjs', 'story17.mjs', 'story18.mjs', 'story19.mjs', 'story20.mjs', 'story21.mjs', 'story25.mjs']) {
   const M = await import(path.join(here, f));
   for (const k of Object.keys(M)) {
     const v = M[k];

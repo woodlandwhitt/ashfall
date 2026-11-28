@@ -290,6 +290,27 @@ func _world() -> void:
 		Game.main.hud.toggle_dev()
 		var pp: Vector3 = Game.player.global_position
 		Game.travel_area("world", pp.x, pp.z, Game.player.yaw))
+	# build 25: houses of your own
+	g = _row("Homes", "Owned: %s. GIVE takes the house for nothing; FIT OUT adds every upgrade; GO takes you to its door" % (", ".join(Homes.S().owned.keys()) if Homes.owns_any() else "none"))
+	for hid in Homes.HOMES:
+		_btn(g, "GIVE " + String(Homes.HOMES[hid].town).to_upper(), func():
+			Game.caps += 99999
+			Homes.buy(hid)
+			Game.caps -= 99999
+			Game.caps = maxi(0, Game.caps))
+		_btn(g, "FIT OUT " + String(Homes.HOMES[hid].town).to_upper(), func():
+			if not Homes.owns(hid):
+				Game.msg("You don't own it yet.")
+				return
+			Game.caps += 99999
+			for k in Homes.UP_ORDER:
+				Homes.buy_up(hid, k)
+			Game.caps -= 99999
+			Game.caps = maxi(0, Game.caps))
+		_btn(g, "GO " + String(Homes.HOMES[hid].town).to_upper(), func():
+			Game.main.hud.toggle_dev()
+			var at := Homes.world(hid, Vector3(0, 0, Homes.D * 0.5 + 2.0))
+			run("tp %s %s" % [str(at.x), str(at.z)]))
 	g = _row("Open a shop", "From anywhere")
 	for k in Game.L.get("vendors", {}):
 		_btn(g, k.to_upper(), func():

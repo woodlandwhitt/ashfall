@@ -11,7 +11,7 @@ MODEL = os.path.join(os.path.dirname(os.path.abspath(LINES)), "en-us-libritts-hi
 FEM = {"sheriff", "cass", "ro", "finch", "kess", "overseer", "nan", "tamsin", "sable", "vex", "trader", "della", "gambler2", "ines",
 	"hale", "maren", "lark", "teacher", "grower", "rook", "dot", "settler_b", "settler_d", "settler_f", "goosebumps", "tuesday", "mother_hum", "pip",
 	"odile", "juno", "saba", "ira", "hester", "hester2", "cg_guard2", "ab_guard2", "ab_folk2", "cg_folk1",
-	"nell", "mara", "sw_folk1", "velma", "duchess", "gc_folk1", "gc_folk3"}
+	"nell", "mara", "sw_folk1", "velma", "duchess", "gc_folk1", "gc_folk3", "mags_t", "orla", "ada"}
 # special voices: [pool, which (0 = lowest/most extreme), pace, ffmpeg filter]
 SPECIAL = {
 	"radio": ["m", 6, 0.9, "highpass=f=320,lowpass=f=3300,acrusher=bits=10:mix=0.25,volume=1.4"],

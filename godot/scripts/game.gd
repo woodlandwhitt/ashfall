@@ -23,6 +23,7 @@ var killed: Dictionary = {}   # enemy id -> true (quests ask for named enemies: 
 var shops: Dictionary = {}    # vendor id -> {day, caps, stock, back, deal}
 var upgrades: Dictionary = {} # weapon or armor id -> workbench upgrade level (0..3)
 var opened: Dictionary = {}   # container id -> remaining items ([] when emptied); unlocked locks
+var homes: Dictionary = {}    # build 25: the houses you own, their upgrades, furnishings and residents, and the stash
 var day := 1
 var player_name := "Wanderer"
 var rad := 0.0               # radiation 0..100: eats into max health; at 100 it eats health
@@ -455,7 +456,7 @@ func save_game(slot: String) -> bool:
 	var s := {"v": 1, "time": Time.get_datetime_string_from_system(), "pos": [player.global_position.x, player.global_position.y, player.global_position.z, player.yaw],
 		"inv": inv, "flags": flags, "quests": quests, "kills": kills, "hp": hp, "caps": caps, "xp": xp, "level": level, "points": points, "perk_pts": perk_pts, "ap": ap, "name": player_name, "area": area, "rad": rad, "tod": time, "buffs": buffs, "drugs": drugs, "addict": addict,
 		"stats": stats, "perks": perks, "karma": karma, "weapon": weapon, "nade": nade, "chem": chem, "armor": armor, "magd": magd, "magt": magt, "ammo_sel": ammo_sel, "discovered": discovered,
-		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day, "mods": mods}
+		"dead": dead, "looted": looted, "killed": killed, "shops": shops, "upgrades": upgrades, "opened": opened, "day": day, "mods": mods, "homes": homes}
 	var f := FileAccess.open("user://save_" + slot + ".json", FileAccess.WRITE)
 	if f == null:
 		return false
@@ -484,8 +485,9 @@ func load_game(slot: String) -> bool:
 	magt = s.get("magt", {})
 	ammo_sel = s.get("ammo_sel", {})
 	_mod_cache.clear()
-	for k in ["killed", "shops", "upgrades", "opened"]:
+	for k in ["killed", "shops", "upgrades", "opened", "homes"]:
 		set(k, s.get(k, {}))
+	Homes.normalize()
 	day = int(s.get("day", 1))
 	for st in SPECIAL:
 		if not stats.has(st):
@@ -550,7 +552,7 @@ func reset() -> void:
 		load_area("world")
 	player_name = "Wanderer"
 	inv = {"vault_suit": 1, "pipe_pistol": 1, "ammo_9": 36, "stimpak": 2}
-	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted", "killed", "shops", "upgrades", "opened", "mods"]:
+	for k in ["flags", "quests", "kills", "perks", "discovered", "dead", "looted", "killed", "shops", "upgrades", "opened", "mods", "homes"]:
 		set(k, {})
 	_mod_cache.clear()
 	day = 1
@@ -958,6 +960,9 @@ func cell_at(x: float, z: float) -> int:
 
 func add_xp(n: int) -> void:
 	n = maxi(1, int(round(n * (1.0 + (int(stats.get("intellect", 5)) - 5) * 0.05)))) if n > 0 else n
+	# Well Rested (a night in your own proper bed: build 25)
+	if n > 0 and buffs.has("xp"):
+		n = int(round(n * float(buffs.xp.amt)))
 	xp += n
 	while xp >= xp_need():
 		xp -= xp_need()

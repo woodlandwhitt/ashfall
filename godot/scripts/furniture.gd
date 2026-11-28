@@ -102,6 +102,9 @@ static func make(id: String, lit := true, solid_override := -1) -> Node3D:
 		return root
 	var m := ps.instantiate() as Node3D
 	root.add_child(m)
+	# build 25: the old chests were glossy gold-trimmed things; they've been through a war since
+	if id == "treasure_chest":
+		Scorch.apply(m, float(randi() % 4), true)
 	# nothing out here is showroom-new: every piece is aged, the painted junk most of all
 	Weathering.apply(m, 0.8 if id.begins_with("k:") else 0.45, false, true)
 	for c in m.find_children("*", "MeshInstance3D", true, false):

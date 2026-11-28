@@ -140,6 +140,8 @@ func close() -> void:
 		Game.main.hud.touch.visible = Game.main.hud.touch_on
 	if m == "loot" and loot_done.is_valid():
 		loot_done.call(loot_items.is_empty())
+	loot_cap = -1.0
+	loot_only = []
 	if on_close.is_valid():
 		var c := on_close
 		on_close = Callable()
@@ -233,6 +235,107 @@ func _next_banner() -> void:
 	tw.tween_callback(_next_banner)
 
 # ================================================================ BARTER
+# ================================================================ HOME (build 25)
+# your house's ledger: what it has, what you can put in (with the town's goodwill knocked off), how it's furnished,
+# and who lives there
+var home_id := ""
+var home_tab := "up"
+func open_home(id: String) -> void:
+	home_id = id
+	home_tab = "up"
+	_open("home")
+	Sfx.play("k_page", -6.0)
+	for n in Homes.collect(id):
+		Game.msg(String(n))
+	_render_home()
+
+func _render_home() -> void:
+	_clear()
+	var id := home_id
+	var h: Dictionary = Homes.HOMES[id]
+	var top := _row()
+	var t := _label(top, String(h.n).to_upper() + "  ·  " + String(h.town).to_upper(), 24)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_label(top, "%d caps" % Game.caps, 20, DIM)
+	_button(top, "X", close, 60)
+	var fac := String(h.fac)
+	var cut := Homes.faction_cut(fac)
+	var fname := String(Game.STORY.get("factions", {}).get(fac, {}).get("n", h.town))
+	_label(body, "%s see you as %s: %s" % [fname, Game.rep_title(Game.rep_of(fac)).to_lower(),
+		("%d%% off work done here" % int(round(cut * 75.0))) if cut > 0.0 else ("%d%% on top, for the trouble" % int(round(-cut * 75.0)) if cut < 0.0 else "full price")], 18, DIM)
+	var tabs := _row()
+	for k in [["up", "UPGRADES"], ["furn", "FURNISH"], ["res", "WHO LIVES HERE"]]:
+		var b := _button(tabs, k[1], func(): home_tab = k[0]; _render_home(), 0, home_tab != k[0])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var list := _scroll()
+	match home_tab:
+		"up":
+			for k in Homes.UP_ORDER:
+				var u: Dictionary = Homes.UPGRADES[k]
+				var row := HBoxContainer.new()
+				list.add_child(row)
+				var col := VBoxContainer.new()
+				col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				row.add_child(col)
+				_label(col, String(u.n), 21)
+				_label(col, String(u.desc), 16, DIM).custom_minimum_size.x = 520
+				if Homes.has_up(id, k):
+					_label(row, "DONE", 20, DIM)
+				else:
+					var c := Homes.up_cost(id, k)
+					_button(row, "%d caps" % c, func(): Homes.buy_up(id, k); _render_home(), 150, Game.caps >= c)
+		"furn":
+			for s in Homes.FURN_ORDER:
+				var f: Dictionary = Homes.FURNISH[s]
+				_label(list, String(f.n).to_upper(), 20)
+				var cur := String(Homes.H(id).get("furn", {}).get(s, ""))
+				var row := HFlowContainer.new()
+				row.add_theme_constant_override("h_separation", 8)
+				row.add_theme_constant_override("v_separation", 6)
+				list.add_child(row)
+				for i in f.opts.size():
+					var o: Array = f.opts[i]
+					var c := Homes.furn_cost(id, int(o[2]))
+					var here := cur == String(o[1])
+					var txt := String(o[0]) + ("  ✓" if here else ("" if c == 0 else "  %d" % c))
+					var b := _button(row, txt, func(): Homes.furnish(id, s, i); _render_home(), 0, not here and Game.caps >= c)
+					b.custom_minimum_size.y = 46
+		"res":
+			var cap := Homes.cap_res(id)
+			var res: Array = Homes.H(id).get("res", [])
+			if cap == 0:
+				_label(list, "Nobody can live here yet: put in the companion bunks first (UPGRADES).", 19, DIM)
+			else:
+				_label(list, "Bunks: %d of %d taken. Companions living here keep the place while you're away and bring home what they find; ask one along and they come back here when you part." % [res.size(), cap], 17, DIM)
+			for c in res:
+				var row := _row_in(list)
+				var nm := String(Game.L.get("companions", {}).get(String(c), {}).get("n", c))
+				var away: bool = Game.main.party.any(func(p): return String(p.id) == String(c))
+				var l := _label(row, nm + ("  (with you)" if away else "  (at home)"), 20)
+				l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				if not away:
+					_button(row, "BRING ALONG", func(): Homes.bring(String(c)); _render_home(), 190)
+				_button(row, "MOVE OUT", func(): Homes.move_out(String(c)); _render_home(), 150)
+			if cap > res.size():
+				for p in Game.main.party:
+					var cid := String(p.id)
+					if cid in res:
+						continue
+					var row := _row_in(list)
+					var nm2 := String(Game.L.get("companions", {}).get(cid, {}).get("n", cid))
+					var l2 := _label(row, nm2 + "  (with you)", 20)
+					l2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+					var elsewhere := Homes.home_of(cid)
+					_button(row, "LIVE HERE" if elsewhere == "" else "MOVE HERE", func(): Homes.move_in(id, cid); _render_home(), 170)
+				if Game.main.party.is_empty():
+					_label(list, "Bring a companion here to offer them a bunk.", 17, DIM)
+
+func _row_in(parent: Node) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	parent.add_child(h)
+	return h
+
 func open_trade(id: String) -> void:
 	var v: Dictionary = Game.vendor(id)
 	if v.is_empty():
@@ -531,6 +634,8 @@ static func item_stats(id: String) -> Array:
 var loot_check: Callable          # (item, ...) -> bool: may this be taken? (pickpocketing rolls for each)
 var loot_store := false           # a container you can put things in as well as take them out
 var loot_putting := false
+var loot_cap := -1.0              # build 25: a home stash holds so many lbs (-1: no limit)
+var loot_only: Array = []         # build 25: the armory takes only these kinds of thing
 
 func open_loot(name: String, items: Array, done: Callable, check := Callable(), store := true) -> void:
 	loot_name = name
@@ -578,6 +683,14 @@ func _take_all() -> void:
 func _put(id: String, n: int) -> void:
 	if Game.count(id) < n:
 		return
+	if loot_cap >= 0.0:
+		var room := loot_cap - Homes.stash_weight(loot_items)
+		var w := float(Game.item(id).get("w", 0.5))
+		if w > 0.0 and w * n > room + 0.001:
+			n = int(floor((room + 0.001) / w))
+			if n <= 0:
+				Game.msg("No room left in the stash (%.0f lbs). Wall lockers would hold more." % loot_cap)
+				return
 	Game.take(id, n)
 	var found := false
 	for it in loot_items:
@@ -606,6 +719,8 @@ func _render_put() -> void:
 		var it := Game.item(String(id))
 		if c <= 0 or String(it.get("t", "")) == "quest" or id == Game.weapon or id == Game.armor:
 			continue
+		if not loot_only.is_empty() and not String(it.get("t", "")) in loot_only:
+			continue
 		any = true
 		var h := HBoxContainer.new()
 		list.add_child(h)
@@ -624,7 +739,10 @@ func _render_loot() -> void:
 		return
 	_clear()
 	var top := _row()
-	var t := _label(top, loot_name.to_upper(), 24)
+	var head := loot_name
+	if loot_cap >= 0.0:
+		head = loot_name.split("  (")[0] + "  (%.0f / %.0f lbs)" % [Homes.stash_weight(loot_items), loot_cap]
+	var t := _label(top, head.to_upper(), 24)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if loot_store:
 		_button(top, "PUT IN", func(): loot_putting = true; _render_loot(), 130)

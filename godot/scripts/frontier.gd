@@ -90,7 +90,8 @@ static func layout() -> Array:
 	L.append(R("shack", 802, -54, 0, {"w": 8, "d": 6, "role": "shop", "m": "tin_teal", "roof": "tin", "sign": "PIKE'S GOODS"}))
 	L.append(R("hall", 816, -56, 0, {"w": 12, "d": 9, "role": "bar", "m": "plank", "roof": "tin_red", "sign": "THE EMBER ROOM"}))
 	L.append(R("shack", 832, -54, 0, {"w": 7, "d": 6, "role": "clinic", "m": "plank", "roof": "tin", "sign": "DOC SORREL"}))
-	L.append(R("shack", 846, -53, 0, {"w": 6, "d": 5, "role": "home", "m": "tin", "roof": "tin_red"}))
+	# build 25: the Tinsmith's Shack, for sale (Homes)
+	L.append(R("shack", 846, -53, 0, {"w": 8, "d": 7, "role": "player_home", "home": "cinder", "m": "tin", "roof": "tin_red"}))
 	L.append(R("shack", 786, -28, 2, {"w": 6, "d": 5, "role": "home", "m": "tin_red", "roof": "tin"}))
 	L.append(R("shack", 799, -27, 2, {"w": 8, "d": 6, "role": "office", "m": "plank", "roof": "tin", "sign": "TOWN HALL"}))
 	L.append(R("stall", 825, -32, 2, {"goods": "food"}))
@@ -186,7 +187,8 @@ static func layout() -> Array:
 	L.append(R("shack", 593, 135, 2, {"w": 8, "d": 6, "role": "office", "m": "plank", "roof": "tin", "sign": "ROW HALL"}))
 	L.append(R("stall", 606, 132, 2, {"goods": "food"}))
 	L.append(R("stall", 612, 132, 2, {"goods": "scrap"}))
-	L.append(R("shack", 623, 134, 2, {"w": 6, "d": 5, "role": "home", "m": "plank", "roof": "tin"}))
+	# build 25: Row House Nine, for sale (Homes)
+	L.append(R("shack", 623, 134, 2, {"w": 8, "d": 7, "role": "player_home", "home": "lantern", "m": "plank", "roof": "tin"}))
 	L.append(R("shack", 634, 133, 2, {"w": 7, "d": 6, "role": "workshop", "m": "tin", "roof": "tin_red", "sign": "TINKER"}))
 	L.append(R("water_tower", 640, 116, 0))
 	L.append(R("tower", 566, 112, 0))
@@ -252,7 +254,8 @@ static func _north(L: Array) -> void:
 	L.append(R("shack", -80, -754, 3, {"w": 6, "d": 5, "role": "home", "m": "tin_teal", "roof": "tin_red"}))
 	L.append(R("shack", -62, -727, 2, {"w": 7, "d": 6, "role": "smoke", "m": "plank", "roof": "tin", "sign": "SMOKEHOUSE"}))
 	L.append(R("shack", -40, -728, 2, {"w": 8, "d": 6, "role": "office", "m": "plank", "roof": "tin_red", "sign": "HARBOURMASTER"}))
-	L.append(R("shack", -24, -752, 1, {"w": 6, "d": 5, "role": "home", "m": "tin", "roof": "tin"}))
+	# build 25: the Lockwood Place, for sale (Homes)
+	L.append(R("shack", -24, -752, 1, {"w": 8, "d": 7, "role": "player_home", "home": "stillwater", "m": "tin", "roof": "tin"}))
 	L.append(R("shack", -92, -738, 3, {"w": 8, "d": 7, "role": "boats", "m": "plank", "roof": "tin", "sign": "BOATS"}))
 	L.append(R("pier", -112, -748, 0, {"len": 26.0, "y": wy + 0.55}))
 	L.append(R("pier", -110, -726, 0, {"len": 20.0, "y": wy + 0.55}))
@@ -666,6 +669,10 @@ func _furnish(n: Node3D, d: Dictionary) -> void:
 	l.distance_fade_length = 10.0
 	n.add_child(l)
 	match String(d.role):
+		"player_home":
+			# a house you can buy: dressed by Homes to what you've done with it (build 25)
+			l.light_energy = 0.9
+			Homes.adopt(String(d.home), n)
 		"home":
 			# a proper table to eat at (it was a knee-high side table with a lantern hovering over it: build 23)
 			_cot(n, Vector3(-hw + 0.45, fl, -hd + 1.0), 0.0)
@@ -2395,7 +2402,11 @@ static func _mat(k: String) -> Material:
 	else:
 		var st := StandardMaterial3D.new()
 		var cols := {"metal": Color(0.28, 0.28, 0.3), "bone": Color(0.84, 0.8, 0.7), "red": Color(0.5, 0.11, 0.08), "ochre": Color(0.72, 0.48, 0.16),
-			"dark": Color(0.06, 0.05, 0.05), "glass": Color(0.12, 0.15, 0.16), "alien": Color(0.6, 0.64, 0.68)}
+			"dark": Color(0.06, 0.05, 0.05), "glass": Color(0.12, 0.15, 0.16), "alien": Color(0.6, 0.64, 0.68),
+			# build 25: a home's fittings
+			"army": Color(0.3, 0.33, 0.22), "army_dk": Color(0.19, 0.21, 0.14), "brass": Color(0.58, 0.46, 0.24), "steel_blue": Color(0.3, 0.36, 0.4),
+			"metal_dk": Color(0.15, 0.15, 0.16), "paint_white": Color(0.82, 0.81, 0.77), "cloth_red": Color(0.5, 0.12, 0.1), "cloth_white": Color(0.84, 0.82, 0.76),
+			"glass_green": Color(0.35, 0.6, 0.42), "soil": Color(0.18, 0.13, 0.08), "leaf": Color(0.26, 0.44, 0.2)}
 		st.albedo_color = cols.get(k, Color(0.5, 0.5, 0.5))
 		if k == "alien":
 			st.albedo_color = Color(0.72, 0.75, 0.78)
@@ -2406,6 +2417,9 @@ static func _mat(k: String) -> Material:
 			return m
 		st.roughness = 0.2 if k == "glass" else (0.5 if k == "metal" else 0.85)
 		st.metallic = 0.6 if k == "metal" else (0.3 if k == "glass" else 0.0)
+		if k in ["brass", "steel_blue", "metal_dk"]:
+			st.metallic = 0.45
+			st.roughness = 0.55
 		if k == "glass":
 			st.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			st.albedo_color.a = 0.45

@@ -410,6 +410,8 @@ func _qp(o: Dictionary) -> Dictionary:
 
 func point_label(o: Dictionary) -> Variant:
 	var id := String(o.id)
+	if id.begins_with("home:"):
+		return Homes.label(o)
 	var G := Game.G
 	match id:
 		"vaultExit":
@@ -450,6 +452,9 @@ func _pt(o: Dictionary) -> Dictionary:
 
 func point_use(o: Dictionary) -> void:
 	var id := String(o.id)
+	if id.begins_with("home:"):
+		Homes.use(o)
+		return
 	var G := Game.G
 	match id:
 		"recycler":
